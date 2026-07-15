@@ -16,11 +16,6 @@ if (Boolean(cloudAppId) !== Boolean(cloudServerUrl)) {
     "Cloud mode requires both JAZZ_APP_ID and JAZZ_SERVER_URL; set the missing name or remove the partial pair.",
   );
 }
-if (cloudAppId && cloudServerUrl) {
-  process.env.VITE_JAZZ_APP_ID = cloudAppId;
-  process.env.VITE_JAZZ_SERVER_URL = cloudServerUrl;
-}
-
 export default defineConfig({
   output: "static",
   integrations: [preact({ compat: true, devtools: true })],
@@ -34,6 +29,10 @@ export default defineConfig({
     ],
     server: {
       fs: { allow: [workspaceRoot] },
+    },
+    define: {
+      __LOFI_JAZZ_APP_ID__: JSON.stringify(cloudAppId ?? ""),
+      __LOFI_JAZZ_SERVER_URL__: JSON.stringify(cloudServerUrl ?? ""),
     },
     resolve: {
       noExternal: ["@astrojs/preact"],

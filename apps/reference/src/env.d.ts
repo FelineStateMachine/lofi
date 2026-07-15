@@ -8,3 +8,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __LOFI_JAZZ_APP_ID__: string;
+declare const __LOFI_JAZZ_SERVER_URL__: string;

@@ -111,6 +111,7 @@ export class ChecklistStore {
 
   async #settle(mutation: MutationHandle): Promise<void> {
     const generation = ++this.#writeGeneration;
+    this.#set({ durability: "none", error: null });
     try {
       await mutation.wait({ tier: "local" });
       this.#diagnostics.localWaitCalls += 1;

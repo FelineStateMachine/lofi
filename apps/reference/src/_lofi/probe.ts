@@ -12,6 +12,8 @@ export type ReferenceProbe = {
   update(id: string, text: string): Promise<void>;
   setCompleted(id: string, completed: boolean): Promise<void>;
   delete(id: string): Promise<void>;
+  disconnect(): Promise<void>;
+  reconnect(): Promise<void>;
   recreate(): Promise<void>;
   shutdown(): Promise<void>;
 };
@@ -30,6 +32,8 @@ if (typeof document !== "undefined") {
     setCompleted: async (id, completed) =>
       await (await getRuntime()).checklist.setCompleted(id, completed),
     delete: async (id) => await (await getRuntime()).checklist.delete(id),
+    disconnect: async () => await (await getRuntime()).db.disconnect(),
+    reconnect: async () => await (await getRuntime()).db.reconnect(),
     recreate: async () => {
       await recreateRuntime();
       globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));

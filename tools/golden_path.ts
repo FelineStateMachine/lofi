@@ -63,6 +63,7 @@ const updatedBody = "Golden path retained item updated";
 const disposableBody = "Golden path disposable item";
 const offlineDevelopmentBody = "Golden path development offline item";
 const offlineProductionBody = "Golden path production offline item";
+const offlineProductionSyncedBody = "Golden path production offline item synced";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -85,14 +86,11 @@ async function waitForItem(
     const island = page.locator("[data-island]").filter({ hasText: label });
     const item = island.getByRole("listitem").filter({ hasText: body });
     if (index === 0) {
-      await Promise.race([
-        item.waitFor({ state: "visible" }),
-        island.getByRole("status").filter({ hasText: "Write failed:" }).waitFor({
-          state: "visible",
-        }).then(async () => {
-          throw new Error((await island.getByRole("status").textContent()) ?? "Write failed");
-        }),
-      ]);
+      const failure = island.getByRole("status").filter({ hasText: "Write failed:" });
+      await item.or(failure).waitFor({ state: "visible" });
+      if (await failure.isVisible()) {
+        throw new Error((await failure.textContent()) ?? "Write failed");
+      }
     } else {
       await item.waitFor({ state: "visible" });
     }
@@ -168,16 +166,35 @@ async function assertRuntimeCardinality(
   });
 }
 
+async function setReferenceConnection(page: Page, connected: boolean): Promise<void> {
+  await page.evaluate(async (shouldConnect) => {
+    const probe = (globalThis as typeof globalThis & {
+      __LOFI_REFERENCE__?: {
+        disconnect(): Promise<void>;
+        reconnect(): Promise<void>;
+      };
+    }).__LOFI_REFERENCE__;
+    if (!probe) throw new Error("development reference probe is unavailable");
+    if (shouldConnect) await probe.reconnect();
+    else await probe.disconnect();
+  }, connected);
+}
+
 async function observeReconnectSettlement(
   page: Page,
   timeoutMs: number,
   required: boolean,
 ): Promise<JourneyAssertion> {
   try {
-    await page.getByRole("status").filter({ hasText: /last write global/ }).first().waitFor({
+    const global = page.getByRole("status").filter({ hasText: /last write global/ }).first();
+    const failure = page.getByRole("status").filter({ hasText: "Write failed:" }).first();
+    await global.or(failure).waitFor({
       state: "visible",
       timeout: Math.min(timeoutMs, 10_000),
     });
+    if (await failure.isVisible()) {
+      throw new Error((await failure.textContent()) ?? "Write failed");
+    }
     return {
       name: "development reconnect settlement",
       status: "passed",
@@ -244,13 +261,14 @@ async function completeItem(page: Page, body: string): Promise<void> {
   const name = new RegExp(`^(?:Complete ${escaped(body)}|Mark ${escaped(body)} complete)$`);
   const checkboxes = page.getByRole("checkbox", { name });
   try {
-    await checkboxes.first().check();
+    await checkboxes.first().waitFor({ state: "visible" });
   } catch (error) {
     throw new Error(
       `reference UI needs checkbox "Complete ${body}" or "Mark ${body} complete"`,
       { cause: error },
     );
   }
+  await checkboxes.first().click();
   await page.waitForFunction((accessibleName) => {
     const matches = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
       .filter((element) =>
@@ -474,11 +492,13 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       detail: "Create, update, complete, and delete worked through named author-facing controls.",
     });
 
+    if (environmentMode === "cloud-from-root") await setReferenceConnection(page, false);
     await context.setOffline(true);
     await addItem(page, islandLabels[1], offlineDevelopmentBody);
     await waitForItem(page, islandLabels, offlineDevelopmentBody);
     await waitForLocalDurability(page);
     await context.setOffline(false);
+    if (environmentMode === "cloud-from-root") await setReferenceConnection(page, true);
     assertions.push(
       await observeReconnectSettlement(page, timeoutMs, environmentMode === "cloud-from-root"),
     );
@@ -543,8 +563,17 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
     await waitForItem(page, islandLabels, offlineProductionBody);
     await context.setOffline(false);
+    if (environmentMode === "cloud-from-root") {
+      await updateItem(page, offlineProductionBody, offlineProductionSyncedBody);
+      await waitForItem(page, islandLabels, offlineProductionSyncedBody);
+      assertions.push(await observeReconnectSettlement(page, timeoutMs, true));
+    }
     await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
-    await waitForItem(page, islandLabels, offlineProductionBody);
+    await waitForItem(
+      page,
+      islandLabels,
+      environmentMode === "cloud-from-root" ? offlineProductionSyncedBody : offlineProductionBody,
+    );
     assertions.push({
       name: "production offline cold start",
       status: "passed",
@@ -552,11 +581,11 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     });
 
     if (environmentMode === "cloud-from-root") {
-      for (const body of [updatedBody, offlineDevelopmentBody, offlineProductionBody]) {
+      for (const body of [updatedBody, offlineDevelopmentBody, offlineProductionSyncedBody]) {
         await deleteItem(page, body);
         await waitForItemAbsent(page, islandLabels, body);
+        assertions.push(await observeReconnectSettlement(page, timeoutMs, true));
       }
-      assertions.push(await observeReconnectSettlement(page, timeoutMs, true));
       assertions.push({
         name: "cloud fixture cleanup",
         status: "passed",

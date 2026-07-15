@@ -108,3 +108,26 @@ Deno.test("offline convergence captures the failing stage and restores connectiv
     `failure label lost the stage: ${fixture.captures[0].label}`,
   );
 });
+
+Deno.test("offline convergence bounds a never-settling app predicate", async () => {
+  const fixture = new FakeFixture();
+  try {
+    await runConcurrentOfflineConvergence(fixture, {
+      edits: [1, 2],
+      timeoutMs: 10,
+      ready: () => Promise.resolve(),
+      apply: () => Promise.resolve(),
+      locallyApplied: () => Promise.resolve(),
+      converged: () => new Promise(() => undefined),
+    });
+    throw new Error("expected convergence deadline failure");
+  } catch (error) {
+    assert(error instanceof ConvergenceScenarioError, `unexpected error: ${error}`);
+    assert(error.stage === "convergence", `unexpected stage: ${error.stage}`);
+    assert(
+      error.cause instanceof Error && error.cause.message.includes("10ms deadline"),
+      `deadline cause was not retained: ${error.cause}`,
+    );
+  }
+  assert(fixture.clients.every((client) => !client.offline), "deadline left clients offline");
+});

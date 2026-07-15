@@ -24,14 +24,22 @@ export interface ConcurrentOfflineScenario<
   Client extends OfflineTestClient = BrowserTestClient,
 > {
   readonly edits: readonly [Edit, Edit];
+  /** Overall defensive deadline. Defaults to 60 seconds. */
+  readonly timeoutMs?: number;
   /** App-owned, deterministic readiness assertion (locator/waitForFunction/etc.). */
-  readonly ready: (client: Client) => Promise<void>;
-  readonly apply: (client: Client, edit: Edit) => Promise<void>;
-  readonly locallyApplied: (client: Client, edit: Edit) => Promise<void>;
+  readonly ready: (client: Client, signal: AbortSignal) => Promise<void>;
+  readonly apply: (client: Client, edit: Edit, signal: AbortSignal) => Promise<void>;
+  readonly locallyApplied: (client: Client, edit: Edit, signal: AbortSignal) => Promise<void>;
   /** Use this hook for page/client restart while offline work is pending. */
-  readonly whilePending?: (fixture: OfflineTestFixture<Client>) => Promise<void>;
+  readonly whilePending?: (
+    fixture: OfflineTestFixture<Client>,
+    signal: AbortSignal,
+  ) => Promise<void>;
   /** Must resolve only when both app views have converged, or reject on timeout. */
-  readonly converged: (fixture: OfflineTestFixture<Client>) => Promise<void>;
+  readonly converged: (
+    fixture: OfflineTestFixture<Client>,
+    signal: AbortSignal,
+  ) => Promise<void>;
   readonly snapshot?: (client: Client) => Promise<ValueFreeState>;
   readonly failureLabel?: string;
 }
@@ -52,27 +60,57 @@ export async function runConcurrentOfflineConvergence<Edit, Client extends Offli
   fixture: OfflineTestFixture<Client>,
   scenario: ConcurrentOfflineScenario<Edit, Client>,
 ): Promise<void> {
+  const timeoutMs = scenario.timeoutMs ?? 60_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("convergence timeoutMs must be a positive finite number");
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new Error(`convergence exceeded its ${timeoutMs}ms deadline`)),
+    timeoutMs,
+  );
+  const withinDeadline = async <Result>(operation: Promise<Result>): Promise<Result> => {
+    if (controller.signal.aborted) throw controller.signal.reason;
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([operation, aborted]);
+    } finally {
+      controller.signal.removeEventListener("abort", onAbort);
+    }
+  };
   let stage = "readiness";
   try {
-    await Promise.all(fixture.clients.map((client) => scenario.ready(client)));
+    await withinDeadline(
+      Promise.all(fixture.clients.map((client) => scenario.ready(client, controller.signal))),
+    );
     stage = "going offline";
-    await fixture.goOffline();
+    await withinDeadline(fixture.goOffline());
     stage = "concurrent edits";
-    await Promise.all([
-      scenario.apply(fixture.first, scenario.edits[0]),
-      scenario.apply(fixture.second, scenario.edits[1]),
-    ]);
+    await withinDeadline(
+      Promise.all([
+        scenario.apply(fixture.first, scenario.edits[0], controller.signal),
+        scenario.apply(fixture.second, scenario.edits[1], controller.signal),
+      ]),
+    );
     stage = "local persistence";
-    await Promise.all([
-      scenario.locallyApplied(fixture.first, scenario.edits[0]),
-      scenario.locallyApplied(fixture.second, scenario.edits[1]),
-    ]);
+    await withinDeadline(
+      Promise.all([
+        scenario.locallyApplied(fixture.first, scenario.edits[0], controller.signal),
+        scenario.locallyApplied(fixture.second, scenario.edits[1], controller.signal),
+      ]),
+    );
     stage = "pending-work hook";
-    await scenario.whilePending?.(fixture);
+    if (scenario.whilePending) {
+      await withinDeadline(scenario.whilePending(fixture, controller.signal));
+    }
     stage = "reconnection";
-    await fixture.goOnline();
+    await withinDeadline(fixture.goOnline());
     stage = "convergence";
-    await scenario.converged(fixture);
+    await withinDeadline(scenario.converged(fixture, controller.signal));
   } catch (error) {
     await fixture.captureFailure(
       scenario.failureLabel ?? `offline-convergence-${stage}`,
@@ -80,6 +118,7 @@ export async function runConcurrentOfflineConvergence<Edit, Client extends Offli
     ).catch(() => undefined);
     throw new ConvergenceScenarioError(stage, { cause: error });
   } finally {
+    clearTimeout(timeout);
     await Promise.allSettled(
       fixture.clients.filter((client) => client.offline).map((client) => client.goOnline()),
     );

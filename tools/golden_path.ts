@@ -1,4 +1,9 @@
 import { join, resolve } from "node:path";
+import {
+  type BrowserTestClient,
+  createTwoClientFixture,
+  runConcurrentOfflineConvergence,
+} from "@nzip/lofi/testing";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { environmentNames, validateEnvironment } from "./env_contract.ts";
 import {
@@ -77,6 +82,9 @@ const offlineDevelopmentBody = "Golden path development offline item";
 const offlineProductionBody = "Golden path production offline item";
 const offlineProductionSyncedBody = "Golden path production offline item synced";
 const replicaClearBody = "Golden path replica-clear disposable item";
+const convergenceTextSeedBody = "Golden path two-client text item";
+const convergenceEditedBody = "Golden path two-client text item edited";
+const convergenceCompletionBody = "Golden path two-client completion item";
 
 function taskArgs(task: string, extra: string[] = []): string[] {
   return ["task", task, ...(extra.length > 0 ? ["--", ...extra] : [])];
@@ -427,6 +435,11 @@ async function assertCompleted(page: Page, body: string): Promise<void> {
   const name = checklistUi.complete(body);
   const checkboxes = page.getByRole("checkbox", { name });
   await checkboxes.first().waitFor({ state: "visible" });
+  await page.waitForFunction((accessibleName) => {
+    const matches = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+      .filter((element) => element.getAttribute("aria-label") === accessibleName);
+    return matches.length === 2 && matches.every((element) => element.checked);
+  }, name);
   assert(await checkboxes.count() === 2, `expected two completion controls for ${body}`);
   assert(
     await checkboxes.evaluateAll((elements) =>
@@ -459,6 +472,118 @@ async function waitForProductionPwa(page: Page, timeoutMs: number): Promise<void
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
     timeout: timeoutMs,
   });
+}
+
+async function waitForChecklistReady(page: Page, timeoutMs: number): Promise<void> {
+  await page.getByRole("textbox", { name: checklistUi.newItem }).first().waitFor({
+    state: "visible",
+    timeout: timeoutMs,
+  });
+  await page.getByRole("status").filter({ hasText: /\d+ item\(s\)/ }).first().waitFor({
+    state: "visible",
+    timeout: timeoutMs,
+  });
+}
+
+async function valueFreeClientState(client: BrowserTestClient) {
+  const renderedRows = await client.page.locator("[data-task-id]").count();
+  const completedControls = await client.page.locator('input[type="checkbox"]:checked').count();
+  return { offline: client.offline, renderedRows, completedControls };
+}
+
+async function exerciseTwoClientCloudConvergence(
+  browser: Browser,
+  url: string,
+  islandLabels: readonly string[],
+  timeoutMs: number,
+  artifactRoot: string,
+  redactValues: readonly string[],
+): Promise<void> {
+  const fixture = await createTwoClientFixture({
+    baseURL: url,
+    browser,
+    identity: {
+      mode: "shared",
+      async preparePrimary(client) {
+        await waitForProductionPwa(client.page, timeoutMs);
+        await waitForChecklistReady(client.page, timeoutMs);
+      },
+    },
+    artifacts: {
+      directory: join(artifactRoot, "two-client-convergence"),
+      secretValues: redactValues,
+    },
+  });
+  try {
+    await Promise.all(fixture.clients.map(async (client) => {
+      await waitForProductionPwa(client.page, timeoutMs);
+      await waitForChecklistReady(client.page, timeoutMs);
+    }));
+    await addItem(fixture.first.page, islandLabels[0], convergenceTextSeedBody);
+    await waitForItem(fixture.first.page, islandLabels, convergenceTextSeedBody);
+    await addItem(fixture.first.page, islandLabels[0], convergenceCompletionBody);
+    await waitForItem(fixture.first.page, islandLabels, convergenceCompletionBody);
+    await observeReconnectSettlement(fixture.first.page, timeoutMs, true);
+    await waitForItem(fixture.second.page, islandLabels, convergenceTextSeedBody);
+    await waitForItem(fixture.second.page, islandLabels, convergenceCompletionBody);
+
+    type ConvergenceEdit = { kind: "text" } | { kind: "completion" };
+    await runConcurrentOfflineConvergence<ConvergenceEdit, BrowserTestClient>(fixture, {
+      edits: [{ kind: "text" }, { kind: "completion" }],
+      async ready(client) {
+        await waitForProductionPwa(client.page, timeoutMs);
+        await waitForItem(client.page, islandLabels, convergenceTextSeedBody);
+        await waitForItem(client.page, islandLabels, convergenceCompletionBody);
+      },
+      async apply(client, edit) {
+        if (edit.kind === "text") {
+          await updateItem(client.page, convergenceTextSeedBody, convergenceEditedBody);
+        } else {
+          await completeItem(client.page, convergenceCompletionBody);
+        }
+      },
+      async locallyApplied(client, edit) {
+        if (edit.kind === "text") {
+          await waitForItem(client.page, islandLabels, convergenceEditedBody);
+        } else {
+          await assertCompleted(client.page, convergenceCompletionBody);
+        }
+        await waitForLocalDurability(client.page);
+      },
+      async whilePending(current) {
+        await current.first.reloadPage();
+        await waitForProductionPwa(current.first.page, timeoutMs);
+        await waitForItem(current.first.page, islandLabels, convergenceEditedBody);
+
+        await current.second.restartPage();
+        await waitForProductionPwa(current.second.page, timeoutMs);
+        await waitForItem(current.second.page, islandLabels, convergenceCompletionBody);
+        await assertCompleted(current.second.page, convergenceCompletionBody);
+      },
+      async converged(current) {
+        for (const client of current.clients) {
+          await waitForItem(client.page, islandLabels, convergenceEditedBody);
+          await assertCompleted(client.page, convergenceCompletionBody);
+        }
+      },
+      snapshot: valueFreeClientState,
+      failureLabel: "cloud-two-client-convergence",
+    });
+
+    for (const body of [convergenceEditedBody, convergenceCompletionBody]) {
+      await deleteItem(fixture.first.page, body);
+      await waitForItemAbsent(fixture.first.page, islandLabels, body);
+      await observeReconnectSettlement(fixture.first.page, timeoutMs, true);
+      await waitForItemAbsent(fixture.second.page, islandLabels, body);
+    }
+  } catch (error) {
+    await fixture.captureFailure("cloud-two-client-cleanup", valueFreeClientState).catch(() => {
+      // The original convergence or cleanup failure remains authoritative.
+    });
+    throw error;
+  } finally {
+    await fixture.close();
+  }
 }
 
 async function screenshotFailure(page: Page | null, path: string): Promise<void> {
@@ -881,6 +1006,23 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail: "The service-worker shell and OPFS data survived cold offline reload and editing.",
     });
+
+    if (environmentMode === "cloud-from-root") {
+      await exerciseTwoClientCloudConvergence(
+        browser,
+        previewUrl,
+        islandLabels,
+        timeoutMs,
+        artifacts.root,
+        redactValues,
+      );
+      assertions.push({
+        name: "cloud two-client convergence",
+        status: "passed",
+        detail:
+          "Two isolated OPFS replicas shared one in-memory-restored identity, retained orthogonal offline edits through reload/page restart, converged after reconnect, and cleaned up globally.",
+      });
+    }
 
     if (environmentMode === "cloud-from-root") {
       for (const body of [updatedBody, offlineDevelopmentBody, offlineProductionSyncedBody]) {

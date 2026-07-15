@@ -40,9 +40,10 @@ previews, and opens the same stable secure origin on a physical phone — with D
 required global runtime and a command surface of exactly seven verbs: `create`, `dev`, `doctor`,
 `check`, `test`, `build`, `preview`.
 
-## Try it today (M1 journey)
+## Try it today (checkout journey)
 
-The generator does not exist yet; the graduated prototype runs from a checkout:
+The M2 branch now contains the source generator and its package-owned commands, but the package is
+not published while Layer 2 is under review. The currently available journey runs from a checkout:
 
 ```sh
 git clone https://github.com/FelineStateMachine/lofi.git
@@ -67,7 +68,9 @@ deno task dev
 | `deno task build`   | Production build through the supported Deno path.                        |
 | `deno task preview` | Serves the production build.                                             |
 
-`create` and `doctor` graduate in M2 — their output contracts are already specified in the
+`create` and `doctor` are implemented in the M2 source package. They graduate only after the
+generated-project golden journey, clean-room review, and registry-backed smoke pass; their output
+contracts are specified in the
 [DevX contract](docs/devx-contract.md#canonical-command-surface-and-output-contract).
 
 ## How this repository works
@@ -109,10 +112,12 @@ lofi/
 │   ├── devx-contract.md   # The product contract: promises, budgets, statuses
 │   └── decisions/         # Evidence-backed decision records (ADR-style)
 ├── apps/reference/        # The integrated app graduated from M1 and reshaped in M2
+├── package/               # The single @nzip/lofi package source and generated-project commands
 ├── spikes/                # M1 feasibility experiments, kept for evidence
 ├── tools/                 # Deno tasks: env contract, secret scanning, runners
 ├── init.md                # Original research plan — input, not the contract
-└── deno.json              # Workspace tasks and pinned toolchain
+├── deno.json              # Workspace tasks and pinned toolchain
+└── jsr.json               # One package name, version, export map, and publish manifest
 ```
 
 ## Stack

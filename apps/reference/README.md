@@ -1,7 +1,8 @@
 # lofi reference application
 
-This application proves the author-facing lofi workflow before the public `@nzip/lofi` package is
-extracted. It is deliberately split into two ownership zones.
+This application proves the author-facing lofi workflow while the public `@nzip/lofi` package is
+graduated in layers. M2 extracts the generated-project commands; broader framework API extraction
+remains M4 work. The application is deliberately split into two ownership zones.
 
 ## Author-owned files
 
@@ -19,9 +20,9 @@ extracted. It is deliberately split into two ownership zones.
 - `public/manifest.webmanifest`, `public/sw.js`, and `public/favicon.svg` — PWA plumbing
 - `src/_lofi/` — storage, identity, synchronization, lifecycle, diagnostics, and framework adapter
 
-Application work should not require edits in `src/_lofi/`. Its local path is a temporary extraction
-seam: later M2 work may replace it with generated files or `@nzip/lofi` subpath imports without
-changing product UI.
+Application work should not require edits in `src/_lofi/`. The M2 generator copies these validated
+runtime-owned files without turning them into public framework APIs. M4 may replace the local seam
+with proven `@nzip/lofi` subpath imports without changing product UI.
 
 Passkey backup and recovery are intentionally absent. The pinned Jazz alpha exposes a rejected
 credential design, so this reference uses a device-local identity and does not imply recoverability.

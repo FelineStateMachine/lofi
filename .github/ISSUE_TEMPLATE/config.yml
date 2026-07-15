@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: DevX contract
+    url: https://github.com/FelineStateMachine/lofi/blob/main/docs/devx-contract.md
+    about: The product contract — check whether a promise already covers your concern.

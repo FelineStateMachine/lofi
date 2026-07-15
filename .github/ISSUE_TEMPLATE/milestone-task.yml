@@ -1,0 +1,35 @@
+name: Milestone task
+description: Implementation or documentation work that advances a milestone
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What exists (and is observable) when this issue closes.
+    validations:
+      required: true
+  - type: input
+    id: contract-ids
+    attributes:
+      label: Contract IDs
+      description: >-
+        Promises from docs/devx-contract.md this work implements or changes. Write "none" for
+        mechanical changes.
+      placeholder: DX-CMD-01, DX-CREATE-01
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements a reviewer can verify without re-deriving the work.
+      placeholder: |
+        - [ ] `deno task doctor` prints a versioned capability table without values
+        - [ ] Nonzero exit for blockers
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Adjacent work this issue deliberately does not claim.

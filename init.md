@@ -4,7 +4,7 @@
 > contract lives in `docs/devx-contract.md`. M1 spikes are expected to correct or reject claims in
 > this draft as Jazz 2 and target-browser behavior are verified.
 
-Working name **`lofi`** (import paths like `@lofi/core`). Goal: validate that Jazz + Preact
+Working name **`lofi`** (import paths like `@nzip/lofi/core`). Goal: validate that Jazz + Preact
 islands + Astro + Deno can be wrapped into an ergonomic framework where the UI always hydrates from
 local data, identity is passkey-only, and **the only network surface an app developer ever sees is
 the sync module's primitives/hooks**.
@@ -29,8 +29,8 @@ targeting Android Chrome 148+ / iOS Safari 16.4+ as hard floors**.
 ## Platform floors (enforced, not advisory)
 
 Jazz 2.0's only fallback below these floors is memory-only storage, which silently loses data — so
-`@lofi/core`'s `detect()` is a **boot gate**: unsupported browser → explicit "unsupported" screen
-(or opt-in memory mode with a "nothing will persist" banner). Never a silent fallback.
+`@nzip/lofi/core`'s `detect()` is a **boot gate**: unsupported browser → explicit "unsupported"
+screen (or opt-in memory mode with a "nothing will persist" banner). Never a silent fallback.
 
 | Feature                                         | iOS Safari tab                                  | iOS installed PWA | Android Chrome 148+                                     | Framework behavior                                                                         |
 | ----------------------------------------------- | ----------------------------------------------- | ----------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -44,35 +44,31 @@ Jazz 2.0's only fallback below these floors is memory-only storage, which silent
 | WebAuthn passkeys                               | ✅ iCloud Keychain                              | ✅                | ✅                                                      | Primary auth                                                                               |
 | WebAuthn PRF                                    | Safari 18+, no external keys                    | same              | robust                                                  | Stretch phase only; feature-detect, never require                                          |
 
-App code never sniffs user agents — `@lofi/pwa` and `@lofi/sync` branch on the `Capabilities` object
-from `detect()`.
+App code never sniffs user agents — `@nzip/lofi/pwa` and `@nzip/lofi/sync` branch on the
+`Capabilities` object from `detect()`.
 
 ## Monorepo layout (Deno workspace)
 
 ```
 lofi/
-├── deno.json                      # workspace: ./packages/*, ./apps/demo; shared tasks
+├── deno.json                      # workspace: ./packages/lofi, ./apps/demo; shared tasks
 ├── packages/
-│   ├── core/      # @lofi/core — schema (re-export co/z + defineSchema), createApp()
-│   │               #   singleton client (lazy, auth-gated), platform.ts detect() boot gate
-│   ├── auth/      # @lofi/auth — registerPasskey/signInWithPasskey/recoverWithPassphrase,
-│   │               #   authState signal: "loading" | "anonymous" | "signedIn"
-│   ├── sync/      # @lofi/sync — THE ONLY NETWORK-AWARE MODULE: syncState signal
-│   │               #   (connected/syncing/pendingOps/lastSyncedAt), pauseSync/resumeSync,
-│   │               #   lifecycle.ts: visibility/online reconnect manager (iOS WS-drop fix)
-│   ├── ui/        # @lofi/ui — Preact hooks: useCoState, useAccount, useAuthState,
-│   │               #   useSyncStatus, useOnline; adapter-compat.ts (Plan A) / adapter-vanilla.ts (Plan B)
-│   ├── pwa/       # @lofi/pwa — lofiPwa() @vite-pwa/astro config preset, install-prompt
-│   │               #   orchestration (beforeinstallprompt / iOS coach-mark / EU degrade),
-│   │               #   requestPersistentStorage() incl. Safari notification-permission dance
-│   └── testing/   # @lofi/testing — Playwright virtual-authenticator + offline/sync test helpers
+│   └── lofi/      # @nzip/lofi — one JSR package, one version, subpath exports
+│       ├── core/  # ./core — schema (re-export co/z + defineSchema), createApp(), detect()
+│       ├── auth/  # ./auth — passkey registration/sign-in/recovery and authState
+│       ├── sync/  # ./sync — THE ONLY NETWORK-AWARE MODULE and lifecycle manager
+│       ├── ui/    # ./ui — context-free Preact hooks and adapter implementation
+│       ├── pwa/   # ./pwa — PWA config, install orchestration, persistent-storage UX
+│       ├── testing/ # ./testing — virtual-authenticator and offline/sync test helpers
+│       └── create/  # ./create — non-interactive project creation command
 └── apps/demo/     # Astro app: "Ticktick-lite" checklist; schema.ts, app.ts, islands/
 ```
 
-Dependency direction (strict): `demo → ui,pwa,auth,sync,core` · `ui → sync,auth,core` · `pwa → core`
-· `sync → core` · `auth → core` · `core → npm:jazz-tools` and nothing else. **Only `sync` may
-construct or configure a network peer** — the enforcement point for the "sync is the only network
-surface" constraint.
+The public modules are subpath exports of `@nzip/lofi`, not separately versioned packages.
+Dependency direction remains strict inside that package: `demo → ui,pwa,auth,sync,core` ·
+`ui → sync,auth,core` · `pwa → core` · `sync → core` · `auth → core` · `core → npm:jazz-tools` and
+nothing else. **Only `sync` may construct or configure a network peer** — the enforcement point for
+the "sync is the only network surface" constraint.
 
 Multi-tab coordination comes free: the SharedWorker Jazz 2.0 already requires is the single owner of
 storage (and possibly sync) across tabs. Open question for Spike 0: does Jazz 2.0 run the sync
@@ -83,7 +79,7 @@ manager.
 
 ```ts
 // schema.ts
-import { co, defineSchema, z } from "@lofi/core";
+import { co, defineSchema, z } from "@nzip/lofi/core";
 export const Task = co.map({ text: z.string(), done: z.boolean(), createdAt: z.date() });
 export const TaskList = co.list(Task);
 export const schema = defineSchema({
@@ -95,19 +91,19 @@ export const schema = defineSchema({
 });
 
 // app.ts — module scope, imported by every island (Vite guarantees one instance per page)
-import { createApp } from "@lofi/core";
+import { createApp } from "@nzip/lofi/core";
 export const app = createApp({
   schema,
   sync: { peer: `wss://cloud.jazz.tools/?key=${import.meta.env.PUBLIC_JAZZ_KEY}` },
   storage: "opfs",
 });
 // createApp() registers config only; the client boots lazily on first hook/auth call,
-// and the sync peer is attached exclusively by @lofi/sync.
+// and the sync peer is attached exclusively by @nzip/lofi/sync.
 ```
 
 ```tsx
 // islands/TaskListView.tsx
-import { useCoState } from "@lofi/ui";
+import { useCoState } from "@nzip/lofi/ui";
 export default function TaskListView({ listId }) {
   const list = useCoState(TaskList, listId, { resolve: { $each: true } });
   if (list === undefined) return <Spinner />; // still loading from OPFS
@@ -155,15 +151,15 @@ exists, which is what makes multi-island apps work.
 
 ## Risk-ordered roadmap
 
-| #   | Phase                                                                                                                                                                                                                                                                           | Duration | Learn / kill criteria                                                                                                                                                                          |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | **Spike: preact/compat × jazz-tools 2.0** — bare Vite+Preact page (no Astro, no Deno), Plan A then Plan B, anonymous account, `useCoState` round-trip to Jazz Cloud; measure gzipped bundle; find where the sync socket lives (worker vs tab)                                   | 2 days   | Which adapter plan; bundle cost. **Kill:** both plans fail to subscribe reliably → Jazz choice is dead, re-evaluate data layer                                                                 |
-| 0.5 | **Spike: OPFS persistence on real devices** — same page with `storage: "opfs"` on a real iPhone (Safari tab + installed) and a real Chrome-148 Android; kill/relaunch, check data survives; multi-tab open                                                                      | 2 days   | Does Jazz 2.0 persistent mode actually work on WebKit's SharedWorker. **Kill:** broken on iOS → fall back to jazz-tools 0.20.x/IndexedDB (architecture unchanged — `storage:` is a named seam) |
-| 1   | **Spike: PasskeyAuth on real devices** — register/sign-in/passphrase-recovery over real HTTPS on iOS Safari tab, installed PWA, Android Chrome, WebAPK; verify the credential survives install                                                                                  | 3 days   | Does Jazz's passkey custody work on mobile Safari (its PRF/largeBlob mechanism is undocumented — this is where we find out). **Kill:** fails on iOS → passphrase-primary UX or reconsider      |
-| 2   | **Astro shell + islands + Deno toolchain** — scaffold workspace, port spikes into `@lofi/*`, two _separate_ islands sharing one client and live-updating each other (acceptance test for the singleton design); `deno task dev/build/serve` end-to-end with @deno/astro-adapter | 1 wk     | Island-boundary state sharing works; npm-compat friction. **Soft kill:** Astro misbehaves under Deno → Node for build, Deno for serve; cap at 1 day                                            |
-| 3   | **PWA hardening** — Workbox shell precache, manifest, Android install prompt, iOS coach-mark, EU-iOS degrade, `storage.persist()` incl. Safari notification-permission dance, reconnect-on-foreground verified on devices                                                       | 1 wk     | Offline cold-start (airplane mode → installed PWA → shell + data render); WS reconnect reliability. Failures here are degradable UX, not fatal                                                 |
-| 4   | **Demo app "Ticktick-lite"** — checklists, shared lists via Group invite links (two accounts, two devices), sync badge, offline edits, conflict-free merge test                                                                                                                 | 1 wk     | Is the API pleasant; where the abstraction leaks; invite-revocation gap surfaces concretely                                                                                                    |
-| 5   | **(Stretch) PRF-derived E2E-at-rest** — WebAuthn PRF → HKDF → field-level encryption before data enters Jazz                                                                                                                                                                    | optional | Only if a real threat model demands it; Safari 18 iCloud-Keychain-only; feature-detect, never require                                                                                          |
+| #   | Phase                                                                                                                                                                                                                                                                                              | Duration | Learn / kill criteria                                                                                                                                                                          |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | **Spike: preact/compat × jazz-tools 2.0** — bare Vite+Preact page (no Astro, no Deno), Plan A then Plan B, anonymous account, `useCoState` round-trip to Jazz Cloud; measure gzipped bundle; find where the sync socket lives (worker vs tab)                                                      | 2 days   | Which adapter plan; bundle cost. **Kill:** both plans fail to subscribe reliably → Jazz choice is dead, re-evaluate data layer                                                                 |
+| 0.5 | **Spike: OPFS persistence on real devices** — same page with `storage: "opfs"` on a real iPhone (Safari tab + installed) and a real Chrome-148 Android; kill/relaunch, check data survives; multi-tab open                                                                                         | 2 days   | Does Jazz 2.0 persistent mode actually work on WebKit's SharedWorker. **Kill:** broken on iOS → fall back to jazz-tools 0.20.x/IndexedDB (architecture unchanged — `storage:` is a named seam) |
+| 1   | **Spike: PasskeyAuth on real devices** — register/sign-in/passphrase-recovery over real HTTPS on iOS Safari tab, installed PWA, Android Chrome, WebAPK; verify the credential survives install                                                                                                     | 3 days   | Does Jazz's passkey custody work on mobile Safari (its PRF/largeBlob mechanism is undocumented — this is where we find out). **Kill:** fails on iOS → passphrase-primary UX or reconsider      |
+| 2   | **Astro shell + islands + Deno toolchain** — scaffold workspace, port spikes into `@nzip/lofi` subpath modules, two _separate_ islands sharing one client and live-updating each other (acceptance test for the singleton design); `deno task dev/build/serve` end-to-end with @deno/astro-adapter | 1 wk     | Island-boundary state sharing works; npm-compat friction. **Soft kill:** Astro misbehaves under Deno → Node for build, Deno for serve; cap at 1 day                                            |
+| 3   | **PWA hardening** — Workbox shell precache, manifest, Android install prompt, iOS coach-mark, EU-iOS degrade, `storage.persist()` incl. Safari notification-permission dance, reconnect-on-foreground verified on devices                                                                          | 1 wk     | Offline cold-start (airplane mode → installed PWA → shell + data render); WS reconnect reliability. Failures here are degradable UX, not fatal                                                 |
+| 4   | **Demo app "Ticktick-lite"** — checklists, shared lists via Group invite links (two accounts, two devices), sync badge, offline edits, conflict-free merge test                                                                                                                                    | 1 wk     | Is the API pleasant; where the abstraction leaks; invite-revocation gap surfaces concretely                                                                                                    |
+| 5   | **(Stretch) PRF-derived E2E-at-rest** — WebAuthn PRF → HKDF → field-level encryption before data enters Jazz                                                                                                                                                                                       | optional | Only if a real threat model demands it; Safari 18 iCloud-Keychain-only; feature-detect, never require                                                                                          |
 
 ## Verification
 
@@ -174,7 +170,7 @@ exists, which is what makes multi-island apps work.
 - **Per-phase device pass:** one-page manual checklist on a physical iPhone (tab + installed) and
   Android (tab + WebAPK); debug via Safari Web Inspector over USB and `chrome://inspect`.
 - **CI-able WebAuthn:** Playwright CDP virtual authenticator (resident key + user verification) in
-  `@lofi/testing` for register/sign-in/recovery. Real-device passkey behavior still verified
+  `@nzip/lofi/testing` for register/sign-in/recovery. Real-device passkey behavior still verified
   manually in Spike 1 (virtual authenticators don't model iCloud Keychain or PRF quirks).
 - **Offline:** Playwright `context.setOffline(true)` for automated shell+data cold-start; manual
   airplane mode on devices for the installed path.
@@ -190,8 +186,8 @@ exists, which is what makes multi-island apps work.
 2. **Jazz 2.0 OPFS persistence on WebKit** — SharedWorker on iOS Safari exists but is quirk-prone;
    Spike 0.5 decides. Fallback to 0.20.x/IndexedDB costs nothing architecturally (`storage:` seam).
 3. **Alpha API churn** — pin the exact 2.0-alpha version; expect breakage on every bump;
-   `@lofi/core` is the single jazz-tools chokepoint containing migration cost. 2.0 docs are sparse —
-   read the changelog and source when docs fail.
+   `@nzip/lofi/core` is the single jazz-tools chokepoint containing migration cost. 2.0 docs are
+   sparse — read the changelog and source when docs fail.
 4. **Pre-148 Android installed base** — SharedWorker only returned in Chrome 148 (stable ~May–June
    2026); older devices hit the boot gate. Acceptable for a prototype; revisit for any real release.
 5. **Astro-under-Deno friction** — pre-agreed fallback: Node for `astro build`, Deno for everything

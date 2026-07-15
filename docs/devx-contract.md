@@ -1,7 +1,7 @@
 # lofi developer-experience contract
 
-Status: **v0 proposed**\
-Scope: **M0 contract and M1 feasibility**\
+Status: **v0 validated through M1; M2 implementation in progress**\
+Scope: **M0 contract, M1 feasibility, and M2 DevX graduation**\
 Last reviewed: **2026-07-15**
 
 This is the product contract for lofi. Implementation choices are provisional until they satisfy
@@ -18,9 +18,9 @@ The older `init.md` is research input, not an authoritative description of Jazz 
 - **deferred** — valuable but intentionally owned by a later milestone.
 - **rejected** — disproved or incompatible with the product direction.
 
-The promises marked **M1 gate: yes** must be validated, revised, or rejected before M1 merges. A
+The promises marked **M1 gate: yes** were validated, revised, or rejected before M1 merged. A
 post-M1 promise may remain proposed only when it has a named milestone and does not affect the
-honesty of the graduated prototype.
+honesty of the graduated reference application.
 
 ## Two distinct journeys
 
@@ -30,10 +30,15 @@ This is the eventual product experience. The generator itself is M2 work and is 
 deliverable.
 
 ```sh
-deno run -A jsr:@lofi/create my-app
+deno run -A jsr:@nzip/lofi/create my-app
 cd my-app
 deno task dev
 ```
+
+The planned JSR surface is one package, `@nzip/lofi`, with one version and publish operation.
+Framework and tooling boundaries are subpath exports—starting with `./create`, `./core`, `./sync`,
+`./auth`, `./ui`, `./pwa`, and `./testing`—rather than lockstep packages. See
+[ADR 0005](decisions/0005-publish-one-nzip-lofi-package.md).
 
 From there the developer makes a retained local write, reloads it, works offline, runs checks,
 builds, previews, and opens the same stable secure origin on a physical device.
@@ -49,11 +54,11 @@ cd lofi
 deno task dev
 ```
 
-The graduated `apps/prototype` must then support a local write, reload, offline cold-start and edit,
-check, test, build, and preview. It does not claim observable transport reconnection or convergence
-because the pinned Jazz API exposes neither signal; that remains a later test contract. Git is a
-contributor prerequisite for this repository journey; Deno remains the only required global runtime
-for a generated application.
+The graduated M1 application, now retained as `apps/reference`, must support a local write, reload,
+offline cold-start and edit, check, test, build, and preview. It does not claim observable transport
+reconnection or convergence because the pinned Jazz API exposes neither signal; that remains a later
+test contract. Git is a contributor prerequisite for this repository journey; Deno remains the only
+required global runtime for a generated application.
 
 ## End-to-end journey contract
 
@@ -116,15 +121,15 @@ These are product outputs, not claims that every command is implemented at Contr
 prototype must implement `dev`, `check`, `test`, `build`, and `preview`; `create` and the complete
 `doctor` experience graduate in M2.
 
-| Command                               | Success output must contain                                | Failure output must contain                                                |
-| ------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `deno run -A jsr:@lofi/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command. |
-| `deno task dev`                       | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                   |
-| `deno task doctor`                    | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.      |
-| `deno task check`                     | Checks run and concise pass summary.                       | First failing check and rerun command.                                     |
-| `deno task test`                      | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.         |
-| `deno task build`                     | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                |
-| `deno task preview`                   | Production URL and build identity.                         | Missing/stale build and exact build command.                               |
+| Command                                    | Success output must contain                                | Failure output must contain                                                |
+| ------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `deno run -A jsr:@nzip/lofi/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command. |
+| `deno task dev`                            | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                   |
+| `deno task doctor`                         | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.      |
+| `deno task check`                          | Checks run and concise pass summary.                       | First failing check and rerun command.                                     |
+| `deno task test`                           | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.         |
+| `deno task build`                          | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                |
+| `deno task preview`                        | Production URL and build identity.                         | Missing/stale build and exact build command.                               |
 
 Example successful development output:
 
@@ -155,14 +160,17 @@ my-app/
 ├── public/
 ├── src/
 │   ├── schema.ts
+│   ├── permissions.ts
 │   ├── app.ts
 │   ├── pages/
-│   └── islands/
+│   ├── islands/
+│   ├── styles/
+│   └── _lofi/                 # generated; not author-edited
 └── tests/
 ```
 
-The exact layout may change during M1 only when verified toolchain behavior requires it or the
-change removes an author-facing concept.
+The exact layout may change only when verified toolchain behavior requires it or the change removes
+an author-facing concept. `src/_lofi/` is generated machinery, not an author-editing surface.
 
 ## Author boundary
 
@@ -170,6 +178,7 @@ change removes an author-facing concept.
 | -------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Product UI/pages/islands   | lofi components/hooks and application types only.             | Raw Jazz, worker, transport, Workbox, and capability branching are forbidden.                                                                             |
 | `schema.ts`                | Application schema declarations.                              | Direct pinned Jazz 2 schema declarations are allowed in the M1 prototype until #7 determines whether a lofi-owned schema facade is honest and affordable. |
+| `permissions.ts`           | Application access policy next to the schema.                 | Direct pinned Jazz 2 permission declarations are allowed; Jazz tooling watches this location.                                                             |
 | `app.ts`                   | Named lofi configuration and composition.                     | Raw vendor setup is allowed only inside spike controls, not the graduated prototype.                                                                      |
 | Generated/internal runtime | Vendor clients, workers, storage, sync, auth, and PWA wiring. | May change across alpha pins without changing product UI.                                                                                                 |
 | Escape-hatch module        | Explicitly isolated unsupported vendor access.                | Never generated by default; no compatibility promise before framework extraction.                                                                         |
@@ -268,9 +277,40 @@ generator gets its own fixture inspection.
 
 ## Graduation rule
 
-M1 graduates exactly one integrated `apps/prototype` containing the approved Jazz version, Preact
-strategy, Astro/Deno path, durability policy, and identity model. Rejected runtime alternatives are
-removed from the final tree; their evidence remains in decisions and merge-commit history.
+M1 graduated exactly one integrated application, now named `apps/reference`, containing the approved
+Jazz version, Preact strategy, Astro/Deno path, durability policy, and identity model. Rejected
+runtime alternatives are removed from the final tree; their evidence remains in decisions and
+merge-commit history.
 
 Package extraction, the generator, full inspector/testing SDK, and production PWA hardening remain
 M2 or later work.
+
+## M2 layered graduation
+
+M2 integrates into the `m2` branch as three separately reviewed layers. Each layer must pass its own
+checks and independent pull-request review before merge. The combined branch is re-reviewed before
+it may merge into `dev`.
+
+Layer verification runs outside the product and framework surface. An independent agent checks the
+exact pushed head in a detached Git worktree, runs `deno task check` plus the layer's applicable
+golden journey, and confirms that the retained report names the tested commit. The pull request is a
+communication channel for the monitoring reviewer, not a reason to impose a permanent per-push CI
+workflow on the framework or generated applications. A layer may merge only when both the clean-room
+result and independent review accept that exact head. The final `m2` combination repeats the same
+clean-room and review boundary before promotion to `dev`.
+
+| Layer                              | Issues                  | Contract result                                                                                                     |
+| ---------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 1 — reference and checkout journey | #9; tracks #11          | Honest checklist CRUD, explicit author/generated boundary, and reusable checkout-mode golden-path evidence.         |
+| 2 — public command path            | #13, #14; completes #11 | Non-interactive creation plus actionable `dev`/`doctor`; the same journey runs against generated output.            |
+| 3 — testing and inspection         | #12, #10                | Reusable offline/convergence controls and truthful developer diagnostics without leaking machinery into product UI. |
+
+Layer 1 does not close #11: checkout-mode evidence is necessary, but the generated-project journey
+cannot pass until Layer 2 implements the public create command. Remaining abstraction leaks are
+tracked in `docs/m2-abstraction-leaks.md` rather than hidden behind premature package APIs.
+
+Layer 1 keeps M1's `lofi-prototype-<appId>` OPFS namespace so existing device rows remain visible to
+the reviewed notes-to-tasks lens. Jazz discovers that lens and its snapshots beside `schema.ts` in
+`apps/reference/src/migrations`. `deno task check:migrations` couples the current schema hash,
+incoming migration edge, and snapshot; `deno task schema:deploy` is the explicit cloud publication
+step for the schema, migration, and permissions bundle.

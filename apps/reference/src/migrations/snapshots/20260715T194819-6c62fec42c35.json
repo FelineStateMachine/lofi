@@ -1,0 +1,20 @@
+{
+  "notes": {
+    "columns": [
+      {
+        "name": "body",
+        "column_type": {
+          "type": "Text"
+        },
+        "nullable": false
+      },
+      {
+        "name": "createdAt",
+        "column_type": {
+          "type": "Timestamp"
+        },
+        "nullable": false
+      }
+    ]
+  }
+}

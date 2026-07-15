@@ -317,6 +317,15 @@ registry command exists: after source acceptance and explicit publication author
 fresh-directory smoke must invoke `deno run -A jsr:@nzip/lofi/create <name>` before #13 and #11 can
 close.
 
+Layer 3 keeps inspection and testing semantics distinct. The generated development inspector may
+pause a configured Jazz transport, restart the client, and confirmation-gate an OPFS replica clear;
+it does not call transport pause "browser offline" and does not infer live connectivity, vendor
+queue depth, or leader/follower role. Real network control and readiness-first two-client fixtures
+graduate at `@nzip/lofi/testing`. The convergence fixture uses two isolated OPFS replicas with one
+identity restored only in memory because the current creator-only permissions do not allow two
+distinct identities to edit the same row. See
+[ADR 0006](decisions/0006-bound-layer3-inspection-and-testing.md).
+
 Layer 1 keeps M1's `lofi-prototype-<appId>` OPFS namespace so existing device rows remain visible to
 the reviewed notes-to-tasks lens. Jazz discovers that lens and its snapshots beside `schema.ts` in
 `apps/reference/src/migrations`. `deno task check:migrations` couples the current schema hash,

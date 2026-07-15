@@ -65,6 +65,40 @@ h1 {
   margin: 0.25rem 0 1.5rem;
 }
 
+.device-status {
+  background: #1d2b25;
+  border: 1px solid #3b594c;
+  border-radius: 0.7rem;
+  margin-top: 1rem;
+  padding: 1.4rem;
+}
+
+.device-status h2 {
+  margin: 0.25rem 0 1rem;
+}
+
+.device-status dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.device-status dl div {
+  background: #18231f;
+  padding: 0.75rem;
+}
+
+.device-status dt {
+  color: #9bc9b1;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.device-status dd {
+  margin: 0.25rem 0 0;
+}
+
 label {
   display: block;
   font-weight: 750;

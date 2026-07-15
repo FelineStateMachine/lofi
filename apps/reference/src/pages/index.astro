@@ -1,5 +1,6 @@
 ---
 import ChecklistIsland from "../islands/ChecklistIsland";
+import DeviceStatus from "../_lofi/DeviceStatus";
 import ReferenceShell from "../_lofi/ReferenceShell.astro";
 import "../styles/global.css";
 ---
@@ -21,5 +22,6 @@ import "../styles/global.css";
     <strong>Identity stays on this device.</strong> Clearing site data removes access because
     passkey backup and recovery are not enabled in this reference application.
   </aside>
+  <DeviceStatus client:load />
   <footer>Thin Preact adapter · static Astro shell · Deno command surface</footer>
 </ReferenceShell>

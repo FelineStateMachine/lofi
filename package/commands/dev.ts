@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 
-import { runDeno } from "../tooling/process.ts";
+import { runDenoStatus } from "../tooling/process.ts";
 import { validatedCommandEnvironment } from "./shared.ts";
 
 const environment = await validatedCommandEnvironment();
@@ -21,13 +21,16 @@ console.log("PWA:         development service worker disabled");
 console.log("Device:      stable HTTPS URL not configured; device preview graduates in M3");
 
 const forwarded = Deno.args[0] === "--" ? Deno.args.slice(1) : Deno.args;
-const exitCode = await runDeno(
+const status = await runDenoStatus(
   ["run", "-A", "npm:astro@7.0.9", "dev", ...forwarded],
   environment,
 );
-if (exitCode !== 0) {
+if (status.forwardedSignal) {
+  Deno.exit(0);
+}
+if (status.code !== 0) {
   console.error(
     "error: development server stopped; application impact: no local URL is available. Run `deno task doctor`, apply the first action, then rerun `deno task dev`.",
   );
-  Deno.exit(exitCode);
+  Deno.exit(status.code);
 }

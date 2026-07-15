@@ -61,6 +61,7 @@ export async function walkFiles(
       left.name.localeCompare(right.name)
     );
     for (const entry of entries) {
+      const child = join(path, entry.name);
       if (
         entry.name === ".env" || (entry.name.startsWith(".env.") && entry.name !== ".env.example")
       ) {
@@ -72,13 +73,13 @@ export async function walkFiles(
         }
         await visit(join(path, entry.name));
       } else if (entry.isFile) {
-        const child = join(path, entry.name);
         if (!options.extensions || options.extensions.has(extname(child))) {
           files.push(relative(absoluteRoot, child));
         }
       } else {
         throw new Error(
-          `project contains unsupported symbolic link: ${relative(absoluteRoot, path)}`,
+          `project contains unsupported symbolic link: ${relative(absoluteRoot, child)}; ` +
+            "replace it with a regular file or directory, then rerun the command",
         );
       }
     }
@@ -89,7 +90,16 @@ export async function walkFiles(
 
 export async function sourceFingerprint(root = Deno.cwd()): Promise<string> {
   const files = await walkFiles(root, {
-    extensions: new Set([".astro", ".css", ".json", ".svg", ".ts", ".tsx", ".webmanifest"]),
+    extensions: new Set([
+      ".astro",
+      ".css",
+      ".js",
+      ".json",
+      ".svg",
+      ".ts",
+      ".tsx",
+      ".webmanifest",
+    ]),
   });
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -108,6 +118,20 @@ export async function sourceFingerprint(root = Deno.cwd()): Promise<string> {
   }
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", input));
   return Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const precacheExcludedPaths = new Set([
+  "lofi-build.json",
+  "lofi-precache.json",
+  "sw.js",
+]);
+
+export function precacheUrls(paths: readonly string[]): string[] {
+  return paths
+    .map((path) => path.replaceAll("\\", "/"))
+    .filter((path) => !precacheExcludedPaths.has(path))
+    .map((path) => path === "index.html" ? "./" : `./${path}`)
+    .sort();
 }
 
 function contains(haystack: Uint8Array, needle: Uint8Array): boolean {

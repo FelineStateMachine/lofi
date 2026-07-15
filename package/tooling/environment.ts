@@ -160,7 +160,6 @@ export function childEnvironment(
   } else {
     environment.JAZZ_APP_ID = "";
     environment.JAZZ_SERVER_URL = "";
-    environment.VITE_JAZZ_APP_ID = "00000000-0000-0000-0000-00000000f153";
   }
   environment.JAZZ_ADMIN_SECRET = "";
   environment.BACKEND_SECRET = "";

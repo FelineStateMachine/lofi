@@ -635,8 +635,20 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       detail: "A loaded page accepted a local write offline and retained it after network return.",
     });
 
+    const devStderrPath = dev.stderrPath;
     await dev.stop();
     dev = null;
+    const devStderr = await Deno.readTextFile(devStderrPath);
+    assert(
+      !devStderr.includes("error: development server stopped"),
+      `normal development shutdown printed a fatal diagnostic; inspect ${devStderrPath}`,
+    );
+    assertions.push({
+      name: "development shutdown",
+      status: "passed",
+      detail:
+        "The generated development command stopped on the harness signal without a false failure.",
+    });
     if (restoreHmr) await restoreHmr();
     restoreHmr = null;
     for (

@@ -1,9 +1,9 @@
 #!/usr/bin/env -S deno run -A
 
-import { extname, join, normalize } from "node:path";
+import { extname, join } from "node:path";
 import { LOFI_VERSION } from "../version.ts";
 import { loadEnvironment, serverEnvironmentNames } from "../tooling/environment.ts";
-import { scanSecrets, sourceFingerprint, walkFiles } from "../tooling/project.ts";
+import { precacheUrls, scanSecrets, sourceFingerprint, walkFiles } from "../tooling/project.ts";
 import { runDeno } from "../tooling/process.ts";
 import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
 
@@ -30,11 +30,7 @@ await Deno.writeTextFile(
   serviceWorkerPath,
   serviceWorker.replace("__LOFI_BUILD_REVISION__", sourceHash),
 );
-const precache = (await walkFiles("dist", { includeDist: true }))
-  .map((path) => `./${normalize(path)}`)
-  .filter((path) => path !== "./lofi-precache.json")
-  .map((path) => path === "./index.html" ? "./" : path);
-precache.push("./lofi-precache.json");
+const precache = precacheUrls(await walkFiles("dist", { includeDist: true }));
 await Deno.writeTextFile("dist/lofi-precache.json", `${JSON.stringify(precache.sort())}\n`);
 
 const loadedEnvironment = await loadEnvironment();

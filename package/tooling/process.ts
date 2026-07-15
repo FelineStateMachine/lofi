@@ -1,8 +1,12 @@
-export async function runDeno(
+export type DenoRunStatus = Deno.CommandStatus & {
+  forwardedSignal: Deno.Signal | null;
+};
+
+export async function runDenoStatus(
   args: readonly string[],
   environment: Readonly<Record<string, string>>,
   cwd = Deno.cwd(),
-): Promise<number> {
+): Promise<DenoRunStatus> {
   const child = new Deno.Command(Deno.execPath(), {
     args: [...args],
     cwd,
@@ -12,6 +16,7 @@ export async function runDeno(
     stdout: "piped",
     stderr: "piped",
   }).spawn();
+  let forwardedSignal: Deno.Signal | null = null;
   const forward = (
     stream: ReadableStream<Uint8Array>,
     target: WritableStream<Uint8Array>,
@@ -19,6 +24,7 @@ export async function runDeno(
   const forwardSignal = (signal: Deno.Signal) => {
     try {
       child.kill(signal);
+      forwardedSignal ??= signal;
     } catch (error) {
       if (!(error instanceof Deno.errors.NotFound)) throw error;
     }
@@ -33,9 +39,17 @@ export async function runDeno(
       forward(child.stdout, Deno.stdout.writable),
       forward(child.stderr, Deno.stderr.writable),
     ]);
-    return status.code;
+    return { ...status, forwardedSignal };
   } finally {
     Deno.removeSignalListener("SIGINT", onInterrupt);
     Deno.removeSignalListener("SIGTERM", onTerminate);
   }
+}
+
+export async function runDeno(
+  args: readonly string[],
+  environment: Readonly<Record<string, string>>,
+  cwd = Deno.cwd(),
+): Promise<number> {
+  return (await runDenoStatus(args, environment, cwd)).code;
 }

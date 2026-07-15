@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { scanSecrets, sourceFingerprint } from "./project.ts";
+import { precacheUrls, scanSecrets, sourceFingerprint, walkFiles } from "./project.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -32,6 +32,71 @@ Deno.test("source fingerprint is stable across file creation order and changes w
     await Deno.remove(left, { recursive: true });
     await Deno.remove(right, { recursive: true });
   }
+});
+
+Deno.test("source fingerprint includes authored service worker JavaScript", async () => {
+  const root = await makeTestRoot();
+  try {
+    await Deno.mkdir(join(root, "public"));
+    await Deno.writeTextFile(join(root, "public", "sw.js"), "const revision = 'one';\n");
+    const first = await sourceFingerprint(root);
+    await Deno.writeTextFile(join(root, "public", "sw.js"), "const revision = 'two';\n");
+    assert(first !== await sourceFingerprint(root), "fingerprint ignored service worker source");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("precache URLs are portable app-shell URLs", () => {
+  const urls = precacheUrls([
+    "sw.js",
+    "index.html",
+    "lofi-build.json",
+    "lofi-precache.json",
+    "assets\\client.js",
+    "manifest.webmanifest",
+  ]);
+  assert(
+    JSON.stringify(urls) === JSON.stringify([
+      "./",
+      "./assets/client.js",
+      "./manifest.webmanifest",
+    ]),
+    `unexpected precache URLs: ${JSON.stringify(urls)}`,
+  );
+});
+
+Deno.test({
+  name: "project walking names unsupported symbolic links and the remediation",
+  ignore: Deno.build.os === "windows",
+  async fn() {
+    const root = await makeTestRoot();
+    try {
+      await Deno.writeTextFile(join(root, "target.ts"), "export const target = true;\n");
+      const link = await new Deno.Command("ln", {
+        args: ["-s", "target.ts", join(root, "linked.ts")],
+        stdout: "null",
+        stderr: "piped",
+      }).output();
+      assert(
+        link.success,
+        `failed to create test symlink: ${new TextDecoder().decode(link.stderr)}`,
+      );
+      let message = "";
+      try {
+        await walkFiles(root);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      assert(message.includes("linked.ts"), `error did not name the symbolic link: ${message}`);
+      assert(
+        message.includes("replace it with a regular file or directory"),
+        `error did not include remediation: ${message}`,
+      );
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
 });
 
 Deno.test("secret scan ignores the local env source but catches source and build leaks", async () => {

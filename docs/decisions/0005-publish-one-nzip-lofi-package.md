@@ -3,6 +3,11 @@
 Status: accepted\
 Date: 2026-07-15
 
+Owner confirmation: FelineStateMachine explicitly confirmed `@nzip/lofi` as the canonical package
+after #21 and superseded the earlier `@lofi-cat/*` direction. The `@nzip` JSR scope is the owned
+nzip publishing surface and already lists the reserved `@nzip/lofi` package alongside the published
+nzip packages. Publication credentials remain a release-time secret, not repository configuration.
+
 ## Decision
 
 Use `@nzip/lofi` as lofi's only JSR package. Public framework boundaries remain explicit subpath
@@ -27,3 +32,7 @@ release promises before the seams have been proven by a second application.
   artifacts.
 - A future split requires evidence that a module needs an independent compatibility or release
   lifecycle.
+
+## Registry evidence
+
+- [JSR `@nzip` scope](https://jsr.io/@nzip), including the reserved `@nzip/lofi` package

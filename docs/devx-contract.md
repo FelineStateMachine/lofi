@@ -291,6 +291,14 @@ M2 integrates into the `m2` branch as three separately reviewed layers. Each lay
 checks and independent pull-request review before merge. The combined branch is re-reviewed before
 it may merge into `dev`.
 
+Layer verification runs outside the product and framework surface. An independent agent checks the
+exact pushed head in a detached Git worktree, runs `deno task check` plus the layer's applicable
+golden journey, and confirms that the retained report names the tested commit. The pull request is a
+communication channel for the monitoring reviewer, not a reason to impose a permanent per-push CI
+workflow on the framework or generated applications. A layer may merge only when both the clean-room
+result and independent review accept that exact head. The final `m2` combination repeats the same
+clean-room and review boundary before promotion to `dev`.
+
 | Layer                              | Issues                  | Contract result                                                                                                     |
 | ---------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | 1 — reference and checkout journey | #9; tracks #11          | Honest checklist CRUD, explicit author/generated boundary, and reusable checkout-mode golden-path evidence.         |

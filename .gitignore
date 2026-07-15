@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+
+node_modules/
+.astro/
+.vite/
+dist/
+coverage/
+playwright-report/
+test-results/
+.playwright-cli/
+.nzip-*/
+.DS_Store

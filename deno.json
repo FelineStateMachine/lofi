@@ -1,0 +1,46 @@
+{
+  "imports": {
+    "@astrojs/check": "npm:@astrojs/check@0.9.9",
+    "@astrojs/preact": "npm:@astrojs/preact@6.0.1",
+    "astro": "npm:astro@7.0.9",
+    "astro/config": "npm:astro@7.0.9/config",
+    "jazz-tools": "npm:jazz-tools@2.0.0-alpha.53",
+    "jazz-tools/dev/vite": "npm:jazz-tools@2.0.0-alpha.53/dev/vite",
+    "preact": "npm:preact@10.29.7",
+    "preact/hooks": "npm:preact@10.29.7/hooks",
+    "preact/jsx-dev-runtime": "npm:preact@10.29.7/jsx-dev-runtime",
+    "preact/jsx-runtime": "npm:preact@10.29.7/jsx-runtime",
+    "typescript": "npm:typescript@6.0.3",
+    "vite": "npm:vite@8.0.1"
+  },
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
+  },
+  "tasks": {
+    "check:env": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env tools/check_env.ts",
+    "check:secrets": "deno run --allow-env=JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read --allow-run=git tools/check_secret_leaks.ts",
+    "check:astro": "LOFI_SKIP_JAZZ_MANAGED=1 JAZZ_ADMIN_SECRET= BACKEND_SECRET= deno run -A npm:astro@7.0.9 check --root apps/prototype",
+    "check": "deno fmt --check && deno lint && deno check tools/*.ts spikes/jazz2-baseline/*.ts spikes/jazz2-baseline/src/*.ts apps/prototype/*.ts apps/prototype/src/**/*.ts apps/prototype/src/**/*.tsx && deno task check:astro && deno task test && deno task check:env && deno task check:secrets",
+    "test": "deno test --allow-read --allow-write=. --allow-run=git tools apps/prototype/src/runtime",
+    "dev": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env,apps/prototype/.env --allow-write=apps/prototype/.env --allow-run tools/run_prototype.ts dev",
+    "build": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env,apps/prototype/.env,apps/prototype/dist --allow-write=apps/prototype/.env,apps/prototype/dist --allow-run tools/run_prototype.ts build",
+    "preview": "deno run --allow-net --allow-read=apps/prototype/dist tools/preview.ts",
+    "spike:jazz2:dev": "deno run --allow-read=spikes/jazz2-baseline/.env --allow-write=spikes/jazz2-baseline/.env --allow-run tools/run_jazz2_spike.ts local",
+    "spike:jazz2:cloud": "deno run --allow-read=spikes/jazz2-baseline/.env --allow-write=spikes/jazz2-baseline/.env --allow-run tools/run_jazz2_spike.ts cloud",
+    "spike:jazz2:build": "deno run -A npm:vite@8.0.1 build spikes/jazz2-baseline --config spikes/jazz2-baseline/vite.config.ts",
+    "spike:jazz2:preview": "deno run -A npm:vite@8.0.1 preview spikes/jazz2-baseline --config spikes/jazz2-baseline/vite.config.ts --host 127.0.0.1"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}

@@ -49,9 +49,11 @@ cd lofi
 deno task dev
 ```
 
-The graduated `apps/prototype` must then support a local write, reload, offline edit, reconnect,
-check, test, build, and preview. Git is a contributor prerequisite for this repository journey; Deno
-remains the only required global runtime for a generated application.
+The graduated `apps/prototype` must then support a local write, reload, offline cold-start and edit,
+check, test, build, and preview. It does not claim observable transport reconnection or convergence
+because the pinned Jazz API exposes neither signal; that remains a later test contract. Git is a
+contributor prerequisite for this repository journey; Deno remains the only required global runtime
+for a generated application.
 
 ## End-to-end journey contract
 
@@ -62,7 +64,7 @@ remains the only required global runtime for a generated application.
 | Develop       | Run `deno task dev`.                                                            | One local URL, storage mode, identity state, sync mode, and PWA readiness are printed.                | Unsupported durable storage stops or requires explicit ephemeral opt-in; it never silently degrades.         |
 | First write   | Use the starter UI to create data.                                              | UI updates without awaiting network; data survives reload or runtime recreation.                      | A failed durable write is visible in UI and diagnostics with impact and remediation.                         |
 | Reload/HMR    | Reload and edit an island five times.                                           | Identity and local data remain; client/subscription counts do not grow.                               | Duplicate runtime resources fail a development assertion with the responsible subsystem named.               |
-| Offline       | Disable network, read and edit, then reconnect.                                 | Local behavior continues and observable sync eventually converges.                                    | Unsupported or failed sync remains visible; no “synced” claim is fabricated.                                 |
+| Offline       | Disable network, cold-start, read, and edit.                                    | Local behavior continues; returning online makes no unsupported connection-state claim.               | Unsupported or failed sync remains visible; convergence waits for an explicit observable test seam.          |
 | Check/test    | Run `deno task check` and `deno task test`.                                     | Static checks and deterministic local-first tests pass without hidden global tools in generated apps. | Failure prints the failing check and preserves browser/log evidence.                                         |
 | Build/preview | Run `deno task build`, then `deno task preview`.                                | Production output is served through the supported Deno path.                                          | npm-compat or adapter failure names the internal fallback; no undocumented user-facing Node command appears. |
 | Device        | Open the printed stable HTTPS origin on a phone.                                | Secure-context, storage, install, and passkey capability are diagnosed.                               | An unstable relying-party ID is rejected before passkey creation and the stable-origin action is named.      |
@@ -85,28 +87,28 @@ remains the only required global runtime for a generated application.
 
 ## Measurable promises
 
-| ID              | Promise                                                        | v0 budget or condition                                                                               | Evidence owner                    | M1 gate | Status    |
-| --------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------- | ------- | --------- |
-| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                      | M2                                | no      | proposed  |
-| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                               | #2 and #6                         | yes     | proposed  |
-| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                        | M2                                | no      | proposed  |
-| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                              | integrated M1 prototype           | yes     | proposed  |
-| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                        | #6                                | yes     | proposed  |
-| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one subscription per consumer after five edits.       | #5 and #6                         | yes     | proposed  |
-| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.              | integrated prototype              | yes     | proposed  |
-| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.     | #5, #6, integration               | yes     | proposed  |
-| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.    | #7                                | yes     | validated |
-| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                               | #4 and #7                         | yes     | proposed  |
-| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                 | #7 and integration                | yes     | proposed  |
-| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named. | #7                                | yes     | revised   |
-| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.  | #3, #7, final build               | yes     | proposed  |
-| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                     | #3, #4, #6                        | yes     | proposed  |
-| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI distinguishes local identity, passkey backup/restore, and bearer recovery phrase.                 | #8                                | yes     | proposed  |
-| DX-DEVICE-01    | M1 device/auth tests use a stable secure origin.               | Tested origin preserves relying-party ID across browser and installed-app sessions.                  | #8                                | yes     | proposed  |
-| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                  | M3                                | no      | proposed  |
-| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                         | feasibility #4; full M3           | no      | proposed  |
-| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                       | #6                                | yes     | proposed  |
-| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                       | feasibility #7; M2 implementation | no      | proposed  |
+| ID              | Promise                                                        | v0 budget or condition                                                                                                                                          | Evidence owner                    | M1 gate | Status    |
+| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------- | --------- |
+| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                                                                                 | M2                                | no      | proposed  |
+| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                                                                                          | #2 and #6                         | yes     | validated |
+| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                                                                                   | M2                                | no      | proposed  |
+| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                                                                                         | integrated M1 prototype           | yes     | validated |
+| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                                                                                   | #6                                | yes     | validated |
+| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one vendor subscription per shared query after five edits.                                                       | #5 and #6                         | yes     | validated |
+| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.                                                                         | integrated prototype              | yes     | validated |
+| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.                                                                | #5, #6, integration               | yes     | validated |
+| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.                                                               | #7                                | yes     | validated |
+| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                                                                                          | #4 and #7                         | yes     | validated |
+| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                                                                            | #7 and integration                | yes     | validated |
+| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named.                                                            | #7                                | yes     | validated |
+| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.                                                             | #3, #7, final build               | yes     | validated |
+| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                                                                                | #3, #4, #6                        | yes     | validated |
+| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI identifies the device-local key, blocks the rejected alpha passkey path, and defines any future phrase as an identity bearer secret rather than data backup. | #8                                | yes     | revised   |
+| DX-DEVICE-01    | Device/auth tests use a stable, appropriately isolated origin. | M1 proves a stable HTTPS PWA scope for OPFS; installed-app RP-ID preservation and identity isolation remain required before any replacement passkey ceremony.   | #4 and #8                         | yes     | revised   |
+| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                                                                             | M3                                | no      | proposed  |
+| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                                                                                    | feasibility #4; full M3           | no      | proposed  |
+| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                                                                                  | #6                                | yes     | validated |
+| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                                                                                  | feasibility #7; M2 implementation | no      | proposed  |
 
 ## Canonical command surface and output contract
 
@@ -233,27 +235,26 @@ generator gets its own fixture inspection.
 ## M1 acceptance checklist
 
 - [x] Optional `.env` and process precedence select the expected mode without printing values.
-- [ ] Exact Jazz alpha, Deno, Astro, Preact, browser, OS, and device versions are retained.
+- [x] Exact Jazz alpha, Deno, Astro, Preact, browser, and executed OS versions are retained;
+      physical device versions are explicitly deferred to M3 by the M1 approval.
 - [x] Vendor control proves local write, subscription, reload retention, and optional cloud sync.
 - [x] Observability inventory maps each promised diagnostic to evidence or removes it.
-- [ ] Preact decision passes mount/update/unmount/recreate and five-cycle HMR checks.
-- [ ] Two Astro islands share exactly one client and update each other.
-- [ ] `deno task dev`, `check`, `test`, `build`, and `preview` work from the checkout.
-- [ ] Startup/HMR measurements follow the declared protocol.
-- [ ] OPFS matrix covers reload, browser/app termination, device restart, foreground/background,
-      multi-tab leadership/concurrent writes, and browser persistence API behavior on exact iPhone
-      tab/installed and Android tab/installed versions.
-- [ ] OPFS evidence distinguishes durable, unsupported, and memory fallback and ends with an
-      explicit raise-floor/degrade/Classic-Jazz/change-layer decision tree.
-- [ ] Identity matrix covers fresh profile, cleared site data, deleted passkey, sign-out, switching,
-      recovery phrase, same-ecosystem restore, and cross-platform restore in browser and installed
-      variants.
-- [ ] Auth evidence uses stable HTTPS/RP-ID, states that the recovery phrase is a bearer secret, and
-      decides first-run, backup reminder, recovery, and unrecoverable-loss UX wording.
-- [ ] Integrated prototype works offline, reloads retained data, and visibly reconnects.
-- [ ] Final build passes server-secret scanning and contains no development-only inspector.
-- [ ] Every M1-gated promise is validated, revised, or rejected with evidence.
-- [ ] Final contract and decisions identify all remaining post-M1 work without implying completion.
+- [x] Preact decision passes mount/update/unmount/recreate and five-cycle HMR checks.
+- [x] Two Astro islands share exactly one client and update each other.
+- [x] `deno task dev`, `check`, `test`, `build`, and `preview` work from the checkout.
+- [x] Startup/HMR measurements follow the declared protocol.
+- [x] OPFS evidence distinguishes durable, unsupported, and memory fallback, retains the complete
+      physical checklist for M3, and records the product owner's M1 HTTPS-artifact approval.
+- [x] Identity ceremony testing stopped at the security pre-gate; the unsafe alpha passkey design is
+      rejected rather than exercised or implied to work.
+- [x] Auth evidence rejects the unsafe ceremony, makes a stable isolated RP ID a replacement
+      precondition, states that a recovery phrase is a bearer secret, and defines honest first-run,
+      backup, and unrecoverable-loss wording.
+- [x] Integrated prototype works offline and reloads retained local data without a false transport
+      reconnection claim.
+- [x] Final build passes server-secret scanning and contains no development-only inspector.
+- [x] Every M1-gated promise is validated, revised, or rejected with evidence.
+- [x] Final contract and decisions identify all remaining post-M1 work without implying completion.
 
 ## M1 falsification map
 

@@ -10,4 +10,5 @@ coverage/
 playwright-report/
 test-results/
 .playwright-cli/
+.nzip-*/
 .DS_Store

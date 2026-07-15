@@ -1,7 +1,7 @@
 # lofi reference application
 
-This application proves the author-facing lofi workflow before framework packages are extracted. It
-is deliberately split into two ownership zones.
+This application proves the author-facing lofi workflow before the public `@nzip/lofi` package is
+extracted. It is deliberately split into two ownership zones.
 
 ## Author-owned files
 
@@ -20,7 +20,8 @@ is deliberately split into two ownership zones.
 - `src/_lofi/` — storage, identity, synchronization, lifecycle, diagnostics, and framework adapter
 
 Application work should not require edits in `src/_lofi/`. Its local path is a temporary extraction
-seam: later M2 work may replace it with generated files or packages without changing product UI.
+seam: later M2 work may replace it with generated files or `@nzip/lofi` subpath imports without
+changing product UI.
 
 Passkey backup and recovery are intentionally absent. The pinned Jazz alpha exposes a rejected
 credential design, so this reference uses a device-local identity and does not imply recoverability.

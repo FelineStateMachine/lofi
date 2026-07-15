@@ -1,0 +1,18 @@
+{
+  "tasks": {
+    "check:env": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env tools/check_env.ts",
+    "check:secrets": "deno run --allow-env=JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read --allow-run=git tools/check_secret_leaks.ts",
+    "check": "deno fmt --check && deno lint && deno check tools/*.ts && deno task test && deno task check:env && deno task check:secrets",
+    "test": "deno test --allow-read --allow-write=. --allow-run=git tools"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}

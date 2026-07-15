@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { assert } from "./assert.ts";
 import {
   installNodeSentinel,
   materializeCleanProject,
@@ -11,10 +12,6 @@ import {
   startReadyProcess,
   withDeadline,
 } from "./golden_path_core.ts";
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -125,6 +122,28 @@ Deno.test("clean project copy excludes secrets caches and the retired prototype"
     assert(!await exists(join(destination, ".nzip-site")), "hosted artifacts must be excluded");
   } finally {
     await Promise.all([removeWorkspaceTemp(source), removeWorkspaceTemp(destination)]);
+  }
+});
+
+Deno.test("clean project materialization copies only tracked files from a repository", async () => {
+  const source = await workspaceTemp("tracked-source");
+  const destination = await workspaceTemp("tracked-destination");
+  try {
+    await Deno.writeTextFile(join(source, "tracked.ts"), "export const tracked = true;\n");
+    await Deno.writeTextFile(join(source, "untracked.ts"), "export const untracked = true;\n");
+    for (const args of [["init", "-q"], ["add", "tracked.ts"]]) {
+      const output = await new Deno.Command("git", { args, cwd: source }).output();
+      assert(output.success, `git ${args[0]} fixture setup failed`);
+    }
+
+    await materializeCleanProject(source, destination);
+    assert(await exists(join(destination, "tracked.ts")), "tracked source must be copied");
+    assert(!await exists(join(destination, "untracked.ts")), "untracked source must be excluded");
+  } finally {
+    await Promise.all([
+      removeWorkspaceTemp(source),
+      removeWorkspaceTemp(destination),
+    ]);
   }
 });
 

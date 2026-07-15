@@ -1,17 +1,10 @@
 import type { Db, MutationErrorEvent } from "jazz-tools";
 import { ChecklistStore, type RuntimeDiagnostics } from "./checklist-store.ts";
+import { assert, assertCount } from "./test-assert.ts";
 
 const test = (globalThis as unknown as {
   Deno: { test(name: string, body: () => void | Promise<void>): void };
 }).Deno.test;
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
-
-function assertCount(actual: number, expected: number, message: string): void {
-  if (actual !== expected) throw new Error(`${message}: expected ${expected}, received ${actual}`);
-}
 
 function diagnostics(): RuntimeDiagnostics {
   return {

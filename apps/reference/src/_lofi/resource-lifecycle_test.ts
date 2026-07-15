@@ -6,18 +6,11 @@ import {
   recreateResource,
   shutdownResource,
 } from "./resource-lifecycle.ts";
+import { assert, assertCount } from "./test-assert.ts";
 
 const test = (globalThis as unknown as {
   Deno: { test(name: string, body: () => void | Promise<void>): void };
 }).Deno.test;
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
-
-function assertCount(actual: number, expected: number, message: string) {
-  if (actual !== expected) throw new Error(`${message}: expected ${expected}, received ${actual}`);
-}
 
 test("concurrent recreation is single-flight and shutdown is idempotent", async () => {
   const state = createSerializedResourceState<{ id: number }>();

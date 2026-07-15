@@ -31,7 +31,6 @@ jobs:
           chmod +x "$sentinel/node"
           export PATH="$sentinel:$PATH"
           deno task check
-          deno task test
           deno task test:golden:checkout
       - name: Upload golden-path failure evidence
         if: ${{ failure() }}

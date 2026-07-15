@@ -21,6 +21,7 @@ import {
 } from "./golden_path_core.ts";
 import { loadEnvironment } from "./load_env.ts";
 import { checklistUi } from "../apps/reference/src/ui-contract.ts";
+import { assert } from "./assert.ts";
 
 export type GoldenPathCommands = {
   dev: string;
@@ -66,10 +67,6 @@ const disposableBody = "Golden path disposable item";
 const offlineDevelopmentBody = "Golden path development offline item";
 const offlineProductionBody = "Golden path production offline item";
 const offlineProductionSyncedBody = "Golden path production offline item synced";
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
 
 function taskArgs(task: string, extra: string[] = []): string[] {
   return ["task", task, ...(extra.length > 0 ? ["--", ...extra] : [])];

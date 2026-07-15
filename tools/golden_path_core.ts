@@ -162,6 +162,48 @@ async function copyDirectory(
   }
 }
 
+async function trackedFiles(source: string): Promise<string[] | null> {
+  const rootOutput = await new Deno.Command("git", {
+    args: ["-C", source, "rev-parse", "--show-toplevel"],
+    stdout: "piped",
+    stderr: "null",
+  }).output();
+  if (!rootOutput.success) return null;
+  const repositoryRoot = new TextDecoder().decode(rootOutput.stdout).trim();
+  if (resolve(repositoryRoot) !== resolve(source)) return null;
+
+  const filesOutput = await new Deno.Command("git", {
+    args: ["-C", source, "ls-files", "-z"],
+    stdout: "piped",
+    stderr: "null",
+  }).output();
+  if (!filesOutput.success) return null;
+  return new TextDecoder().decode(filesOutput.stdout).split("\0").filter(Boolean).sort();
+}
+
+async function copyTrackedFiles(
+  source: string,
+  destination: string,
+  files: readonly string[],
+): Promise<void> {
+  await Deno.mkdir(destination, { recursive: true });
+  for (const displayPath of files) {
+    const segments = displayPath.split(/[\\/]/);
+    if (
+      segments.some((name, index) =>
+        shouldExclude(name, index < segments.length - 1, segments.slice(0, index + 1).join("/"))
+      )
+    ) continue;
+    const from = join(source, displayPath);
+    const to = join(destination, displayPath);
+    const stat = await Deno.lstat(from);
+    if (stat.isSymlink) throw new Error(`clean checkout refuses symlink: ${displayPath}`);
+    if (!stat.isFile) continue;
+    await Deno.mkdir(dirname(to), { recursive: true });
+    await Deno.copyFile(from, to);
+  }
+}
+
 export async function materializeCleanProject(
   sourceRoot: string,
   destinationRoot?: string,
@@ -171,7 +213,9 @@ export async function materializeCleanProject(
     ? resolve(destinationRoot)
     : join(await Deno.makeTempDir({ prefix: "lofi-golden-" }), "project");
   if (source === destination) throw new Error("clean project destination must differ from source");
-  await copyDirectory(source, source, destination);
+  const files = await trackedFiles(source);
+  if (files) await copyTrackedFiles(source, destination, files);
+  else await copyDirectory(source, source, destination);
   return destination;
 }
 

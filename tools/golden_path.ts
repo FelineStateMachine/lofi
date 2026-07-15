@@ -76,6 +76,7 @@ const disposableBody = "Golden path disposable item";
 const offlineDevelopmentBody = "Golden path development offline item";
 const offlineProductionBody = "Golden path production offline item";
 const offlineProductionSyncedBody = "Golden path production offline item synced";
+const replicaClearBody = "Golden path replica-clear disposable item";
 
 function taskArgs(task: string, extra: string[] = []): string[] {
   return ["task", task, ...(extra.length > 0 ? ["--", ...extra] : [])];
@@ -127,7 +128,6 @@ async function addItem(page: Page, island: string, body: string): Promise<void> 
       { cause: error },
     );
   }
-  await textbox.fill(body);
   const add = section.getByRole("button", { name: checklistUi.addFrom(island) });
   try {
     await add.waitFor({ state: "visible" });
@@ -139,6 +139,7 @@ async function addItem(page: Page, island: string, body: string): Promise<void> 
       { cause: error },
     );
   }
+  await textbox.fill(body);
   await add.click();
 }
 
@@ -155,25 +156,64 @@ async function assertRuntimeCardinality(
   islandLabels: readonly string[],
 ): Promise<void> {
   assert(islandLabels.length === 2, "golden path cardinality requires two mounted islands");
-  await page.waitForFunction(() => {
-    const probe = (globalThis as typeof globalThis & {
-      __LOFI_REFERENCE__?: {
-        diagnostics(): {
-          storageState: string;
-          activeClients: number;
-          activeConsumers: number;
-          activeVendorSubscriptions: number;
-          activeMutationListeners: number;
-        };
+  await page.waitForFunction(async () => {
+    const inspector = (globalThis as typeof globalThis & {
+      __LOFI_INSPECTOR__?: {
+        readSnapshot(): Promise<{
+          storage: { driver: string };
+          runtime: {
+            clients: number;
+            consumers: number;
+            vendorSubscriptions: number;
+            mutationListeners: number;
+          };
+        }>;
       };
-    }).__LOFI_REFERENCE__;
-    const diagnostics = probe?.diagnostics();
-    return diagnostics?.storageState === "persistent-driver-open" &&
-      diagnostics.activeClients === 1 &&
-      diagnostics.activeConsumers === 2 &&
-      diagnostics.activeVendorSubscriptions === 1 &&
-      diagnostics.activeMutationListeners === 1;
+    }).__LOFI_INSPECTOR__;
+    const snapshot = await inspector?.readSnapshot();
+    return snapshot?.storage.driver === "persistent open" &&
+      snapshot.runtime.clients === 1 &&
+      snapshot.runtime.consumers === 2 &&
+      snapshot.runtime.vendorSubscriptions === 1 &&
+      snapshot.runtime.mutationListeners === 1;
   });
+}
+
+async function restartClientThroughInspector(
+  page: Page,
+  islandLabels: readonly string[],
+  retainedItem: string,
+  timeoutMs: number,
+): Promise<void> {
+  const before = await page.evaluate(() => ({
+    timeOrigin: performance.timeOrigin,
+    url: location.href,
+    identity: JSON.stringify(
+      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  }));
+  const navigated = page.waitForEvent("domcontentloaded", { timeout: timeoutMs });
+  await page.getByRole("button", { name: "Restart client" }).click();
+  await navigated;
+  const after = await page.evaluate(() => ({
+    timeOrigin: performance.timeOrigin,
+    url: location.href,
+    identity: JSON.stringify(
+      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  }));
+  assert(after.timeOrigin !== before.timeOrigin, "inspector restart did not replace the document");
+  assert(after.url === before.url, "inspector restart changed the application URL");
+  assert(after.identity === before.identity, "inspector restart changed the device identity");
+  await waitForItem(page, islandLabels, retainedItem);
+  for (const label of islandLabels) {
+    const island = page.locator("[data-island]").filter({ hasText: label });
+    await island.getByRole("status").filter({ hasText: "1 item(s)" }).waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+  }
+  await assertRuntimeCardinality(page, islandLabels);
 }
 
 async function exerciseHmr(
@@ -212,16 +252,71 @@ async function exerciseHmr(
 
 async function setReferenceConnection(page: Page, connected: boolean): Promise<void> {
   await page.evaluate(async (shouldConnect) => {
-    const probe = (globalThis as typeof globalThis & {
-      __LOFI_REFERENCE__?: {
-        disconnect(): Promise<void>;
-        reconnect(): Promise<void>;
-      };
-    }).__LOFI_REFERENCE__;
-    if (!probe) throw new Error("development reference probe is unavailable");
-    if (shouldConnect) await probe.reconnect();
-    else await probe.disconnect();
+    const inspector = (globalThis as typeof globalThis & {
+      __LOFI_INSPECTOR__?: { setTransportPaused(paused: boolean): Promise<void> };
+    }).__LOFI_INSPECTOR__;
+    if (!inspector) throw new Error("development inspector is unavailable");
+    await inspector.setTransportPaused(!shouldConnect);
   }, connected);
+}
+
+async function exerciseReplicaClear(
+  browser: Browser,
+  url: string,
+  islandLabels: readonly string[],
+  timeoutMs: number,
+): Promise<void> {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    await page.getByRole("textbox", { name: checklistUi.newItem }).first().waitFor({
+      state: "visible",
+    });
+    await assertRuntimeCardinality(page, islandLabels);
+    await addItem(page, islandLabels[0], replicaClearBody);
+    await waitForItem(page, islandLabels, replicaClearBody);
+    await waitForLocalDurability(page);
+    const identityBefore = await page.evaluate(() =>
+      JSON.stringify(
+        Object.entries(globalThis.localStorage).sort(([left], [right]) =>
+          left.localeCompare(right)
+        ),
+      )
+    );
+    assert(identityBefore !== "[]", "replica-clear fixture did not create an identity state");
+    const navigated = page.waitForEvent("domcontentloaded", { timeout: timeoutMs });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Clear local replica" }).click();
+    await navigated;
+    await waitForItemAbsent(page, islandLabels, replicaClearBody);
+    const identityAfter = await page.evaluate(() =>
+      JSON.stringify(
+        Object.entries(globalThis.localStorage).sort(([left], [right]) =>
+          left.localeCompare(right)
+        ),
+      )
+    );
+    assert(identityBefore === identityAfter, "replica clear changed the device-local identity");
+  } finally {
+    await context.close();
+  }
+}
+
+async function inspectorMarkerFiles(root: string): Promise<string[]> {
+  const matches: string[] = [];
+  async function visit(path: string): Promise<void> {
+    for await (const entry of Deno.readDir(path)) {
+      const child = join(path, entry.name);
+      if (entry.isDirectory) await visit(child);
+      else if (entry.isFile) {
+        const content = await Deno.readTextFile(child).catch(() => "");
+        if (content.includes("lofi-development-inspector")) matches.push(child);
+      }
+    }
+  }
+  await visit(root);
+  return matches.sort();
 }
 
 async function observeReconnectSettlement(
@@ -552,6 +647,38 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     await page.getByRole("status").filter({ hasText: /\d+ item\(s\)/ }).first().waitFor({
       state: "visible",
     });
+    const inspector = page.locator('[data-lofi-inspector="lofi-development-inspector"]');
+    await inspector.waitFor({ state: "attached" });
+    const inspectorSnapshot = await page.evaluate(async () => {
+      const bridge = (globalThis as typeof globalThis & {
+        __LOFI_INSPECTOR__?: { readSnapshot(): Promise<unknown> };
+      }).__LOFI_INSPECTOR__;
+      if (!bridge) throw new Error("development inspector bridge is unavailable");
+      return await bridge.readSnapshot();
+    });
+    const serializedInspector = JSON.stringify(inspectorSnapshot);
+    assert(
+      serializedInspector.includes("live detail unavailable") ||
+        serializedInspector.includes("not configured"),
+      "inspector must name unavailable transport precision",
+    );
+    assert(
+      !/secret|token|password/i.test(serializedInspector),
+      "inspector snapshot exposed secrets",
+    );
+    if (environmentMode === "isolated-local") {
+      assert(
+        await page.getByRole("button", { name: "Transport pause unavailable in local-only" })
+          .isDisabled(),
+        "local-only inspector must disable cloud transport controls",
+      );
+    }
+    assertions.push({
+      name: "development inspector",
+      status: "passed",
+      detail:
+        "The development-only surface exposed value-free storage, durability, runtime, and explicitly unavailable vendor signals.",
+    });
     devReadyMs = Math.round(performance.now() - devStarted);
     assertions.push({
       name: "development readiness",
@@ -576,6 +703,13 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail:
         "The local write survived reload and both islands kept one shared runtime subscription.",
+    });
+
+    await restartClientThroughInspector(page, islandLabels, retainedBody, timeoutMs);
+    assertions.push({
+      name: "inspector client restart",
+      status: "passed",
+      detail: "The development-only client restart retained data and restored runtime cardinality.",
     });
 
     const hmr = await exerciseHmr(
@@ -635,6 +769,16 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       detail: "A loaded page accepted a local write offline and retained it after network return.",
     });
 
+    if (environmentMode === "isolated-local") {
+      await exerciseReplicaClear(browser, devUrl, islandLabels, timeoutMs);
+      assertions.push({
+        name: "inspector replica clear",
+        status: "passed",
+        detail:
+          "A confirmation-gated clear removed an isolated OPFS replica while preserving its in-memory-compared identity state.",
+      });
+    }
+
     const devStderrPath = dev.stderrPath;
     await dev.stop();
     dev = null;
@@ -674,6 +818,20 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail: "check, test, and build completed through Deno tasks.",
     });
+    const productionRoot = join(
+      projectRoot,
+      options.source === "create" ? "dist" : "apps/reference/dist",
+    );
+    const inspectorFiles = await inspectorMarkerFiles(productionRoot);
+    assert(
+      inspectorFiles.length === 0,
+      `production build contains development inspector markers: ${inspectorFiles.join(", ")}`,
+    );
+    assertions.push({
+      name: "production inspector exclusion",
+      status: "passed",
+      detail: "The production bundle contains no development-inspector marker.",
+    });
 
     preview = startReadyProcess({
       cwd: projectRoot,
@@ -689,6 +847,10 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     const previewUrl = await preview.ready;
     assert(new URL(previewUrl).origin === new URL(devUrl).origin, "preview must reuse dev origin");
     await page.goto(previewUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    assert(
+      await page.locator('[data-lofi-inspector="lofi-development-inspector"]').count() === 0,
+      "production preview mounted the development inspector",
+    );
     await waitForItem(page, islandLabels, updatedBody);
     await waitForProductionPwa(page, timeoutMs);
     await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });

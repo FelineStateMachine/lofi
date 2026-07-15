@@ -23,6 +23,7 @@ export const runtimeRecreatedEvent = "lofi:runtime-recreated";
 type RuntimeSlot = {
   client: SerializedResourceState<Db>;
   diagnostics: RuntimeDiagnostics;
+  diagnosticListeners: Set<() => void>;
 };
 
 const slotName = "__LOFI_ALPHA53_RUNTIME__";
@@ -42,10 +43,18 @@ function slot(): RuntimeSlot {
       totalMutationListeners: 0,
       unsubscribeCalls: 0,
       localWaitCalls: 0,
+      pendingLocalWrites: 0,
+      pendingGlobalWrites: 0,
+      lastWriteDurability: "none",
       mutationErrors: 0,
     },
+    diagnosticListeners: new Set(),
   };
   return browserGlobal[slotName];
+}
+
+function notifyDiagnostics(state = slot()): void {
+  for (const listener of state.diagnosticListeners) listener();
 }
 
 async function createClient(state: RuntimeSlot): Promise<Db> {
@@ -56,6 +65,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     state.diagnostics.storageState = "persistent-driver-open";
     state.diagnostics.clientsCreated += 1;
     state.diagnostics.activeClients += 1;
+    notifyDiagnostics(state);
     return db;
   } catch (error) {
     state.diagnostics.storageState = "failed";
@@ -66,6 +76,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
 async function destroyClient(state: RuntimeSlot, db: Db): Promise<void> {
   await db.shutdown();
   state.diagnostics.activeClients -= 1;
+  notifyDiagnostics(state);
 }
 
 const adapter = new AdapterLifecycle<Db, LofiRuntime>();
@@ -73,10 +84,16 @@ let recreationPromise: Promise<LofiRuntime> | null = null;
 let shutdownPromise: Promise<void> | null = null;
 
 function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
-  const checklist = new ChecklistStore(db, state.diagnostics);
+  const checklist = new ChecklistStore(
+    db,
+    state.diagnostics,
+    undefined,
+    () => notifyDiagnostics(state),
+  );
   const stopMutationErrors = db.onMutationError((event) => checklist.reportMutationError(event));
   state.diagnostics.activeMutationListeners += 1;
   state.diagnostics.totalMutationListeners += 1;
+  notifyDiagnostics(state);
   let active = true;
   const runtime: LofiRuntime = {
     db,
@@ -88,6 +105,7 @@ function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
       checklist.close();
       stopMutationErrors();
       state.diagnostics.activeMutationListeners -= 1;
+      notifyDiagnostics(state);
       return Promise.resolve();
     },
   };
@@ -105,6 +123,17 @@ export function getRuntime(): Promise<LofiRuntime> {
 
 export function getRuntimeDiagnostics(): RuntimeDiagnostics {
   return { ...slot().diagnostics };
+}
+
+export function subscribeRuntimeDiagnostics(listener: () => void): () => void {
+  const listeners = slot().diagnosticListeners;
+  listeners.add(listener);
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    listeners.delete(listener);
+  };
 }
 
 export function recreateRuntime(): Promise<LofiRuntime> {

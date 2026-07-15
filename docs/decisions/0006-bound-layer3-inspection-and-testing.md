@@ -30,9 +30,11 @@ connectivity, and checklist writes are not mislabeled as the vendor's complete p
 Inspector transport pause/resume calls Jazz `Db.disconnect()`/`reconnect()` only when managed sync
 is configured and labels the action as a cloud-transport test seam. Real browser offline control is
 owned by `@nzip/lofi/testing` through Playwright `BrowserContext.setOffline()`. Client restart uses
-the existing serialized runtime recreation. Replica clear uses `Db.deleteClientStorage()` behind a
-destructive confirmation; it clears the local OPFS namespace while preserving the localStorage
-identity and warns that unsynced data may be lost.
+a full document reload: Jazz alpha.53 does not reliably reopen the same browser-broker namespace
+after an in-document `Db.shutdown()`/`createDb()` cycle, while a document lifecycle restart retains
+the locally durable replica. Replica clear uses `Db.deleteClientStorage()` behind a destructive
+confirmation, then reloads the document; it clears the local OPFS namespace while preserving the
+localStorage identity and warns that unsynced data may be lost.
 
 ## Two-client identity rule
 

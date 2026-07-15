@@ -29,20 +29,36 @@ function diagnostics(): RuntimeDiagnostics {
   };
 }
 
-function fakeDb() {
+function fakeDb(options: { allowGlobal?: boolean } = {}) {
   let subscriber: ((delta: { all: unknown[] }) => void) | null = null;
   let unsubscribeCalls = 0;
   let rejectNextWrite: Error | null = null;
+  let deferredNextWrite: {
+    promise: Promise<void>;
+    resolve(): void;
+    reject(error: Error): void;
+  } | null = null;
+  let globalWaitCalls = 0;
   const writes: Array<{ operation: "insert" | "update" | "delete"; value: unknown }> = [];
 
   function handle() {
+    const deferredWrite = deferredNextWrite;
+    deferredNextWrite = null;
     return {
       wait: ({ tier }: { tier: "local" | "global" }) => {
+        if (tier === "global") {
+          globalWaitCalls += 1;
+          if (!options.allowGlobal) {
+            return Promise.reject(new Error("unconfigured stores must not request global waits"));
+          }
+          return Promise.resolve();
+        }
         if (tier === "local" && rejectNextWrite) {
           const error = rejectNextWrite;
           rejectNextWrite = null;
           return Promise.reject(error);
         }
+        if (tier === "local" && deferredWrite) return deferredWrite.promise;
         return Promise.resolve();
       },
     };
@@ -79,7 +95,18 @@ function fakeDb() {
     failNextWrite(message: string) {
       rejectNextWrite = new Error(message);
     },
+    deferNextWrite() {
+      let resolve!: () => void;
+      let reject!: (error: Error) => void;
+      const promise = new Promise<void>((accept, decline) => {
+        resolve = accept;
+        reject = decline;
+      });
+      deferredNextWrite = { promise, resolve, reject };
+      return deferredNextWrite;
+    },
     writes,
+    globalWaitCalls: () => globalWaitCalls,
     unsubscribeCalls: () => unsubscribeCalls,
   };
 }
@@ -135,16 +162,23 @@ test("every checklist mutation waits for local durability", async () => {
     "create, edit, complete, and delete must reach the Jazz boundary",
   );
   assert(store.getSnapshot().durability === "local", "the UI may claim local after the wait");
+  assertCount(
+    db.globalWaitCalls(),
+    0,
+    "an unconfigured store must never request global durability",
+  );
 });
 
 test("configured sync advances the latest write from local to global durability", async () => {
-  const store = new ChecklistStore(fakeDb().value, diagnostics(), true);
+  const db = fakeDb({ allowGlobal: true });
+  const store = new ChecklistStore(db.value, diagnostics(), true);
   await store.create("sync after reconnect");
   await Promise.resolve();
   assert(
     store.getSnapshot().durability === "global",
     "the public mutation handle must make completed global durability visible",
   );
+  assertCount(db.globalWaitCalls(), 1, "configured sync must request global durability");
 });
 
 test("local write failures remain visible and reject the mutation", async () => {
@@ -160,6 +194,46 @@ test("local write failures remain visible and reject the mutation", async () => 
   assert(rejected, "a failed local wait must reject the public mutation");
   assert(store.getSnapshot().status === "error", "a failed local wait must reach UI state");
   assert(store.getSnapshot().error === "disk full", "the durable-write cause must remain visible");
+});
+
+test("a superseded local-write failure remains visible", async () => {
+  const db = fakeDb();
+  const counts = diagnostics();
+  const store = new ChecklistStore(db.value, counts);
+  const firstWrite = db.deferNextWrite();
+
+  const firstMutation = store.create("first");
+  await Promise.resolve();
+  await store.create("newer");
+  firstWrite.reject(new Error("first write lost"));
+
+  let rejected = false;
+  try {
+    await firstMutation;
+  } catch {
+    rejected = true;
+  }
+  assert(rejected, "the superseded mutation promise must still reject");
+  assert(store.getSnapshot().status === "error", "the stale rejection must reach UI state");
+  assert(store.getSnapshot().durability === "failed", "the stale rejection must be durable state");
+  assert(store.getSnapshot().error === "first write lost", "the stale cause must remain visible");
+  assertCount(counts.mutationErrors, 1, "the stale failure must remain diagnosable");
+});
+
+test("retrying after failure clears the error status immediately", async () => {
+  const db = fakeDb();
+  const store = new ChecklistStore(db.value, diagnostics());
+  db.failNextWrite("disk full");
+  await store.create("fails").catch(() => undefined);
+  const retryWrite = db.deferNextWrite();
+
+  const retry = store.create("retry");
+  await Promise.resolve();
+  assert(store.getSnapshot().status === "ready", "retry must leave the failed list status");
+  assert(store.getSnapshot().error === null, "retry must not render a null error message");
+  assert(store.getSnapshot().durability === "none", "retry is pending until local durability");
+  retryWrite.resolve();
+  await retry;
 });
 
 test("public mutation errors update observable diagnostics", () => {

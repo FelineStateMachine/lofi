@@ -111,7 +111,7 @@ export class ChecklistStore {
 
   async #settle(mutation: MutationHandle): Promise<void> {
     const generation = ++this.#writeGeneration;
-    this.#set({ durability: "none", error: null });
+    this.#set({ status: "ready", durability: "none", error: null });
     try {
       await mutation.wait({ tier: "local" });
       this.#diagnostics.localWaitCalls += 1;
@@ -126,12 +126,14 @@ export class ChecklistStore {
             }
           },
           (error) => {
-            if (generation === this.#writeGeneration) this.#fail(error);
+            this.#diagnostics.mutationErrors += 1;
+            this.#fail(error);
           },
         );
       }
     } catch (error) {
-      if (generation === this.#writeGeneration) this.#fail(error);
+      this.#diagnostics.mutationErrors += 1;
+      this.#fail(error);
       throw error;
     }
   }

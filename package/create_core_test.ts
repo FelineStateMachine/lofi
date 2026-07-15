@@ -100,12 +100,13 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
     }
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
     assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.1.0/");
+    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.1.0/testing");
     const lofiSpecifiers = Object.entries(config.imports)
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
     assert(
-      lofiSpecifiers.length === 7,
-      `expected one package prefix and six command mappings, received ${lofiSpecifiers.length}`,
+      lofiSpecifiers.length === 8,
+      `expected one package prefix, six commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.1.0/")),
@@ -119,6 +120,7 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
 Deno.test("package manifest and generated version stay coupled", () => {
   assertEquals(packageManifest.name, "@nzip/lofi");
   assertEquals(packageManifest.version, LOFI_VERSION);
+  assertEquals(packageManifest.exports["./testing"], "./package/testing/mod.ts");
 });
 
 Deno.test("createProject refuses a non-empty destination without changing it", async () => {

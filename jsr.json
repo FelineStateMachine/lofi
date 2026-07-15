@@ -10,6 +10,7 @@
     "./dev": "./package/commands/dev.ts",
     "./doctor": "./package/commands/doctor.ts",
     "./preview": "./package/commands/preview.ts",
+    "./testing": "./package/testing/mod.ts",
     "./test": "./package/commands/run_tests.ts"
   },
   "publish": {
@@ -25,6 +26,7 @@
     ],
     "exclude": [
       "package/**/*_test.ts",
+      "package/testing/fixture_integration.ts",
       "package/testdata"
     ]
   }

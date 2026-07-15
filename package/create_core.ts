@@ -72,6 +72,7 @@ function generatedDenoConfig(packagePrefix: string): string {
       "@nzip/lofi/dev": packageCommand("dev", "commands/dev.ts"),
       "@nzip/lofi/doctor": packageCommand("doctor", "commands/doctor.ts"),
       "@nzip/lofi/preview": packageCommand("preview", "commands/preview.ts"),
+      "@nzip/lofi/testing": packageCommand("testing", "testing/mod.ts"),
       "@nzip/lofi/test": packageCommand("test", "commands/run_tests.ts"),
       "astro": "npm:astro@7.0.9",
       "astro/config": "npm:astro@7.0.9/config",

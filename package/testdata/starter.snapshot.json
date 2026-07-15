@@ -2,7 +2,7 @@
   ".env.example": "c22aed73c7089168ac777fd4f68ad504f9b826ea7185b705514a4ac5505918b1",
   ".gitignore": "9efb15c6a9bfc20f296ed712e74273b6015a0dd9a40f7e861b8711dcf61825f1",
   "astro.config.ts": "8a19cae348af7fcbd9db119d2423dd2e464f0e5ace6e5723d06cd3a1cc9a0d4b",
-  "deno.json": "11183a356cb65dc17394945622fffd16828c5f47fb88388451b61850c620d3f8",
+  "deno.json": "1285b00d154c19fe9104d7b13eff503cd95d628574d409177cdfbf7d652a98ac",
   "public/favicon.svg": "23efdb888dae688715faafe3ef94f7b5ad1976afcc715c0a742218b54732c6ad",
   "public/manifest.webmanifest": "d23457fe8df68a16181fde1d4ecca4b69d3b050b5fa3bf8f4051cb05bde1d3d6",
   "public/sw.js": "d816161fd5a35f2c477ca72eaa5ba58eb8d94795a4399d29a19838e886dafa31",
@@ -40,5 +40,6 @@
   "src/styles/global.css": "7cbe243842f3bca32038d99a4872afe30c346cf7137387ce41861c9333a1f5c0",
   "src/ui-contract.ts": "fc40d20dff6ba870c0de038839e66cb61d4349031e4a7748d963ca182e8bbec0",
   "tests/author-boundary_test.ts": "7ea79031ed4ae7d7966bef2e456e02efe7d93d82c8f0bee219d885d300260ed2",
+  "tests/testing-contract_test.ts": "4257306060d42566b879d92b3a6c395805b20f53717bee55d670c0ef7a117eec",
   "tsconfig.json": "fe2e5acc66101ed42d893d7e7063d07d298927621b351adcfb1ebde6c3a0a2ac"
 }

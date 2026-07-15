@@ -24,5 +24,10 @@ Application work should not require edits in `src/_lofi/`. The M2 generator copi
 runtime-owned files without turning them into public framework APIs. M4 may replace the local seam
 with proven `@nzip/lofi` subpath imports without changing product UI.
 
+Browser journeys import readiness, offline, two-client, and sanitized failure-artifact helpers from
+`@nzip/lofi/testing`. The normal `deno task test` verifies that generated projects resolve this
+surface without launching Chromium; real browser and cloud-convergence journeys remain explicit
+developer-run gates.
+
 Passkey backup and recovery are intentionally absent. The pinned Jazz alpha exposes a rejected
 credential design, so this reference uses a device-local identity and does not imply recoverability.

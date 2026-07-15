@@ -59,6 +59,9 @@ import uiContract from "../apps/reference/src/ui-contract.ts" with { type: "text
 import authorBoundaryTest from "../apps/reference/tests/author-boundary_test.ts" with {
   type: "text",
 };
+import testingContractTest from "../apps/reference/tests/testing-contract_test.ts" with {
+  type: "text",
+};
 import tsconfig from "../apps/reference/tsconfig.json" with { type: "text" };
 
 /** Every source-controlled file copied from the validated reference app into a new project. */
@@ -100,5 +103,6 @@ export const STARTER_TEMPLATE: Readonly<Record<string, string>> = {
   "src/styles/global.css": globalStyles,
   "src/ui-contract.ts": uiContract,
   "tests/author-boundary_test.ts": authorBoundaryTest,
+  "tests/testing-contract_test.ts": testingContractTest,
   "tsconfig.json": tsconfig,
 };

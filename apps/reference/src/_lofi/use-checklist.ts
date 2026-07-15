@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
-import { getRuntime, getRuntimeDiagnostics, runtimeRecreatedEvent } from "./lofi-runtime.ts";
-import type { NotesSnapshot, RuntimeDiagnostics } from "./notes-store.ts";
+import type { ChecklistSnapshot } from "./checklist-store.ts";
+import { getRuntime, runtimeRecreatedEvent } from "./runtime.ts";
 
-const initial: NotesSnapshot = {
+const initial: ChecklistSnapshot = {
   status: "loading",
-  notes: [],
+  tasks: [],
   durability: "none",
   error: null,
 };
 
-export function useNotes() {
+export function useChecklist() {
   const [snapshot, setSnapshot] = useState(initial);
-  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics>(getRuntimeDiagnostics());
 
   useEffect(() => {
     let cancelled = false;
@@ -24,11 +23,8 @@ export function useNotes() {
       setSnapshot(initial);
       void getRuntime().then((runtime) => {
         if (cancelled || generation !== connectionGeneration) return;
-        const update = () => {
-          setSnapshot(runtime.notes.getSnapshot());
-          setDiagnostics(getRuntimeDiagnostics());
-        };
-        unsubscribe = runtime.notes.subscribe(update);
+        const update = () => setSnapshot(runtime.checklist.getSnapshot());
+        unsubscribe = runtime.checklist.subscribe(update);
         update();
       }, (error) => {
         if (cancelled || generation !== connectionGeneration) return;
@@ -50,15 +46,18 @@ export function useNotes() {
     };
   }, []);
 
-  const add = useCallback(async (body: string) => {
-    const runtime = await getRuntime();
-    await runtime.notes.add(body);
+  const create = useCallback(async (text: string) => {
+    await (await getRuntime()).checklist.create(text);
+  }, []);
+  const update = useCallback(async (id: string, text: string) => {
+    await (await getRuntime()).checklist.update(id, text);
+  }, []);
+  const setCompleted = useCallback(async (id: string, completed: boolean) => {
+    await (await getRuntime()).checklist.setCompleted(id, completed);
+  }, []);
+  const remove = useCallback(async (id: string) => {
+    await (await getRuntime()).checklist.delete(id);
   }, []);
 
-  const update = useCallback(async (id: string, body: string) => {
-    const runtime = await getRuntime();
-    await runtime.notes.update(id, body);
-  }, []);
-
-  return { ...snapshot, diagnostics, add, update };
+  return { ...snapshot, create, update, setCompleted, remove };
 }

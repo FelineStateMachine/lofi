@@ -1,11 +1,17 @@
 import type { Db, MutationErrorEvent } from "jazz-tools";
-import { app } from "../schema.ts";
+import { referenceApp } from "../app.ts";
 import { serverUrl } from "./config.ts";
 
-export type Note = { id: string; body: string; createdAt: Date };
-export type NotesSnapshot = {
+export type ChecklistTask = {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: Date;
+};
+
+export type ChecklistSnapshot = {
   status: "loading" | "ready" | "error";
-  notes: Note[];
+  tasks: ChecklistTask[];
   durability: "none" | "local" | "global" | "failed";
   error: string | null;
 };
@@ -25,25 +31,31 @@ export type RuntimeDiagnostics = {
 };
 
 type Listener = () => void;
+type MutationHandle = {
+  wait(options: { tier: "local" | "global" }): Promise<unknown>;
+};
 
-export class NotesStore {
+export class ChecklistStore {
   readonly #db: Db;
   readonly #diagnostics: RuntimeDiagnostics;
+  readonly #syncConfigured: boolean;
   readonly #listeners = new Set<Listener>();
   #vendorUnsubscribe: (() => void) | null = null;
-  #snapshot: NotesSnapshot = {
+  #writeGeneration = 0;
+  #snapshot: ChecklistSnapshot = {
     status: "loading",
-    notes: [],
+    tasks: [],
     durability: "none",
     error: null,
   };
 
-  constructor(db: Db, diagnostics: RuntimeDiagnostics) {
+  constructor(db: Db, diagnostics: RuntimeDiagnostics, syncConfigured = Boolean(serverUrl)) {
     this.#db = db;
     this.#diagnostics = diagnostics;
+    this.#syncConfigured = syncConfigured;
   }
 
-  getSnapshot = (): NotesSnapshot => this.#snapshot;
+  getSnapshot = (): ChecklistSnapshot => this.#snapshot;
 
   subscribe = (listener: Listener): () => void => {
     this.#listeners.add(listener);
@@ -61,54 +73,76 @@ export class NotesStore {
     };
   };
 
-  async add(body: string): Promise<void> {
-    const write = this.#db.insert(app.notes, { body, createdAt: new Date() });
-    try {
-      await write.wait({ tier: "local" });
-      this.#diagnostics.localWaitCalls += 1;
-      this.#set({ durability: "local", error: null });
-      if (serverUrl) {
-        void write.wait({ tier: "global" }).then(
-          () => this.#set({ durability: "global", error: null }),
-          (error) => this.#fail(error),
-        );
-      }
-    } catch (error) {
-      this.#fail(error);
-      throw error;
-    }
+  async create(text: string): Promise<void> {
+    const now = new Date();
+    await this.#settle(this.#db.insert(referenceApp.schema.tasks, {
+      text,
+      completed: false,
+      createdAt: now,
+    }));
   }
 
-  async update(id: string, body: string): Promise<void> {
-    try {
-      await this.#db.update(app.notes, id, { body }).wait({ tier: "local" });
-      this.#diagnostics.localWaitCalls += 1;
-      this.#set({ durability: "local", error: null });
-    } catch (error) {
-      this.#fail(error);
-      throw error;
-    }
+  async update(id: string, text: string): Promise<void> {
+    await this.#settle(
+      this.#db.update(referenceApp.schema.tasks, id, { text }),
+    );
   }
 
-  reportMutationError(event: MutationErrorEvent) {
+  async setCompleted(id: string, completed: boolean): Promise<void> {
+    await this.#settle(
+      this.#db.update(referenceApp.schema.tasks, id, { completed }),
+    );
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.#settle(this.#db.delete(referenceApp.schema.tasks, id));
+  }
+
+  reportMutationError(event: MutationErrorEvent): void {
     this.#diagnostics.mutationErrors += 1;
     this.#fail(new Error(`${event.code}: ${event.reason}`));
   }
 
-  close() {
+  close(): void {
     this.#listeners.clear();
     this.#diagnostics.activeConsumers = 0;
     this.#closeVendorSubscription();
   }
 
-  #openVendorSubscription() {
+  async #settle(mutation: MutationHandle): Promise<void> {
+    const generation = ++this.#writeGeneration;
+    try {
+      await mutation.wait({ tier: "local" });
+      this.#diagnostics.localWaitCalls += 1;
+      if (generation === this.#writeGeneration) {
+        this.#set({ durability: "local", error: null });
+      }
+      if (this.#syncConfigured) {
+        void mutation.wait({ tier: "global" }).then(
+          () => {
+            if (generation === this.#writeGeneration) {
+              this.#set({ durability: "global", error: null });
+            }
+          },
+          (error) => {
+            if (generation === this.#writeGeneration) this.#fail(error);
+          },
+        );
+      }
+    } catch (error) {
+      if (generation === this.#writeGeneration) this.#fail(error);
+      throw error;
+    }
+  }
+
+  #openVendorSubscription(): void {
     if (this.#vendorUnsubscribe) return;
     try {
-      this.#vendorUnsubscribe = this.#db.subscribeAll(app.notes, (delta) => {
+      this.#vendorUnsubscribe = this.#db.subscribeAll(referenceApp.schema.tasks, (delta) => {
         this.#snapshot = {
           ...this.#snapshot,
           status: "ready",
-          notes: delta.all as Note[],
+          tasks: delta.all as ChecklistTask[],
           error: null,
         };
         this.#emit();
@@ -120,7 +154,7 @@ export class NotesStore {
     }
   }
 
-  #closeVendorSubscription() {
+  #closeVendorSubscription(): void {
     if (!this.#vendorUnsubscribe) return;
     this.#vendorUnsubscribe();
     this.#diagnostics.unsubscribeCalls += 1;
@@ -128,12 +162,12 @@ export class NotesStore {
     this.#diagnostics.activeVendorSubscriptions -= 1;
   }
 
-  #set(change: Partial<NotesSnapshot>) {
+  #set(change: Partial<ChecklistSnapshot>): void {
     this.#snapshot = { ...this.#snapshot, ...change };
     this.#emit();
   }
 
-  #fail(error: unknown) {
+  #fail(error: unknown): void {
     this.#snapshot = {
       ...this.#snapshot,
       status: "error",
@@ -143,7 +177,7 @@ export class NotesStore {
     this.#emit();
   }
 
-  #emit() {
+  #emit(): void {
     for (const listener of this.#listeners) listener();
   }
 }

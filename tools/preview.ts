@@ -1,6 +1,6 @@
 import { extname, join, normalize } from "node:path";
 
-const root = "apps/prototype/dist";
+const root = "apps/reference/dist";
 const portFlag = Deno.args.findIndex((arg) => arg === "--port");
 const port = portFlag >= 0 ? Number(Deno.args[portFlag + 1]) : 4321;
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {

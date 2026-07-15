@@ -1,7 +1,7 @@
 {
-  "name": "lofi device contract",
+  "name": "lofi checklist",
   "short_name": "lofi",
-  "description": "M1 local-first durability and identity contract harness",
+  "description": "A durable local-first checklist reference application",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

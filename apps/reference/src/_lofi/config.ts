@@ -1,6 +1,7 @@
 /// <reference path="../env.d.ts" />
 
 import type { DbConfig } from "jazz-tools";
+import { referenceApp } from "../app.ts";
 
 const LOCAL_APP_ID = "00000000-0000-0000-0000-00000000f153";
 export const appId = import.meta.env?.VITE_JAZZ_APP_ID ?? LOCAL_APP_ID;
@@ -11,6 +12,6 @@ export function databaseConfig(secret: string): DbConfig {
     appId,
     ...(serverUrl ? { serverUrl } : {}),
     secret,
-    driver: { type: "persistent", dbName: `lofi-prototype-${appId}` },
+    driver: { type: "persistent", dbName: `${referenceApp.databaseName}-${appId}` },
   };
 }

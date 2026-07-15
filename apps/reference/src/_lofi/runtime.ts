@@ -1,7 +1,7 @@
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
+import { ChecklistStore, type RuntimeDiagnostics } from "./checklist-store.ts";
 import { appId, databaseConfig } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
-import { NotesStore, type RuntimeDiagnostics } from "./notes-store.ts";
 import {
   AdapterLifecycle,
   createSerializedResourceState,
@@ -13,7 +13,7 @@ import {
 
 export type LofiRuntime = {
   db: Db;
-  notes: NotesStore;
+  checklist: ChecklistStore;
   diagnostics: RuntimeDiagnostics;
   shutdown(): Promise<void>;
 };
@@ -73,19 +73,19 @@ let recreationPromise: Promise<LofiRuntime> | null = null;
 let shutdownPromise: Promise<void> | null = null;
 
 function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
-  const notes = new NotesStore(db, state.diagnostics);
-  const stopMutationErrors = db.onMutationError((event) => notes.reportMutationError(event));
+  const checklist = new ChecklistStore(db, state.diagnostics);
+  const stopMutationErrors = db.onMutationError((event) => checklist.reportMutationError(event));
   state.diagnostics.activeMutationListeners += 1;
   state.diagnostics.totalMutationListeners += 1;
   let active = true;
   const runtime: LofiRuntime = {
     db,
-    notes,
+    checklist,
     diagnostics: state.diagnostics,
     shutdown() {
       if (!active) return Promise.resolve();
       active = false;
-      notes.close();
+      checklist.close();
       stopMutationErrors();
       state.diagnostics.activeMutationListeners -= 1;
       return Promise.resolve();

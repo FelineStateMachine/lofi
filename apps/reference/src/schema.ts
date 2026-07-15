@@ -1,8 +1,9 @@
 import { schema as s } from "jazz-tools";
 
 const schema = {
-  notes: s.table({
-    body: s.string(),
+  tasks: s.table({
+    text: s.string(),
+    completed: s.boolean(),
     createdAt: s.timestamp(),
   }),
 };

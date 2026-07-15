@@ -1,7 +1,7 @@
 import { environmentNames, validateEnvironment } from "./env_contract.ts";
 import { loadEnvironment } from "./load_env.ts";
 
-const INTERNAL_ENV = "apps/prototype/.env";
+const INTERNAL_ENV = "apps/reference/.env";
 const LOCAL_APP_ID = "00000000-0000-0000-0000-00000000f153";
 
 async function ensureStableLocalAppId() {
@@ -63,7 +63,7 @@ async function routeCount(): Promise<number> {
     }
   }
   try {
-    await visit("apps/prototype/dist");
+    await visit("apps/reference/dist");
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error;
   }
@@ -85,7 +85,7 @@ async function buildFiles(root: string): Promise<string[]> {
 
 const command = Deno.args[0];
 if (command !== "dev" && command !== "build") {
-  console.error("usage: run_prototype.ts <dev|build>");
+  console.error("usage: run_reference.ts <dev|build>");
   Deno.exit(2);
 }
 
@@ -135,7 +135,7 @@ const exitCode = await run(
     "npm:astro@7.0.9",
     command,
     "--root",
-    "apps/prototype",
+    "apps/reference",
     ...forwardedArgs,
   ],
   childEnvironment,
@@ -150,21 +150,21 @@ if (command === "build") {
     }).output()).stdout,
   ).trim();
   await Deno.writeTextFile(
-    "apps/prototype/dist/lofi-build.json",
+    "apps/reference/dist/lofi-build.json",
     `${JSON.stringify({ revision, builtAt: new Date().toISOString() })}\n`,
   );
-  const serviceWorkerPath = "apps/prototype/dist/sw.js";
+  const serviceWorkerPath = "apps/reference/dist/sw.js";
   const serviceWorker = await Deno.readTextFile(serviceWorkerPath);
   await Deno.writeTextFile(
     serviceWorkerPath,
     serviceWorker.replace("__LOFI_BUILD_REVISION__", revision),
   );
-  const precache = (await buildFiles("apps/prototype/dist"))
+  const precache = (await buildFiles("apps/reference/dist"))
     .filter((path) => path !== "./lofi-precache.json")
     .map((path) => path === "./index.html" ? "./" : path);
   precache.push("./lofi-precache.json");
   await Deno.writeTextFile(
-    "apps/prototype/dist/lofi-precache.json",
+    "apps/reference/dist/lofi-precache.json",
     `${JSON.stringify(precache.sort())}\n`,
   );
   const scanCode = await run(
@@ -172,5 +172,5 @@ if (command === "build") {
     validatedEnvironment,
   );
   if (scanCode !== 0) Deno.exit(scanCode);
-  console.log(`lofi build: apps/prototype/dist (${await routeCount()} routes, ${revision})`);
+  console.log(`lofi build: apps/reference/dist (${await routeCount()} routes, ${revision})`);
 }

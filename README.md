@@ -30,7 +30,7 @@ Built on [Jazz 2](https://jazz.tools) (CRDT data + sync) · [Preact](https://pre
 When every milestone below has landed, this is the entire onboarding experience:
 
 ```sh
-deno run -A jsr:@lofi-cat/create my-app
+deno run -A jsr:@nzip/lofi/create my-app
 cd my-app
 deno task dev
 ```
@@ -96,7 +96,7 @@ is reported as _unavailable_ rather than faked, because the pinned API exposes n
 | **M1 — Feasibility spikes**   | Prove Jazz 2, Preact, OPFS, identity, Astro islands, and Deno behavior with go/no-go decisions.    | ✅ Done        |
 | **M2 — DevX vertical slice**  | `create`, `dev`, `doctor`, diagnostics, inspector, and testing workflows around a reference app.   | 🚧 In progress |
 | **M3 — Mobile PWA hardening** | Install, persistence, offline cold start, lifecycle recovery, and physical-device validation.      | ⏳ Queued      |
-| **M4 — Framework extraction** | Extract proven seams into `@lofi-cat/*` packages; validate them through a second app.              | ⏳ Queued      |
+| **M4 — Framework extraction** | Extract proven seams into `@nzip/lofi` subpath exports; validate them through a second app.        | ⏳ Queued      |
 
 The definition of done for the whole prototype is the [north star](#the-north-star) journey passing
 its contract budgets end-to-end, on real devices.
@@ -108,7 +108,7 @@ lofi/
 ├── docs/
 │   ├── devx-contract.md   # The product contract: promises, budgets, statuses
 │   └── decisions/         # Evidence-backed decision records (ADR-style)
-├── apps/prototype/        # The integrated app graduated from M1 (M2 reshapes this)
+├── apps/reference/        # The integrated app graduated from M1 and reshaped in M2
 ├── spikes/                # M1 feasibility experiments, kept for evidence
 ├── tools/                 # Deno tasks: env contract, secret scanning, runners
 ├── init.md                # Original research plan — input, not the contract

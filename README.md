@@ -30,7 +30,7 @@ Built on [Jazz 2](https://jazz.tools) (CRDT data + sync) · [Preact](https://pre
 When every milestone below has landed, this is the entire onboarding experience:
 
 ```sh
-deno run -A jsr:@lofi/create my-app
+deno run -A jsr:@lofi-cat/create my-app
 cd my-app
 deno task dev
 ```
@@ -90,13 +90,13 @@ is reported as _unavailable_ rather than faked, because the pinned API exposes n
 
 ## Roadmap
 
-| Milestone                     | Goal                                                                                                 | Status         |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- | -------------- |
-| **M0 — DevX contract**        | Define the golden path, command surface, environment contract, and measurable acceptance criteria.   | ✅ Done        |
-| **M1 — Feasibility spikes**   | Prove Jazz 2, Preact, OPFS, identity, Astro islands, and Deno behavior with go/no-go decisions.      | ✅ Done        |
-| **M2 — DevX vertical slice**  | `create`, `dev`, `doctor`, diagnostics, inspector, and testing workflows around a reference app.     | 🚧 In progress |
-| **M3 — Mobile PWA hardening** | Install, persistence, offline cold start, lifecycle recovery, and physical-device validation.        | ⏳ Queued      |
-| **M4 — Framework extraction** | Extract proven seams into `@lofi/*` packages; validate them through a second generated consumer app. | ⏳ Queued      |
+| Milestone                     | Goal                                                                                               | Status         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- | -------------- |
+| **M0 — DevX contract**        | Define the golden path, command surface, environment contract, and measurable acceptance criteria. | ✅ Done        |
+| **M1 — Feasibility spikes**   | Prove Jazz 2, Preact, OPFS, identity, Astro islands, and Deno behavior with go/no-go decisions.    | ✅ Done        |
+| **M2 — DevX vertical slice**  | `create`, `dev`, `doctor`, diagnostics, inspector, and testing workflows around a reference app.   | 🚧 In progress |
+| **M3 — Mobile PWA hardening** | Install, persistence, offline cold start, lifecycle recovery, and physical-device validation.      | ⏳ Queued      |
+| **M4 — Framework extraction** | Extract proven seams into `@lofi-cat/*` packages; validate them through a second app.              | ⏳ Queued      |
 
 The definition of done for the whole prototype is the [north star](#the-north-star) journey passing
 its contract budgets end-to-end, on real devices.

@@ -30,7 +30,7 @@ This is the eventual product experience. The generator itself is M2 work and is 
 deliverable.
 
 ```sh
-deno run -A jsr:@lofi/create my-app
+deno run -A jsr:@lofi-cat/create my-app
 cd my-app
 deno task dev
 ```
@@ -116,15 +116,15 @@ These are product outputs, not claims that every command is implemented at Contr
 prototype must implement `dev`, `check`, `test`, `build`, and `preview`; `create` and the complete
 `doctor` experience graduate in M2.
 
-| Command                               | Success output must contain                                | Failure output must contain                                                |
-| ------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `deno run -A jsr:@lofi/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command. |
-| `deno task dev`                       | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                   |
-| `deno task doctor`                    | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.      |
-| `deno task check`                     | Checks run and concise pass summary.                       | First failing check and rerun command.                                     |
-| `deno task test`                      | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.         |
-| `deno task build`                     | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                |
-| `deno task preview`                   | Production URL and build identity.                         | Missing/stale build and exact build command.                               |
+| Command                                   | Success output must contain                                | Failure output must contain                                                |
+| ----------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `deno run -A jsr:@lofi-cat/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command. |
+| `deno task dev`                           | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                   |
+| `deno task doctor`                        | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.      |
+| `deno task check`                         | Checks run and concise pass summary.                       | First failing check and rerun command.                                     |
+| `deno task test`                          | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.         |
+| `deno task build`                         | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                |
+| `deno task preview`                       | Production URL and build identity.                         | Missing/stale build and exact build command.                               |
 
 Example successful development output:
 

@@ -295,3 +295,9 @@ it may merge into `dev`.
 Layer 1 does not close #11: checkout-mode evidence is necessary, but the generated-project journey
 cannot pass until Layer 2 implements the public create command. Remaining abstraction leaks are
 tracked in `docs/m2-abstraction-leaks.md` rather than hidden behind premature package APIs.
+
+Layer 1 keeps M1's `lofi-prototype-<appId>` OPFS namespace so existing device rows remain visible to
+the reviewed notes-to-tasks lens. Jazz discovers that lens and its snapshots beside `schema.ts` in
+`apps/reference/src/migrations`. `deno task check:migrations` couples the current schema hash,
+incoming migration edge, and snapshot; `deno task schema:deploy` is the explicit cloud publication
+step for the schema, migration, and permissions bundle.

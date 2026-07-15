@@ -16,6 +16,16 @@ if (Boolean(cloudAppId) !== Boolean(cloudServerUrl)) {
     "Cloud mode requires both JAZZ_APP_ID and JAZZ_SERVER_URL; set the missing name or remove the partial pair.",
   );
 }
+
+// Jazz's managed Vite plugin reads the VITE_ pair when selecting the server
+// that receives schema, migration, and permission publication. The reference
+// runtime still receives explicit build constants below, so only this public
+// pair enters Vite's client-visible namespace and server secrets remain private.
+if (cloudAppId && cloudServerUrl) {
+  process.env.VITE_JAZZ_APP_ID = cloudAppId;
+  process.env.VITE_JAZZ_SERVER_URL = cloudServerUrl;
+}
+
 export default defineConfig({
   output: "static",
   integrations: [preact({ compat: true, devtools: true })],

@@ -1,3 +1,4 @@
+import { collectBuildArtifactFiles } from "./artifact_files.ts";
 import { serverEnvironmentNames } from "./env_contract.ts";
 import { loadNamedEnvironment } from "./load_env.ts";
 import { findSecretLeaks } from "./secret_scan.ts";
@@ -11,26 +12,12 @@ async function sourceFiles(): Promise<string[]> {
   return new TextDecoder().decode(output.stdout).split("\0").filter(Boolean);
 }
 
-async function filesBelow(path: string): Promise<string[]> {
-  try {
-    const result: string[] = [];
-    for await (const entry of Deno.readDir(path)) {
-      const child = `${path}/${entry.name}`;
-      if (entry.isDirectory) result.push(...await filesBelow(child));
-      else if (entry.isFile) result.push(child);
-    }
-    return result;
-  } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return [];
-    throw error;
-  }
-}
-
 const environment = await loadNamedEnvironment(serverEnvironmentNames);
 const secretValues = serverEnvironmentNames
   .map((name) => ({ name, value: environment[name]?.trim() ?? "" }))
   .filter(({ value }) => value.length > 0);
-const candidates = [...new Set([...await sourceFiles(), ...await filesBelow("dist")])];
+const buildArtifacts = await collectBuildArtifactFiles();
+const candidates = [...new Set([...await sourceFiles(), ...buildArtifacts])];
 const files: Array<{ path: string; content: Uint8Array }> = [];
 
 for (const path of candidates) {
@@ -49,5 +36,5 @@ if (leaks.length > 0) {
 }
 
 console.log(
-  `secret leak check passed (${candidates.length} files, ${secretValues.length} available server secrets)`,
+  `secret leak check passed (${candidates.length} files including ${buildArtifacts.length} build artifacts, ${secretValues.length} available server secrets)`,
 );

@@ -85,28 +85,28 @@ remains the only required global runtime for a generated application.
 
 ## Measurable promises
 
-| ID              | Promise                                                        | v0 budget or condition                                                                              | Evidence owner                    | M1 gate | Status   |
-| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------- | ------- | -------- |
-| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                     | M2                                | no      | proposed |
-| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                              | #2 and #6                         | yes     | proposed |
-| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                       | M2                                | no      | proposed |
-| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                             | integrated M1 prototype           | yes     | proposed |
-| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                       | #6                                | yes     | proposed |
-| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one subscription per consumer after five edits.      | #5 and #6                         | yes     | proposed |
-| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.             | integrated prototype              | yes     | proposed |
-| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.    | #5, #6, integration               | yes     | proposed |
-| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.   | #7                                | yes     | proposed |
-| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                              | #4 and #7                         | yes     | proposed |
-| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                | #7 and integration                | yes     | proposed |
-| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Every state maps to documented vendor API or named lofi instrumentation.                            | #7                                | yes     | proposed |
-| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output. | #3, #7, final build               | yes     | proposed |
-| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                    | #3, #4, #6                        | yes     | proposed |
-| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI distinguishes local identity, passkey backup/restore, and bearer recovery phrase.                | #8                                | yes     | proposed |
-| DX-DEVICE-01    | M1 device/auth tests use a stable secure origin.               | Tested origin preserves relying-party ID across browser and installed-app sessions.                 | #8                                | yes     | proposed |
-| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                 | M3                                | no      | proposed |
-| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                        | feasibility #4; full M3           | no      | proposed |
-| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                      | #6                                | yes     | proposed |
-| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                      | feasibility #7; M2 implementation | no      | proposed |
+| ID              | Promise                                                        | v0 budget or condition                                                                               | Evidence owner                    | M1 gate | Status    |
+| --------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------- | ------- | --------- |
+| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                      | M2                                | no      | proposed  |
+| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                               | #2 and #6                         | yes     | proposed  |
+| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                        | M2                                | no      | proposed  |
+| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                              | integrated M1 prototype           | yes     | proposed  |
+| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                        | #6                                | yes     | proposed  |
+| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one subscription per consumer after five edits.       | #5 and #6                         | yes     | proposed  |
+| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.              | integrated prototype              | yes     | proposed  |
+| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.     | #5, #6, integration               | yes     | proposed  |
+| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.    | #7                                | yes     | validated |
+| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                               | #4 and #7                         | yes     | proposed  |
+| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                 | #7 and integration                | yes     | proposed  |
+| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named. | #7                                | yes     | revised   |
+| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.  | #3, #7, final build               | yes     | proposed  |
+| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                     | #3, #4, #6                        | yes     | proposed  |
+| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI distinguishes local identity, passkey backup/restore, and bearer recovery phrase.                 | #8                                | yes     | proposed  |
+| DX-DEVICE-01    | M1 device/auth tests use a stable secure origin.               | Tested origin preserves relying-party ID across browser and installed-app sessions.                  | #8                                | yes     | proposed  |
+| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                  | M3                                | no      | proposed  |
+| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                         | feasibility #4; full M3           | no      | proposed  |
+| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                       | #6                                | yes     | proposed  |
+| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                       | feasibility #7; M2 implementation | no      | proposed  |
 
 ## Canonical command surface and output contract
 
@@ -131,7 +131,7 @@ lofi dev
 Local:       http://localhost:4321
 Storage:     OPFS durable
 Identity:    local-first; passkey backup not configured
-Sync:        connected; durability detail unavailable
+Sync:        configured; last write confirmed global; live connection detail unavailable
 PWA:         development service worker disabled
 ```
 
@@ -190,13 +190,14 @@ change removes an author-facing concept.
 
 ## Environment contract
 
-The four current names are **spike inputs**, not graduated API. #7 must confirm, rename, or remove
-them before DX-ENV-01 can validate.
+The four names are lofi's configuration API. #7 confirmed that the complete public pair can be
+mapped at the Deno/Vite edge without projecting the server-only pair. The vendor's
+`VITE_JAZZ_APP_ID` and `VITE_JAZZ_SERVER_URL` names remain internal implementation details.
 
 | Name                | Provisional classification | Contract                                                                      |
 | ------------------- | -------------------------- | ----------------------------------------------------------------------------- |
-| `JAZZ_APP_ID`       | client-visible identifier  | May enter client config only after validation.                                |
-| `JAZZ_SERVER_URL`   | client-visible endpoint    | May enter the named adapter; raw product-UI use is forbidden.                 |
+| `JAZZ_APP_ID`       | client-visible identifier  | Enters client config only as part of a validated complete public pair.        |
+| `JAZZ_SERVER_URL`   | client-visible endpoint    | Enters the named adapter; raw product-UI use is forbidden.                    |
 | `JAZZ_ADMIN_SECRET` | server-only secret         | Never projected, logged, generated with a value, or built into client assets. |
 | `BACKEND_SECRET`    | server-only secret         | Never projected, logged, generated with a value, or built into client assets. |
 
@@ -231,10 +232,10 @@ generator gets its own fixture inspection.
 
 ## M1 acceptance checklist
 
-- [ ] Optional `.env` and process precedence select the expected mode without printing values.
+- [x] Optional `.env` and process precedence select the expected mode without printing values.
 - [ ] Exact Jazz alpha, Deno, Astro, Preact, browser, OS, and device versions are retained.
-- [ ] Vendor control proves local write, subscription, reload retention, and optional cloud sync.
-- [ ] Observability inventory maps each promised diagnostic to evidence or removes it.
+- [x] Vendor control proves local write, subscription, reload retention, and optional cloud sync.
+- [x] Observability inventory maps each promised diagnostic to evidence or removes it.
 - [ ] Preact decision passes mount/update/unmount/recreate and five-cycle HMR checks.
 - [ ] Two Astro islands share exactly one client and update each other.
 - [ ] `deno task dev`, `check`, `test`, `build`, and `preview` work from the checkout.

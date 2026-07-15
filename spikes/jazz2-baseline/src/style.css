@@ -1,0 +1,94 @@
+:root {
+  color: #eaf3ee;
+  background: #11201b;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 52rem;
+  min-height: 100vh;
+  padding: 4rem 1.5rem;
+}
+
+.eyebrow,
+dt {
+  color: #9fcbb6;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: clamp(2.25rem, 8vw, 5rem);
+  line-height: 0.95;
+  margin: 0.4rem 0 1rem;
+}
+
+.status {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: 2.5rem 0;
+  overflow: hidden;
+}
+
+.status div {
+  background: #1a3028;
+  padding: 1rem;
+}
+
+dd {
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+button {
+  border: 1px solid #5c8974;
+  border-radius: 0.4rem;
+  font: inherit;
+  padding: 0.7rem 0.85rem;
+}
+
+input {
+  background: #edf5f0;
+  flex: 1;
+}
+
+button {
+  background: #8de2b9;
+  color: #11201b;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+#notes {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+}
+
+#notes li {
+  border-left: 3px solid #8de2b9;
+  background: #1a3028;
+  padding: 0.75rem 1rem;
+}

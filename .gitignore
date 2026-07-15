@@ -4,8 +4,10 @@
 
 node_modules/
 .astro/
+.vite/
 dist/
 coverage/
 playwright-report/
 test-results/
+.playwright-cli/
 .DS_Store

@@ -10,7 +10,20 @@ function usage(): never {
 if (Deno.args.length !== 1 || Deno.args[0].startsWith("-")) usage();
 
 try {
-  const result = await createProject({ cwd: Deno.cwd(), name: Deno.args[0] });
+  const developmentPrefix = Deno.env.get("LOFI_CREATE_DEVELOPMENT") === "1"
+    ? Deno.env.get("LOFI_CREATE_PACKAGE_PREFIX")
+    : undefined;
+  if (
+    developmentPrefix &&
+    (!developmentPrefix.startsWith("file:") || !developmentPrefix.endsWith("/"))
+  ) {
+    throw new Error("internal development package prefix must be a trailing-slash file URL");
+  }
+  const result = await createProject({
+    cwd: Deno.cwd(),
+    name: Deno.args[0],
+    packagePrefix: developmentPrefix,
+  });
   console.log(`Created ${result.displayPath}`);
   console.log("");
   console.log("Next:");

@@ -31,6 +31,7 @@
     "test": "deno task test:unit",
     "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium",
     "test:golden:checkout": "deno run -A tools/golden_path_checkout.ts",
+    "test:golden:create": "deno run -A tools/golden_path_create.ts",
     "dev": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env,apps/reference/.env --allow-write=apps/reference/.env --allow-run tools/run_reference.ts dev",
     "build": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env,apps/reference/.env,apps/reference/dist --allow-write=apps/reference/.env,apps/reference/dist --allow-run tools/run_reference.ts build",
     "schema:validate": "deno run -A npm:jazz-tools@2.0.0-alpha.53 validate --schema-dir apps/reference/src",

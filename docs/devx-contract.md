@@ -309,6 +309,14 @@ Layer 1 does not close #11: checkout-mode evidence is necessary, but the generat
 cannot pass until Layer 2 implements the public create command. Remaining abstraction leaks are
 tracked in `docs/m2-abstraction-leaks.md` rather than hidden behind premature package APIs.
 
+Layer 2 has two distinct package gates. Before publication, the generated-project journey invokes
+the real local `./create` entrypoint and uses an explicitly test-only file-URL package override so
+all generated commands execute from the exact source under review. The default generated output
+still pins `jsr:@nzip/lofi` to the manifest version. This source gate does not claim that the
+registry command exists: after source acceptance and explicit publication authorization, a
+fresh-directory smoke must invoke `deno run -A jsr:@nzip/lofi/create <name>` before #13 and #11 can
+close.
+
 Layer 1 keeps M1's `lofi-prototype-<appId>` OPFS namespace so existing device rows remain visible to
 the reviewed notes-to-tasks lens. Jazz discovers that lens and its snapshots beside `schema.ts` in
 `apps/reference/src/migrations`. `deno task check:migrations` couples the current schema hash,

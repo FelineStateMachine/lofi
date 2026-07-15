@@ -44,8 +44,13 @@ export type JourneyReport = {
   cacheMode: "existing" | "cold";
   measurements: {
     developerCommandCount: number;
+    createMs?: number;
+    createToFirstRetainedWriteMs?: number;
     devReadyMs?: number;
     firstRetainedWriteMs?: number;
+    hmrMs?: number[];
+    hmrMedianMs?: number;
+    hmrSlowestMs?: number;
   };
   commands: CommandRecord[];
   assertions: JourneyAssertion[];

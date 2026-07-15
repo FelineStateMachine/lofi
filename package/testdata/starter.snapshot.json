@@ -14,6 +14,7 @@
   "src/_lofi/checklist-store_test.ts": "00a7bbf786b90e6bd765e3fe401331233a6fad29a9d473dc4b1f0d5146e4dbc2",
   "src/_lofi/config.ts": "3ae7e31b3915e12eb595eeea158c0dbd026f4f0f8bf7b0f4809117bec9752f1a",
   "src/_lofi/device-capabilities.ts": "91b03f9bed813d3770061416d40066ed6f21829877293e5395eff8f0f98fc11e",
+  "src/_lofi/device-capabilities_test.ts": "0eece375a0645e915294c7647cba4666e992a8a471cb636cf889bcd323a65ee5",
   "src/_lofi/probe.ts": "72c8a80561a6b5650d943456e1ce36f08d883fc1008fddee4614a2b75a8f06e9",
   "src/_lofi/pwa.ts": "185a0668528b49eae2dd0aa905a5a2e491b3787da335d491ffecaf8bfadec430",
   "src/_lofi/pwa_test.ts": "092d9ff442d82086a03cf45c6ed0256ab0f1ce8db42fe7e636d4b93d6ebae63e",

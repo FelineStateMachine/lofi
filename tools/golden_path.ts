@@ -24,6 +24,7 @@ import { checklistUi } from "../apps/reference/src/ui-contract.ts";
 import { assert } from "./assert.ts";
 
 export type GoldenPathCommands = {
+  doctor?: string;
   dev: string;
   check: string;
   test: string;
@@ -42,6 +43,14 @@ export type GoldenPathOptions = {
   environmentMode?: "isolated-local" | "cloud-from-root";
   timeoutMs?: number;
   islandLabels?: [string, string];
+  hmrPath?: string;
+  initialCommands?: CommandRecord[];
+  sourceRevisionRoot?: string;
+  resetArtifactRoot?: boolean;
+  journeyStartedAt?: Date;
+  journeyStartedPerformanceMs?: number;
+  createDurationMs?: number;
+  developerCommandCount?: number;
 };
 
 const defaultCommands: GoldenPathCommands = {
@@ -165,6 +174,40 @@ async function assertRuntimeCardinality(
       diagnostics.activeVendorSubscriptions === 1 &&
       diagnostics.activeMutationListeners === 1;
   });
+}
+
+async function exerciseHmr(
+  page: Page,
+  projectRoot: string,
+  hmrPath: string,
+  islandLabels: readonly string[],
+  retainedItem: string,
+  timeoutMs: number,
+): Promise<{ samples: number[]; restore: () => Promise<void> }> {
+  const path = resolve(projectRoot, hmrPath);
+  const original = await Deno.readTextFile(path);
+  const samples: number[] = [];
+  for (let cycle = 1; cycle <= 5; cycle++) {
+    const started = performance.now();
+    await Deno.writeTextFile(
+      path,
+      `${original}\n:root {\n  --lofi-golden-hmr-cycle: ${cycle};\n}\n`,
+    );
+    await page.waitForFunction(
+      (expected) =>
+        getComputedStyle(document.documentElement).getPropertyValue("--lofi-golden-hmr-cycle")
+          .trim() === expected,
+      String(cycle),
+      { timeout: timeoutMs },
+    );
+    samples.push(Math.round(performance.now() - started));
+    await waitForItem(page, islandLabels, retainedItem);
+    await assertRuntimeCardinality(page, islandLabels);
+  }
+  return {
+    samples,
+    restore: async () => await Deno.writeTextFile(path, original),
+  };
 }
 
 async function setReferenceConnection(page: Page, connected: boolean): Promise<void> {
@@ -357,6 +400,7 @@ async function sourceRevision(
 
 export async function runJourney(options: GoldenPathOptions): Promise<JourneyReport> {
   const sourceRoot = resolve(options.projectRoot ?? Deno.cwd());
+  const revisionRoot = resolve(options.sourceRevisionRoot ?? sourceRoot);
   const environmentMode = options.environmentMode ?? "isolated-local";
   const artifacts = artifactPaths(
     resolve(
@@ -369,19 +413,21 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
         ),
     ),
   );
-  await Deno.remove(artifacts.root, { recursive: true }).catch((error) => {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
-  });
+  if (options.resetArtifactRoot !== false) {
+    await Deno.remove(artifacts.root, { recursive: true }).catch((error) => {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    });
+  }
   await Deno.mkdir(artifacts.root, { recursive: true });
 
-  const startedAt = new Date();
+  const startedAt = options.journeyStartedAt ?? new Date();
   const timeoutMs = options.timeoutMs ?? 60_000;
   const commands = { ...defaultCommands, ...options.commands };
   const islandLabels = options.islandLabels ?? ["North island", "South island"];
   const environment = await journeyEnvironment(sourceRoot, environmentMode, artifacts.root);
   const redactValues = environmentNames.map((name) => environment[name]).filter(Boolean);
-  const commit = await sourceRevision(sourceRoot, environment);
-  const commandRecords: CommandRecord[] = [];
+  const commit = await sourceRevision(revisionRoot, environment);
+  const commandRecords: CommandRecord[] = [...options.initialCommands ?? []];
   const assertions: JourneyAssertion[] = [];
   let projectRoot = sourceRoot;
   let browser: Browser | null = null;
@@ -392,6 +438,9 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   let browserVersion = "not launched";
   let devReadyMs: number | undefined;
   let firstRetainedWriteMs: number | undefined;
+  let createToFirstRetainedWriteMs: number | undefined;
+  let hmrMs: number[] | undefined;
+  let restoreHmr: (() => Promise<void>) | null = null;
   let failure: unknown;
 
   const report: JourneyReport = {
@@ -412,7 +461,8 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     },
     cacheMode: options.cacheMode ?? "existing",
     measurements: {
-      developerCommandCount: 3,
+      developerCommandCount: options.developerCommandCount ?? (options.source === "create" ? 3 : 1),
+      createMs: options.createDurationMs,
     },
     commands: commandRecords,
     assertions,
@@ -446,6 +496,24 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail: "No forbidden runtime, worker, transport, Workbox, or capability plumbing found.",
     });
+
+    if (commands.doctor) {
+      const doctor = await runCapturedCommand({
+        cwd: projectRoot,
+        args: taskArgs(commands.doctor),
+        environment,
+        artifactRoot: artifacts.root,
+        name: "doctor",
+        redactValues,
+      });
+      commandRecords.push(doctor);
+      if (doctor.exitCode !== 0) throw commandFailure(doctor);
+      assertions.push({
+        name: "doctor preflight",
+        status: "passed",
+        detail: "Generated diagnostics completed without starting the application.",
+      });
+    }
 
     try {
       browser = await chromium.launch({ headless: true });
@@ -495,6 +563,11 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     await waitForItem(page, islandLabels, retainedBody);
     await waitForLocalDurability(page);
     firstRetainedWriteMs = Math.round(performance.now() - devStarted);
+    if (options.journeyStartedPerformanceMs !== undefined) {
+      createToFirstRetainedWriteMs = Math.round(
+        performance.now() - options.journeyStartedPerformanceMs,
+      );
+    }
     await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
     await waitForItem(page, islandLabels, retainedBody);
     await assertRuntimeCardinality(page, islandLabels);
@@ -503,6 +576,28 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail:
         "The local write survived reload and both islands kept one shared runtime subscription.",
+    });
+
+    const hmr = await exerciseHmr(
+      page,
+      projectRoot,
+      options.hmrPath ??
+        (options.source === "create"
+          ? "src/styles/global.css"
+          : "apps/reference/src/styles/global.css"),
+      islandLabels,
+      retainedBody,
+      timeoutMs,
+    );
+    hmrMs = hmr.samples;
+    restoreHmr = hmr.restore;
+    assertions.push({
+      name: "HMR state and cardinality",
+      status: "passed",
+      detail:
+        `Five observable style edits retained data with one client, two consumers, and one vendor subscription (${
+          hmrMs.join(", ")
+        }ms).`,
     });
 
     await updateItem(page, retainedBody, updatedBody);
@@ -542,6 +637,8 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
 
     await dev.stop();
     dev = null;
+    if (restoreHmr) await restoreHmr();
+    restoreHmr = null;
     for (
       const [name, task] of [
         ["check", commands.check],
@@ -641,6 +738,7 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     }
     await preview?.stop().catch(() => undefined);
     await dev?.stop().catch(() => undefined);
+    await restoreHmr?.().catch(() => undefined);
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
     if (options.source === "checkout" && projectRoot !== sourceRoot) {
@@ -655,6 +753,13 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     report.completedAt = new Date().toISOString();
     report.measurements.devReadyMs = devReadyMs;
     report.measurements.firstRetainedWriteMs = firstRetainedWriteMs;
+    report.measurements.createToFirstRetainedWriteMs = createToFirstRetainedWriteMs;
+    report.measurements.hmrMs = hmrMs;
+    if (hmrMs?.length) {
+      const sorted = [...hmrMs].sort((left, right) => left - right);
+      report.measurements.hmrMedianMs = sorted[Math.floor(sorted.length / 2)];
+      report.measurements.hmrSlowestMs = sorted.at(-1);
+    }
     report.runtime.browser = browserVersion;
     await writeJourneyReport(report);
   }

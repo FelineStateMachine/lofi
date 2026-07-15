@@ -2,11 +2,19 @@
   "$schema": "https://jsr.io/schema/config-file.v1.json",
   "name": "@nzip/lofi",
   "version": "0.1.0",
+  "license": "MIT",
   "exports": {
-    "./create": "./package/create.ts"
+    "./build": "./package/commands/build.ts",
+    "./check": "./package/commands/check.ts",
+    "./create": "./package/create.ts",
+    "./dev": "./package/commands/dev.ts",
+    "./doctor": "./package/commands/doctor.ts",
+    "./preview": "./package/commands/preview.ts",
+    "./test": "./package/commands/run_tests.ts"
   },
   "publish": {
     "include": [
+      "LICENSE",
       "README.md",
       "apps/reference/astro.config.ts",
       "apps/reference/public",

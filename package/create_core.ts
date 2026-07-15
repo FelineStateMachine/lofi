@@ -50,19 +50,29 @@ deno task dev
 \`\`\`
 
 The default project runs local-only with durable browser storage. To enable managed sync, copy
-\`.env.example\` to \`.env\` and set both public Jazz values. Run \`deno task doctor\` before boot
-when you want configuration diagnostics without starting the application.
+\`.env.example\` to \`.env\` and set both public Jazz values. Run \`deno task doctor\` before boot when
+you want configuration diagnostics without starting the application.
 
 Public tasks: \`dev\`, \`doctor\`, \`check\`, \`test\`, \`build\`, and \`preview\`.
 `;
 }
 
 function generatedDenoConfig(packagePrefix: string): string {
+  const packageCommand = (subpath: string, localPath: string) =>
+    packagePrefix.startsWith("file:")
+      ? `${packagePrefix}${localPath}`
+      : `${packagePrefix}${subpath}`;
   const config = {
     imports: {
       "@astrojs/check": "npm:@astrojs/check@0.9.9",
       "@astrojs/preact": "npm:@astrojs/preact@6.0.1",
       "@nzip/lofi/": packagePrefix,
+      "@nzip/lofi/build": packageCommand("build", "commands/build.ts"),
+      "@nzip/lofi/check": packageCommand("check", "commands/check.ts"),
+      "@nzip/lofi/dev": packageCommand("dev", "commands/dev.ts"),
+      "@nzip/lofi/doctor": packageCommand("doctor", "commands/doctor.ts"),
+      "@nzip/lofi/preview": packageCommand("preview", "commands/preview.ts"),
+      "@nzip/lofi/test": packageCommand("test", "commands/run_tests.ts"),
       "astro": "npm:astro@7.0.9",
       "astro/config": "npm:astro@7.0.9/config",
       "jazz-tools": "npm:jazz-tools@2.0.0-alpha.53",
@@ -83,9 +93,8 @@ function generatedDenoConfig(packagePrefix: string): string {
     tasks: {
       dev: "deno run -A @nzip/lofi/dev",
       doctor: "deno run -A @nzip/lofi/doctor",
-      check:
-        "deno fmt --check && deno lint && deno check astro.config.ts src/**/*.ts src/**/*.tsx && deno run -A npm:astro@7.0.9 check",
-      test: "deno test --allow-read --allow-write=. src/_lofi tests",
+      check: "deno run -A @nzip/lofi/check",
+      test: "deno run -A @nzip/lofi/test",
       build: "deno run -A @nzip/lofi/build",
       preview: "deno run -A @nzip/lofi/preview",
     },
@@ -208,7 +217,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
       generatedDenoConfig(options.packagePrefix ?? LOFI_PACKAGE_PREFIX),
     );
 
-    await Deno.remove(destination, { recursive: true }).catch((error) => {
+    await Deno.remove(destination).catch((error) => {
       if (!(error instanceof Deno.errors.NotFound)) throw error;
     });
     await Deno.rename(staging, destination);

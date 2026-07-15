@@ -1,5 +1,7 @@
 import { join } from "node:path";
+import packageManifest from "../jsr.json" with { type: "json" };
 import { createProject } from "./create_core.ts";
+import { LOFI_VERSION } from "./version.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -60,6 +62,15 @@ async function fileManifest(root: string): Promise<Record<string, string>> {
   return manifest;
 }
 
+function snapshotDelta(
+  actual: Readonly<Record<string, string>>,
+  expected: Readonly<Record<string, string>>,
+): string[] {
+  return [...new Set([...Object.keys(actual), ...Object.keys(expected)])].sort().filter((path) =>
+    actual[path] !== expected[path]
+  );
+}
+
 function makeTestRoot(): Promise<string> {
   return Deno.makeTempDir({ dir: ".", prefix: ".lofi-create-test-" });
 }
@@ -73,12 +84,41 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
     const expected = JSON.parse(
       await Deno.readTextFile(new URL("./testdata/starter.snapshot.json", import.meta.url)),
     );
-    assertEquals(actual, expected);
+    if (Deno.env.get("LOFI_UPDATE_SNAPSHOT") === "1") {
+      await Deno.writeTextFile(
+        new URL("./testdata/starter.snapshot.json", import.meta.url),
+        `${JSON.stringify(actual, null, 2)}\n`,
+      );
+    } else {
+      const changed = snapshotDelta(actual, expected);
+      assert(
+        changed.length === 0,
+        `generated starter snapshot changed: ${
+          changed.join(", ")
+        }. Review the generated files, then run \`deno task test:update:create\` to accept them.`,
+      );
+    }
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
     assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.1.0/");
+    const lofiSpecifiers = Object.entries(config.imports)
+      .filter(([name]) => name.startsWith("@nzip/lofi/"))
+      .map(([, specifier]) => String(specifier));
+    assert(
+      lofiSpecifiers.length === 7,
+      `expected one package prefix and six command mappings, received ${lofiSpecifiers.length}`,
+    );
+    assert(
+      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.1.0/")),
+      "generated lofi commands do not resolve through one exact package version",
+    );
   } finally {
     await Deno.remove(cwd, { recursive: true });
   }
+});
+
+Deno.test("package manifest and generated version stay coupled", () => {
+  assertEquals(packageManifest.name, "@nzip/lofi");
+  assertEquals(packageManifest.version, LOFI_VERSION);
 });
 
 Deno.test("createProject refuses a non-empty destination without changing it", async () => {
@@ -93,6 +133,27 @@ Deno.test("createProject refuses a non-empty destination without changing it", a
     assertEquals([...Deno.readDirSync(destination)].map((entry) => entry.name), ["keep.txt"]);
   } finally {
     await Deno.remove(cwd, { recursive: true });
+  }
+});
+
+Deno.test("createProject refuses path traversal without creating an outside directory", async () => {
+  const cwd = await makeTestRoot();
+  const outside = join(cwd, "..", "outside-from-lofi-create-test");
+  try {
+    await Deno.remove(outside, { recursive: true }).catch(() => undefined);
+    await assertRejects(
+      () => createProject({ cwd, name: "../outside-from-lofi-create-test" }),
+      "'..'",
+    );
+    try {
+      await Deno.stat(outside);
+      throw new Error("path traversal created an outside destination");
+    } catch (error) {
+      assert(error instanceof Deno.errors.NotFound, "unexpected outside traversal path state");
+    }
+  } finally {
+    await Deno.remove(cwd, { recursive: true });
+    await Deno.remove(outside, { recursive: true }).catch(() => undefined);
   }
 });
 

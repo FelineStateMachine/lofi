@@ -2,7 +2,9 @@ import { join, resolve } from "node:path";
 import {
   installNodeSentinel,
   materializeCleanProject,
+  probeHttpReady,
   redactText,
+  reserveLocalPort,
   runCapturedCommand,
   safeChildEnvironment,
   scanAuthorBoundary,
@@ -188,6 +190,103 @@ Deno.test("process readiness resolves from output rather than a fixed sleep", as
     assert((await process.completed).success, "the readiness control should exit successfully");
     await process.stop();
   } finally {
+    await removeWorkspaceTemp(artifacts);
+  }
+});
+
+Deno.test("HTTP readiness waits until an early advertised URL accepts requests", async () => {
+  const artifacts = await workspaceTemp("golden-http-ready");
+  const port = reserveLocalPort();
+  const url = `http://127.0.0.1:${port}/`;
+  const started = performance.now();
+  const process = startReadyProcess({
+    executable: Deno.execPath(),
+    cwd: Deno.cwd(),
+    args: [
+      "eval",
+      `console.log("READY ${url}"); await new Promise((resolve) => setTimeout(resolve, 200)); Deno.serve({ hostname: "127.0.0.1", port: ${port} }, () => new Response("ready")); await new Promise(() => {});`,
+    ],
+    environment: safeChildEnvironment({}),
+    artifactRoot: artifacts,
+    name: "early-banner",
+    readyPattern: /READY (http:\/\/127\.0\.0\.1:\d+\/)/,
+    readyCheck: probeHttpReady,
+    timeoutMs: 5_000,
+  });
+  try {
+    assert(await process.ready === url, "the accepting URL should satisfy readiness");
+    assert(
+      performance.now() - started >= 150,
+      "a printed banner must not resolve before the listener accepts requests",
+    );
+  } finally {
+    await process.stop();
+    await removeWorkspaceTemp(artifacts);
+  }
+});
+
+Deno.test("post-banner exit rejects with retained diagnostics", async () => {
+  const artifacts = await workspaceTemp("golden-http-exit");
+  const port = reserveLocalPort();
+  const process = startReadyProcess({
+    executable: Deno.execPath(),
+    cwd: Deno.cwd(),
+    args: [
+      "eval",
+      `console.log("READY http://127.0.0.1:${port}/"); console.error("unique post-banner failure"); Deno.exit(42);`,
+    ],
+    environment: safeChildEnvironment({}),
+    artifactRoot: artifacts,
+    name: "post-banner-exit",
+    readyPattern: /READY (http:\/\/127\.0\.0\.1:\d+\/)/,
+    readyCheck: probeHttpReady,
+    timeoutMs: 5_000,
+  });
+  try {
+    let message = "";
+    try {
+      await process.ready;
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    assert(message.includes("exited with 42"), "readiness must report the process exit code");
+    assert(message.includes("unique post-banner failure"), "readiness must include stderr tail");
+    assert(message.includes(process.stderrPath), "readiness must point to retained stderr");
+    await process.completed;
+  } finally {
+    await process.stop();
+    await removeWorkspaceTemp(artifacts);
+  }
+});
+
+Deno.test("stopping a ready wrapper terminates its serving grandchild", async () => {
+  if (Deno.build.os === "windows") return;
+  const artifacts = await workspaceTemp("golden-process-tree");
+  const port = reserveLocalPort();
+  const url = `http://127.0.0.1:${port}/`;
+  const serverSource =
+    `Deno.serve({ hostname: "127.0.0.1", port: ${port} }, () => new Response("child")); await new Promise(() => {});`;
+  const wrapperSource = `const child = new Deno.Command(Deno.execPath(), { args: ["eval", ${
+    JSON.stringify(serverSource)
+  }], stdout: "inherit", stderr: "inherit" }).spawn(); console.log("READY ${url}"); await child.status;`;
+  const process = startReadyProcess({
+    executable: Deno.execPath(),
+    cwd: Deno.cwd(),
+    args: ["eval", wrapperSource],
+    environment: safeChildEnvironment({}),
+    artifactRoot: artifacts,
+    name: "wrapper-tree",
+    readyPattern: /READY (http:\/\/127\.0\.0\.1:\d+\/)/,
+    readyCheck: probeHttpReady,
+    timeoutMs: 5_000,
+  });
+  try {
+    await process.ready;
+    await process.stop();
+    const rebound = Deno.listen({ hostname: "127.0.0.1", port });
+    rebound.close();
+  } finally {
+    await process.stop().catch(() => undefined);
     await removeWorkspaceTemp(artifacts);
   }
 });

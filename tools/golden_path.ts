@@ -11,6 +11,7 @@ import {
   type JourneyReport,
   type JourneySource,
   materializeCleanProject,
+  probeHttpReady,
   reserveLocalPort,
   runCapturedCommand,
   safeChildEnvironment,
@@ -19,6 +20,7 @@ import {
   writeJourneyReport,
 } from "./golden_path_core.ts";
 import { loadEnvironment } from "./load_env.ts";
+import { checklistUi } from "../apps/reference/src/ui-contract.ts";
 
 export type GoldenPathCommands = {
   dev: string;
@@ -86,7 +88,7 @@ async function waitForItem(
     const island = page.locator("[data-island]").filter({ hasText: label });
     const item = island.getByRole("listitem").filter({ hasText: body });
     if (index === 0) {
-      const failure = island.getByRole("status").filter({ hasText: "Write failed:" });
+      const failure = island.getByRole("status").filter({ hasText: checklistUi.writeFailed });
       await item.or(failure).waitFor({ state: "visible" });
       if (await failure.isVisible()) {
         throw new Error((await failure.textContent()) ?? "Write failed");
@@ -110,22 +112,24 @@ async function waitForItemAbsent(
 
 async function addItem(page: Page, island: string, body: string): Promise<void> {
   const section = page.locator("[data-island]").filter({ hasText: island });
-  const textbox = section.getByRole("textbox", { name: "New item" });
+  const textbox = section.getByRole("textbox", { name: checklistUi.newItem });
   try {
     await textbox.waitFor({ state: "visible" });
   } catch (error) {
     throw new Error(
-      `reference UI is missing accessible textbox "New item" in ${island}; #9 must expose CRUD controls`,
+      `reference UI is missing accessible textbox "${checklistUi.newItem}" in ${island}; #9 must expose CRUD controls`,
       { cause: error },
     );
   }
   await textbox.fill(body);
-  const add = section.getByRole("button", { name: `Add from ${island}` });
+  const add = section.getByRole("button", { name: checklistUi.addFrom(island) });
   try {
     await add.waitFor({ state: "visible" });
   } catch (error) {
     throw new Error(
-      `reference UI is missing accessible button "Add from ${island}"; #9 must expose CRUD controls`,
+      `reference UI is missing accessible button "${
+        checklistUi.addFrom(island)
+      }"; #9 must expose CRUD controls`,
       { cause: error },
     );
   }
@@ -133,11 +137,11 @@ async function addItem(page: Page, island: string, body: string): Promise<void> 
 }
 
 async function waitForLocalDurability(page: Page): Promise<void> {
-  await page.getByRole("status").filter({ hasText: /last write (?:local|global)/ }).first().waitFor(
-    {
-      state: "visible",
-    },
-  );
+  await page.getByRole("status").filter({
+    hasText: new RegExp(
+      `(?:${escaped(checklistUi.lastWrite("local"))}|${escaped(checklistUi.lastWrite("global"))})`,
+    ),
+  }).first().waitFor({ state: "visible" });
 }
 
 async function assertRuntimeCardinality(
@@ -185,9 +189,19 @@ async function observeReconnectSettlement(
   timeoutMs: number,
   required: boolean,
 ): Promise<JourneyAssertion> {
+  if (!required) {
+    return {
+      name: "development reconnect settlement",
+      status: "blocked",
+      detail:
+        "Local-only mode has no global durability endpoint; offline retention passed, but this run makes no transport convergence claim.",
+    };
+  }
   try {
-    const global = page.getByRole("status").filter({ hasText: /last write global/ }).first();
-    const failure = page.getByRole("status").filter({ hasText: "Write failed:" }).first();
+    const global = page.getByRole("status").filter({
+      hasText: checklistUi.lastWrite("global"),
+    }).first();
+    const failure = page.getByRole("status").filter({ hasText: checklistUi.writeFailed }).first();
     await global.or(failure).waitFor({
       state: "visible",
       timeout: Math.min(timeoutMs, 10_000),
@@ -201,17 +215,9 @@ async function observeReconnectSettlement(
       detail: "The configured development server exposed global settlement after network return.",
     };
   } catch {
-    if (required) {
-      throw new Error(
-        "cloud evidence failed: reconnect did not expose global settlement before the readiness deadline",
-      );
-    }
-    return {
-      name: "development reconnect settlement",
-      status: "blocked",
-      detail:
-        "The local managed server did not expose global settlement before the readiness deadline; offline retention passed, but this run makes no transport convergence claim.",
-    };
+    throw new Error(
+      "cloud evidence failed: reconnect did not expose global settlement before the readiness deadline",
+    );
   }
 }
 
@@ -237,50 +243,53 @@ async function journeyEnvironment(
 }
 
 async function updateItem(page: Page, body: string, nextBody: string): Promise<void> {
-  const edit = page.getByRole("button", { name: `Edit ${body}`, exact: true }).first();
+  const edit = page.getByRole("button", { name: checklistUi.edit(body), exact: true }).first();
   try {
     await edit.click();
   } catch (error) {
-    throw new Error(`reference UI is missing accessible button "Edit ${body}"`, { cause: error });
+    throw new Error(`reference UI is missing accessible button "${checklistUi.edit(body)}"`, {
+      cause: error,
+    });
   }
-  const textbox = page.getByRole("textbox", { name: `Edit ${body}`, exact: true }).first();
+  const textbox = page.getByRole("textbox", { name: checklistUi.edit(body), exact: true }).first();
   try {
     await textbox.fill(nextBody);
   } catch (error) {
-    throw new Error(`reference UI is missing accessible textbox "Edit ${body}"`, { cause: error });
+    throw new Error(`reference UI is missing accessible textbox "${checklistUi.edit(body)}"`, {
+      cause: error,
+    });
   }
-  const save = page.getByRole("button", { name: `Save ${body}`, exact: true }).first();
+  const save = page.getByRole("button", { name: checklistUi.save(body), exact: true }).first();
   try {
     await save.click();
   } catch (error) {
-    throw new Error(`reference UI is missing accessible button "Save ${body}"`, { cause: error });
+    throw new Error(`reference UI is missing accessible button "${checklistUi.save(body)}"`, {
+      cause: error,
+    });
   }
 }
 
 async function completeItem(page: Page, body: string): Promise<void> {
-  const name = new RegExp(`^(?:Complete ${escaped(body)}|Mark ${escaped(body)} complete)$`);
+  const name = checklistUi.complete(body);
   const checkboxes = page.getByRole("checkbox", { name });
   try {
     await checkboxes.first().waitFor({ state: "visible" });
   } catch (error) {
     throw new Error(
-      `reference UI needs checkbox "Complete ${body}" or "Mark ${body} complete"`,
+      `reference UI needs checkbox "${checklistUi.complete(body)}"`,
       { cause: error },
     );
   }
   await checkboxes.first().click();
   await page.waitForFunction((accessibleName) => {
     const matches = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
-      .filter((element) =>
-        element.getAttribute("aria-label") === accessibleName[0] ||
-        element.getAttribute("aria-label") === accessibleName[1]
-      );
+      .filter((element) => element.getAttribute("aria-label") === accessibleName);
     return matches.length === 2 && matches.every((element) => element.checked);
-  }, [`Complete ${body}`, `Mark ${body} complete`]);
+  }, checklistUi.complete(body));
 }
 
 async function assertCompleted(page: Page, body: string): Promise<void> {
-  const name = new RegExp(`^(?:Complete ${escaped(body)}|Mark ${escaped(body)} complete)$`);
+  const name = checklistUi.complete(body);
   const checkboxes = page.getByRole("checkbox", { name });
   await checkboxes.first().waitFor({ state: "visible" });
   assert(await checkboxes.count() === 2, `expected two completion controls for ${body}`);
@@ -293,11 +302,13 @@ async function assertCompleted(page: Page, body: string): Promise<void> {
 }
 
 async function deleteItem(page: Page, body: string): Promise<void> {
-  const button = page.getByRole("button", { name: `Delete ${body}`, exact: true }).first();
+  const button = page.getByRole("button", { name: checklistUi.delete(body), exact: true }).first();
   try {
     await button.click();
   } catch (error) {
-    throw new Error(`reference UI is missing accessible button "Delete ${body}"`, { cause: error });
+    throw new Error(`reference UI is missing accessible button "${checklistUi.delete(body)}"`, {
+      cause: error,
+    });
   }
 }
 
@@ -332,6 +343,21 @@ function commandFailure(record: CommandRecord): Error {
   );
 }
 
+async function sourceRevision(
+  sourceRoot: string,
+  environment: Record<string, string>,
+): Promise<string> {
+  const output = await new Deno.Command("git", {
+    args: ["rev-parse", "HEAD"],
+    cwd: sourceRoot,
+    clearEnv: true,
+    env: environment,
+    stdout: "piped",
+    stderr: "null",
+  }).output();
+  return output.success ? new TextDecoder().decode(output.stdout).trim() : "unavailable";
+}
+
 export async function runJourney(options: GoldenPathOptions): Promise<JourneyReport> {
   const sourceRoot = resolve(options.projectRoot ?? Deno.cwd());
   const environmentMode = options.environmentMode ?? "isolated-local";
@@ -357,6 +383,7 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   const islandLabels = options.islandLabels ?? ["North island", "South island"];
   const environment = await journeyEnvironment(sourceRoot, environmentMode, artifacts.root);
   const redactValues = environmentNames.map((name) => environment[name]).filter(Boolean);
+  const commit = await sourceRevision(sourceRoot, environment);
   const commandRecords: CommandRecord[] = [];
   const assertions: JourneyAssertion[] = [];
   let projectRoot = sourceRoot;
@@ -384,10 +411,11 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       os: Deno.build.os,
       arch: Deno.build.arch,
       browser: browserVersion,
+      commit,
     },
     cacheMode: options.cacheMode ?? "existing",
     measurements: {
-      developerCommandCount: options.source === "create" ? 3 : 3,
+      developerCommandCount: 3,
     },
     commands: commandRecords,
     assertions,
@@ -398,7 +426,9 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   try {
     if (options.source === "checkout") {
       projectRoot = await materializeCleanProject(sourceRoot);
-      commandRecords.push(...await initializeFixtureGit(projectRoot, environment, artifacts.root));
+      commandRecords.push(
+        ...await initializeFixtureGit(projectRoot, environment, artifacts.root, redactValues),
+      );
     }
 
     report.authorBoundaryViolations = await scanAuthorBoundary(
@@ -443,13 +473,16 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       artifactRoot: artifacts.root,
       name: "dev",
       readyPattern: /(http:\/\/(?:127\.0\.0\.1|localhost):\d+\/?)/,
+      readyCheck: probeHttpReady,
       timeoutMs,
       redactValues,
     });
     const devUrl = await dev.ready;
     devReadyMs = Math.round(performance.now() - devStarted);
     await page.goto(devUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs });
-    await page.getByRole("textbox", { name: "New item" }).first().waitFor({ state: "visible" });
+    await page.getByRole("textbox", { name: checklistUi.newItem }).first().waitFor({
+      state: "visible",
+    });
     await assertRuntimeCardinality(page, islandLabels);
     await page.getByRole("status").filter({ hasText: /\d+ item\(s\)/ }).first().waitFor({
       state: "visible",
@@ -543,6 +576,7 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       artifactRoot: artifacts.root,
       name: "preview",
       readyPattern: /(http:\/\/127\.0\.0\.1:\d+\/)/,
+      readyCheck: probeHttpReady,
       timeoutMs,
       redactValues,
     });
@@ -630,15 +664,4 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
 
   if (failure) throw failure;
   return report;
-}
-
-if (import.meta.main) {
-  try {
-    const report = await runJourney({ source: "checkout" });
-    console.log(`lofi golden path: passed (${report.artifacts.report})`);
-  } catch (error) {
-    console.error(`lofi golden path: failed: ${error instanceof Error ? error.message : error}`);
-    console.error("rerun: deno task test:golden:checkout");
-    Deno.exit(1);
-  }
 }

@@ -1,4 +1,5 @@
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { environmentNames } from "./env_contract.ts";
 
 export type JourneySource = "checkout" | "create";
 
@@ -38,6 +39,7 @@ export type JourneyReport = {
     os: string;
     arch: string;
     browser: string;
+    commit: string;
   };
   cacheMode: "existing" | "cold";
   measurements: {
@@ -184,10 +186,7 @@ export function safeChildEnvironment(
   environment.CI = "1";
   environment.NO_COLOR = "1";
   // Explicit empties prevent a parent shell's sync credentials from influencing local mode.
-  environment.JAZZ_APP_ID = "";
-  environment.JAZZ_SERVER_URL = "";
-  environment.JAZZ_ADMIN_SECRET = "";
-  environment.BACKEND_SECRET = "";
+  for (const name of environmentNames) environment[name] = "";
   return environment;
 }
 
@@ -299,7 +298,7 @@ async function captureLines(
   stream: ReadableStream<Uint8Array>,
   path: string,
   onLine: (line: string) => void,
-  redactValues: readonly string[] = [],
+  redact: (text: string) => string,
 ): Promise<void> {
   const file = await Deno.open(path, { create: true, truncate: true, write: true });
   const writer = file.writable.getWriter();
@@ -312,14 +311,14 @@ async function captureLines(
       const lines = pending.split(/\r?\n/);
       pending = lines.pop() ?? "";
       for (const line of lines) {
-        const redacted = redactText(line, redactValues);
+        const redacted = redact(line);
         await writer.write(encoder.encode(`${redacted}\n`));
         onLine(redacted);
       }
     }
     pending += decoder.decode();
     if (pending) {
-      const redacted = redactText(pending, redactValues);
+      const redacted = redact(pending);
       await writer.write(encoder.encode(redacted));
       onLine(redacted);
     }
@@ -329,11 +328,83 @@ async function captureLines(
 }
 
 export function redactText(text: string, values: readonly string[]): string {
-  let redacted = text;
+  return createRedactor(values)(text);
+}
+
+function createRedactor(values: readonly string[]): (text: string) => string {
   const candidates = [...new Set(values.map((value) => value.trim()).filter(Boolean))]
     .sort((left, right) => right.length - left.length);
-  for (const value of candidates) redacted = redacted.split(value).join("[redacted]");
-  return redacted;
+  return (text) => {
+    let redacted = text;
+    for (const value of candidates) redacted = redacted.split(value).join("[redacted]");
+    return redacted;
+  };
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
+export async function probeHttpReady(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
+    await response.body?.cancel();
+    return response.status >= 200 && response.status < 400;
+  } catch {
+    return false;
+  }
+}
+
+async function descendantProcessIds(rootPid: number): Promise<number[]> {
+  if (Deno.build.os === "windows") return [];
+  const output = await new Deno.Command("ps", {
+    args: ["-axo", "pid=,ppid="],
+    stdout: "piped",
+    stderr: "null",
+  }).output();
+  if (!output.success) return [];
+  const children = new Map<number, number[]>();
+  for (const line of new TextDecoder().decode(output.stdout).split("\n")) {
+    const [pidText, parentText] = line.trim().split(/\s+/);
+    const pid = Number(pidText);
+    const parent = Number(parentText);
+    if (!Number.isInteger(pid) || !Number.isInteger(parent)) continue;
+    const siblings = children.get(parent) ?? [];
+    siblings.push(pid);
+    children.set(parent, siblings);
+  }
+  const descendants: number[] = [];
+  const visit = (pid: number) => {
+    for (const child of children.get(pid) ?? []) visit(child);
+    if (pid !== rootPid) descendants.push(pid);
+  };
+  visit(rootPid);
+  return descendants;
+}
+
+function signalProcess(pid: number, signal: Deno.Signal): void {
+  try {
+    Deno.kill(pid, signal);
+  } catch (error) {
+    if (!isAlreadyTerminated(error)) throw error;
+  }
+}
+
+async function waitForPortRelease(url: string, timeoutMs = 2_000): Promise<void> {
+  const parsed = new URL(url);
+  const port = Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80));
+  const hostname = parsed.hostname;
+  const started = performance.now();
+  while (performance.now() - started < timeoutMs) {
+    try {
+      const connection = await Deno.connect({ hostname, port });
+      connection.close();
+      await delay(50);
+    } catch {
+      return;
+    }
+  }
+  throw new Error(`process shutdown left ${parsed.origin} accepting connections`);
 }
 
 export function startReadyProcess(options: {
@@ -344,11 +415,13 @@ export function startReadyProcess(options: {
   artifactRoot: string;
   name: string;
   readyPattern: RegExp;
+  readyCheck?: (value: string) => Promise<boolean>;
   timeoutMs: number;
   redactValues?: readonly string[];
 }): CapturedProcess {
   const stdoutPath = join(options.artifactRoot, `${options.name}.stdout.log`);
   const stderrPath = join(options.artifactRoot, `${options.name}.stderr.log`);
+  const redact = createRedactor(options.redactValues ?? []);
   const child = new Deno.Command(options.executable ?? Deno.execPath(), {
     args: options.args,
     cwd: options.cwd,
@@ -362,31 +435,87 @@ export function startReadyProcess(options: {
   let resolveReady!: (value: string) => void;
   let rejectReady!: (error: Error) => void;
   let settled = false;
+  let advertisedValue: string | null = null;
+  let terminalStatus: Deno.CommandStatus | null = null;
+  const stderrTail: string[] = [];
+  const knownDescendants = new Set<number>();
+  const rememberDescendants = async () => {
+    for (const pid of await descendantProcessIds(child.pid)) knownDescendants.add(pid);
+  };
+  const diagnostics = (reason: string, status = terminalStatus): Error => {
+    const processState = status
+      ? `exited with ${status.code}${status.signal ? ` (${status.signal})` : ""}`
+      : "is still running";
+    const tail = stderrTail.length > 0 ? stderrTail.join("\n") : "(empty)";
+    return new Error(
+      `${options.name} ${reason}; process ${processState}; stderr tail:\n${tail}\nretained stderr: ${stderrPath}`,
+    );
+  };
   const readiness = new Promise<string>((resolveReadyPromise, rejectReadyPromise) => {
     resolveReady = resolveReadyPromise;
     rejectReady = rejectReadyPromise;
   });
+  const verifyAdvertisedValue = async (value: string) => {
+    if (!options.readyCheck) {
+      if (!settled) {
+        settled = true;
+        resolveReady(value);
+      }
+      return;
+    }
+    while (!settled) {
+      if (await options.readyCheck(value)) {
+        settled = true;
+        resolveReady(value);
+        return;
+      }
+      await delay(50);
+    }
+  };
   const inspectLine = (line: string) => {
     options.readyPattern.lastIndex = 0;
     const match = options.readyPattern.exec(line);
-    if (match && !settled) {
-      settled = true;
-      resolveReady(match[1] ?? match[0]);
+    if (match && !advertisedValue) {
+      advertisedValue = match[1] ?? match[0];
+      void rememberDescendants();
+      void verifyAdvertisedValue(advertisedValue).catch((error) => {
+        if (!settled) {
+          settled = true;
+          rejectReady(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
     }
   };
-  const stdout = captureLines(child.stdout, stdoutPath, inspectLine, options.redactValues);
-  const stderr = captureLines(child.stderr, stderrPath, inspectLine, options.redactValues);
+  const stdout = captureLines(child.stdout, stdoutPath, inspectLine, redact);
+  const stderr = captureLines(child.stderr, stderrPath, (line) => {
+    stderrTail.push(line);
+    if (stderrTail.length > 20) stderrTail.shift();
+    inspectLine(line);
+  }, redact);
   const completed = (async () => {
-    const [status] = await Promise.all([child.status, stdout, stderr]);
+    const status = await child.status;
+    terminalStatus = status;
     if (!settled) {
+      // Give the capture loops one turn to drain buffered stderr without letting an
+      // inherited grandchild pipe delay the exit diagnosis indefinitely.
+      await Promise.race([Promise.all([stdout, stderr]), delay(100)]);
       settled = true;
-      rejectReady(
-        new Error(`${options.name} exited with ${status.code} before printing its usable URL`),
-      );
+      rejectReady(diagnostics("exited before its advertised URL accepted requests", status));
     }
+    await Promise.all([stdout, stderr]);
     return status;
   })();
-  const ready = withDeadline(readiness, options.timeoutMs, `${options.name} URL`);
+  const ready = withDeadline(readiness, options.timeoutMs, `${options.name} URL`).catch((error) => {
+    if (!settled) settled = true;
+    if (error instanceof Error && error.message.includes("did not become ready")) {
+      throw diagnostics(
+        advertisedValue
+          ? "printed a URL that never accepted HTTP requests before the readiness deadline"
+          : "did not print a usable URL before the readiness deadline",
+      );
+    }
+    throw error;
+  });
 
   return {
     child,
@@ -395,6 +524,8 @@ export function startReadyProcess(options: {
     stdoutPath,
     stderrPath,
     async stop() {
+      await rememberDescendants();
+      for (const pid of knownDescendants) signalProcess(pid, "SIGTERM");
       try {
         child.kill("SIGTERM");
       } catch (error) {
@@ -403,12 +534,17 @@ export function startReadyProcess(options: {
       try {
         await withDeadline(completed, 5_000, `${options.name} shutdown`);
       } catch {
+        await rememberDescendants();
+        for (const pid of knownDescendants) signalProcess(pid, "SIGKILL");
         try {
           child.kill("SIGKILL");
         } catch (error) {
           if (!isAlreadyTerminated(error)) throw error;
         }
         await completed;
+      }
+      if (advertisedValue?.startsWith("http://") || advertisedValue?.startsWith("https://")) {
+        await waitForPortRelease(advertisedValue);
       }
     },
   };
@@ -460,6 +596,7 @@ export async function initializeFixtureGit(
   projectRoot: string,
   environment: Record<string, string>,
   artifactRoot: string,
+  redactValues: readonly string[] = [],
 ): Promise<CommandRecord[]> {
   // Deno does not proxy arbitrary git subcommands. Execute git directly, but retain the same
   // structured evidence as every public Deno command.
@@ -484,31 +621,17 @@ export async function initializeFixtureGit(
       ],
     ] as const
   ) {
-    const stdoutPath = join(artifactRoot, `${name}.stdout.log`);
-    const stderrPath = join(artifactRoot, `${name}.stderr.log`);
-    const started = performance.now();
-    const output = await new Deno.Command("git", {
+    const record = await runCapturedCommand({
+      executable: "git",
       args: [...args],
       cwd: projectRoot,
-      clearEnv: true,
-      env: environment,
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
-    await Promise.all([
-      Deno.writeFile(stdoutPath, output.stdout),
-      Deno.writeFile(stderrPath, output.stderr),
-    ]);
-    const record = {
       name,
-      args: ["git", ...args],
-      durationMs: Math.round(performance.now() - started),
-      exitCode: output.code,
-      stdoutPath,
-      stderrPath,
-    };
+      environment,
+      artifactRoot,
+      redactValues,
+    });
     records.push(record);
-    if (!output.success) throw new Error(`${name} failed; see ${stderrPath}`);
+    if (record.exitCode !== 0) throw new Error(`${name} failed; see ${record.stderrPath}`);
   }
   return records;
 }

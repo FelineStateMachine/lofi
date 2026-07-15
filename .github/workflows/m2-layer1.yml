@@ -33,3 +33,11 @@ jobs:
           deno task check
           deno task test
           deno task test:golden:checkout
+      - name: Upload golden-path failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-layer1-golden-path-${{ github.run_attempt }}
+          path: test-results/golden-path/
+          if-no-files-found: warn
+          retention-days: 7

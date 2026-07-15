@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { ChecklistTask } from "../_lofi/checklist-store.ts";
 import { settleUiMutation } from "../_lofi/ui-mutation.ts";
 import { useChecklist } from "../_lofi/use-checklist.ts";
+import { checklistUi } from "../ui-contract.ts";
 
 export interface ChecklistIslandProps {
   label: string;
@@ -29,7 +30,7 @@ function ChecklistRow({ task, update, setCompleted, remove }: ChecklistRowProps)
         <input
           type="checkbox"
           checked={task.completed}
-          aria-label={`Complete ${task.text}`}
+          aria-label={checklistUi.complete(task.text)}
           onChange={(event) =>
             void settleUiMutation(setCompleted(task.id, event.currentTarget.checked))}
         />
@@ -47,14 +48,14 @@ function ChecklistRow({ task, update, setCompleted, remove }: ChecklistRowProps)
               void settleUiMutation(update(task.id, next));
             }}
           >
-            <label class="visually-hidden" for={editId}>Edit {task.text}</label>
+            <label class="visually-hidden" for={editId}>{checklistUi.edit(task.text)}</label>
             <input
               id={editId}
               value={draft}
               onInput={(event) => setDraft(event.currentTarget.value)}
               autocomplete="off"
             />
-            <button type="submit" aria-label={`Save ${task.text}`}>Save</button>
+            <button type="submit" aria-label={checklistUi.save(task.text)}>Save</button>
             <button type="button" onClick={() => setEditing(false)}>Cancel</button>
           </form>
         )
@@ -62,7 +63,7 @@ function ChecklistRow({ task, update, setCompleted, remove }: ChecklistRowProps)
           <div class="task-actions">
             <button
               type="button"
-              aria-label={`Edit ${task.text}`}
+              aria-label={checklistUi.edit(task.text)}
               onClick={() => setEditing(true)}
             >
               Edit
@@ -70,7 +71,7 @@ function ChecklistRow({ task, update, setCompleted, remove }: ChecklistRowProps)
             <button
               type="button"
               class="button-danger"
-              aria-label={`Delete ${task.text}`}
+              aria-label={checklistUi.delete(task.text)}
               onClick={() => void settleUiMutation(remove(task.id))}
             >
               Delete
@@ -101,7 +102,7 @@ export default function ChecklistIsland({ label }: ChecklistIslandProps) {
           void settleUiMutation(checklist.create(next));
         }}
       >
-        <label for={inputId}>New item</label>
+        <label for={inputId}>{checklistUi.newItem}</label>
         <div class="composer">
           <input
             id={inputId}
@@ -109,12 +110,12 @@ export default function ChecklistIsland({ label }: ChecklistIslandProps) {
             onInput={(event) => setText(event.currentTarget.value)}
             autocomplete="off"
           />
-          <button type="submit">Add from {label}</button>
+          <button type="submit">{checklistUi.addFrom(label)}</button>
         </div>
       </form>
       <p class="state" role="status">
         {checklist.status === "loading" && "Opening persistent storage…"}
-        {checklist.status === "error" && `Write failed: ${checklist.error}`}
+        {checklist.status === "error" && `${checklistUi.writeFailed} ${checklist.error}`}
         {checklist.status === "ready" &&
           `${checklist.tasks.length} item(s) · last write ${checklist.durability}`}
       </p>

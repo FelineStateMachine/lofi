@@ -25,6 +25,23 @@ async function jazz(args: string[]): Promise<string> {
 }
 
 async function jazzSnapshot(hash: string): Promise<unknown> {
+  const isolatedEnvironment: Record<string, string> = {};
+  for (
+    const name of [
+      "JAZZ_APP_ID",
+      "JAZZ_SERVER_URL",
+      "JAZZ_ADMIN_SECRET",
+      "BACKEND_SECRET",
+      "VITE_JAZZ_APP_ID",
+      "VITE_JAZZ_SERVER_URL",
+      "PUBLIC_JAZZ_APP_ID",
+      "PUBLIC_JAZZ_SERVER_URL",
+      "NEXT_PUBLIC_JAZZ_APP_ID",
+      "NEXT_PUBLIC_JAZZ_SERVER_URL",
+      "EXPO_PUBLIC_JAZZ_APP_ID",
+      "EXPO_PUBLIC_JAZZ_SERVER_URL",
+    ]
+  ) isolatedEnvironment[name] = "";
   const output = await new Deno.Command(Deno.execPath(), {
     args: [
       "run",
@@ -37,6 +54,7 @@ async function jazzSnapshot(hash: string): Promise<unknown> {
       "--migrations-dir",
       MIGRATIONS_DIR,
     ],
+    env: isolatedEnvironment,
     stdout: "piped",
     stderr: "piped",
   }).output();

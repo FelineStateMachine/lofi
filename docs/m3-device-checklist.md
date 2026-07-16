@@ -54,15 +54,15 @@ granted on the same Android origin. This confirms that the visible remediation c
 device from `not-granted` to granted; retained-data behavior still requires the lifecycle and
 offline procedures below.
 
-The user subsequently reported that the PWA installed successfully, an item survived reload, and
-the installed app rendered its shell and retained item from an offline cold start. This passes the
+The user subsequently reported that the PWA installed successfully, an item survived reload, and the
+installed app rendered its shell and retained item from an offline cold start. This passes the
 Android tab/install, reload-retention, and installed offline cold-start checks for this Deno branch
 build.
 
 The Android row remains partial. The evidence does not yet identify exact hardware, Android or
-Chrome versions, cache temperature, or Jazz mode. Short and five-minute background recovery,
-process termination, device restart, console/network results, and passkey creation/retrieval also
-remain open.
+Chrome versions, cache temperature, or Jazz mode. Short and five-minute background recovery, process
+termination, device restart, console/network results, and passkey creation/retrieval also remain
+open.
 
 ## Per-variant procedure
 

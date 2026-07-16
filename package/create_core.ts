@@ -97,6 +97,9 @@ async function rewritePortableDenoConfig(root: string, packagePrefix: string): P
     }
     imports[key] = isFileOverride ? `${packagePrefix}${localPath}` : `${packagePrefix}${subpath}`;
   }
+  // The reference app links the local @nzip/lofi package for its dev loop; a
+  // generated project resolves the pinned JSR version directly.
+  delete config.links;
   await Deno.writeTextFile(path, `${JSON.stringify(config, null, 2)}\n`);
 }
 

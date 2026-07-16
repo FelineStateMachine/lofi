@@ -2,13 +2,13 @@
   "imports": {
     "@astrojs/check": "npm:@astrojs/check@0.9.9",
     "@astrojs/preact": "npm:@astrojs/preact@6.0.1",
-    "@nzip/lofi/": "../../package/",
-    "@nzip/lofi/build": "../../package/commands/build.ts",
-    "@nzip/lofi/dev": "../../package/commands/dev.ts",
-    "@nzip/lofi/doctor": "../../package/commands/doctor.ts",
-    "@nzip/lofi/preview": "../../package/commands/preview.ts",
-    "@nzip/lofi/test": "../../package/commands/run_tests.ts",
-    "@nzip/lofi/testing": "../../package/testing/mod.ts",
+    "@nzip/lofi/": "jsr:@nzip/lofi@0.1.0/",
+    "@nzip/lofi/build": "jsr:@nzip/lofi@0.1.0/build",
+    "@nzip/lofi/dev": "jsr:@nzip/lofi@0.1.0/dev",
+    "@nzip/lofi/doctor": "jsr:@nzip/lofi@0.1.0/doctor",
+    "@nzip/lofi/preview": "jsr:@nzip/lofi@0.1.0/preview",
+    "@nzip/lofi/test": "jsr:@nzip/lofi@0.1.0/test",
+    "@nzip/lofi/testing": "jsr:@nzip/lofi@0.1.0/testing",
     "astro": "npm:astro@7.0.9",
     "astro/config": "npm:astro@7.0.9/config",
     "jazz-tools": "npm:jazz-tools@2.0.0-alpha.53",
@@ -20,6 +20,7 @@
     "typescript": "npm:typescript@6.0.3",
     "vite": "npm:vite@8.0.1"
   },
+  "links": ["../.."],
   "nodeModulesDir": "auto",
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],

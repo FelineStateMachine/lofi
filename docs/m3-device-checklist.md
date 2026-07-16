@@ -59,10 +59,20 @@ installed app rendered its shell and retained item from an offline cold start. T
 Android tab/install, reload-retention, and installed offline cold-start checks for this Deno branch
 build.
 
+At exact commit `ab4137c40e2efde77a252a830f313793b4cbc070` on the same stable origin, the user
+reported all three Android WebAuthn probe results passing:
+
+- test passkey creation: `created`;
+- discoverable test passkey retrieval: `retrieved`;
+- synthetic sibling RP guard: `sibling-rejected`.
+
+The ceremony used the deployed application's exact `location.hostname` as its RP ID. This validates
+the origin-only probe on a real Android authenticator; it does not graduate passkeys into
+application identity, backup, or recovery.
+
 The Android row remains partial. The evidence does not yet identify exact hardware, Android or
 Chrome versions, cache temperature, or Jazz mode. Short and five-minute background recovery, process
-termination, device restart, console/network results, and passkey creation/retrieval also remain
-open.
+termination, device restart, and console/network results remain open.
 
 ## Per-variant procedure
 

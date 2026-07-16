@@ -1,4 +1,4 @@
-import { waitForActivation } from "./pwa.ts";
+import { classifyInstallExperience, waitForActivation } from "./pwa.ts";
 
 const test = (globalThis as unknown as {
   Deno: { test(name: string, body: () => void | Promise<void>): void };
@@ -45,4 +45,42 @@ test("service worker activation rejects a redundant install", async () => {
       if (!(error instanceof Error) || !error.message.includes("installation failed")) throw error;
     },
   );
+});
+
+test("install experience recognizes standalone display modes", () => {
+  const state = classifyInstallExperience({
+    displayModeStandalone: true,
+    navigatorStandalone: false,
+    platform: "Linux armv8l",
+    maxTouchPoints: 5,
+  });
+  if (state !== "installed") throw new Error(`expected installed, received ${state}`);
+});
+
+test("install experience gives iOS manual guidance without exposing a prompt event", () => {
+  const iphone = classifyInstallExperience({
+    displayModeStandalone: false,
+    navigatorStandalone: false,
+    platform: "iPhone",
+    maxTouchPoints: 5,
+  });
+  const ipadDesktopMode = classifyInstallExperience({
+    displayModeStandalone: false,
+    navigatorStandalone: false,
+    platform: "MacIntel",
+    maxTouchPoints: 5,
+  });
+  if (iphone !== "manual-ios" || ipadDesktopMode !== "manual-ios") {
+    throw new Error(`expected iOS guidance, received ${iphone} and ${ipadDesktopMode}`);
+  }
+});
+
+test("install experience degrades to browser mode when no install path is available", () => {
+  const state = classifyInstallExperience({
+    displayModeStandalone: false,
+    navigatorStandalone: false,
+    platform: "MacIntel",
+    maxTouchPoints: 0,
+  });
+  if (state !== "unavailable") throw new Error(`expected unavailable, received ${state}`);
 });

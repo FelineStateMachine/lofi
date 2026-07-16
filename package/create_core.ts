@@ -167,7 +167,8 @@ async function writeTemplate(destination: string): Promise<void> {
   for (const [relativePath, content] of Object.entries(STARTER_TEMPLATE)) {
     const path = join(destination, relativePath);
     await Deno.mkdir(dirname(path), { recursive: true });
-    await Deno.writeTextFile(path, content);
+    if (typeof content === "string") await Deno.writeTextFile(path, content);
+    else await Deno.writeFile(path, content);
   }
 }
 

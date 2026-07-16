@@ -99,6 +99,10 @@ h1 {
   margin: 0.25rem 0 0;
 }
 
+.device-status button + button {
+  margin-left: 0.5rem;
+}
+
 label {
   display: block;
   font-weight: 750;

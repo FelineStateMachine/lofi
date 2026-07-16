@@ -1,5 +1,11 @@
 import astroConfig from "../apps/reference/astro.config.ts" with { type: "text" };
+import appleTouchIconBase64 from "./assets/apple-touch-icon.png.base64" with { type: "text" };
 import favicon from "../apps/reference/public/favicon.svg" with { type: "text" };
+import icon192Base64 from "./assets/icon-192.png.base64" with { type: "text" };
+import icon512Base64 from "./assets/icon-512.png.base64" with { type: "text" };
+import iconMaskable192Base64 from "./assets/icon-maskable-192.png.base64" with { type: "text" };
+import iconMaskable512Base64 from "./assets/icon-maskable-512.png.base64" with { type: "text" };
+import iconMaskableSource from "../apps/reference/public/icon-maskable.svg" with { type: "text" };
 import manifest from "../apps/reference/public/manifest.webmanifest" with { type: "text" };
 import serviceWorker from "../apps/reference/public/sw.js" with { type: "text" };
 import deviceStatus from "../apps/reference/src/_lofi/DeviceStatus.tsx" with { type: "text" };
@@ -64,10 +70,20 @@ import testingContractTest from "../apps/reference/tests/testing-contract_test.t
 };
 import tsconfig from "../apps/reference/tsconfig.json" with { type: "text" };
 
+function decodeBase64(value: string): Uint8Array {
+  return Uint8Array.from(atob(value.replaceAll(/\s/g, "")), (character) => character.charCodeAt(0));
+}
+
 /** Every source-controlled file copied from the validated reference app into a new project. */
-export const STARTER_TEMPLATE: Readonly<Record<string, string>> = {
+export const STARTER_TEMPLATE: Readonly<Record<string, string | Uint8Array>> = {
   "astro.config.ts": astroConfig,
+  "public/apple-touch-icon.png": decodeBase64(appleTouchIconBase64),
   "public/favicon.svg": favicon,
+  "public/icon-192.png": decodeBase64(icon192Base64),
+  "public/icon-512.png": decodeBase64(icon512Base64),
+  "public/icon-maskable-192.png": decodeBase64(iconMaskable192Base64),
+  "public/icon-maskable-512.png": decodeBase64(iconMaskable512Base64),
+  "public/icon-maskable.svg": iconMaskableSource,
   "public/manifest.webmanifest": manifest,
   "public/sw.js": serviceWorker,
   "src/_lofi/DeviceStatus.tsx": deviceStatus,

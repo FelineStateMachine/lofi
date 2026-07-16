@@ -9,5 +9,8 @@ export const referenceApp = {
   schema,
   storage: "durable" as const,
   identity: "device-local" as const,
+  // Exact hostnames and `*.` suffix patterns the author has committed to keeping stable.
+  // Browser safety still blocks insecure and IP origins before consulting this list.
+  credentialOrigins: ["*.deno.net", "*.n.zip"] as const,
   sync: { adapter: "jazz" as const },
 };

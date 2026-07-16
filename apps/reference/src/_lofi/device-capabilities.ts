@@ -1,3 +1,5 @@
+import { referenceApp } from "../app.ts";
+
 export type DeviceCapabilityReport = {
   secureContext: boolean;
   serviceWorker: boolean;
@@ -33,7 +35,19 @@ function isIpAddress(hostname: string): boolean {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 }
 
-export function classifyCredentialOrigin(url: URL): CredentialOriginReport {
+function matchesCredentialOrigin(hostname: string, pattern: string): boolean {
+  const normalized = pattern.toLowerCase();
+  if (normalized.startsWith("*.")) {
+    const suffix = normalized.slice(1);
+    return hostname.length > suffix.length && hostname.endsWith(suffix);
+  }
+  return normalized.length > 0 && !normalized.includes("*") && hostname === normalized;
+}
+
+export function classifyCredentialOrigin(
+  url: URL,
+  trustedOrigins: readonly string[] = referenceApp.credentialOrigins,
+): CredentialOriginReport {
   const rpId = url.hostname;
   if (url.protocol === "http:" && (rpId === "localhost" || rpId === "127.0.0.1")) {
     return {
@@ -50,7 +64,7 @@ export function classifyCredentialOrigin(url: URL): CredentialOriginReport {
         "use the stable HTTPS URL printed by `deno task --tunnel dev` before enrolling a device credential",
     };
   }
-  if (rpId.endsWith(".deno.net") || rpId.endsWith(".n.zip")) {
+  if (trustedOrigins.some((pattern) => matchesCredentialOrigin(rpId, pattern))) {
     return {
       status: "stable",
       rpId,

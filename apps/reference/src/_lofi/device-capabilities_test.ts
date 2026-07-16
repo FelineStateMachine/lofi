@@ -41,7 +41,7 @@ test("unsupported durable storage names missing capabilities and the stable-orig
   );
 });
 
-test("Deno Tunnel and nzip hostnames are stable credential origins", () => {
+test("author-configured Deno Tunnel and nzip hostnames are stable credential origins", () => {
   for (
     const origin of [
       "https://lofi-dev.example.deno.net/",
@@ -55,6 +55,27 @@ test("Deno Tunnel and nzip hostnames are stable credential origins", () => {
       `${origin} did not preserve location.hostname`,
     );
   }
+});
+
+test("credential origin trust is author configurable", () => {
+  const trusted = classifyCredentialOrigin(
+    new URL("https://login.example.com/"),
+    ["login.example.com"],
+  );
+  const unconfiguredProvider = classifyCredentialOrigin(
+    new URL("https://lofi-dev.example.deno.net/"),
+    ["login.example.com"],
+  );
+  const wildcardApex = classifyCredentialOrigin(
+    new URL("https://example.com/"),
+    ["*.example.com"],
+  );
+  assert(trusted.status === "stable", "configured exact origin was not trusted");
+  assert(
+    unconfiguredProvider.status === "unverified",
+    "framework provider suffix bypassed author configuration",
+  );
+  assert(wildcardApex.status === "unverified", "wildcard unexpectedly trusted its apex");
 });
 
 test("local, insecure, and custom origins cannot silently enroll credentials", () => {

@@ -12,7 +12,7 @@ remains M4 work. The application is deliberately split into two ownership zones.
 - `src/pages/` — product pages and shell content
 - `src/islands/` — product interaction and rendering
 - `src/styles/` — product styling
-- `tests/` — product behavior and author-boundary tests
+- `tests/` — product behavior tests; the generator seeds framework boundary/contract guards here
 
 ## Generated and runtime-owned files
 

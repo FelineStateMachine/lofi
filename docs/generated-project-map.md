@@ -1,8 +1,7 @@
 # Generated project map
 
 This is the complete file map produced by `deno run -A jsr:@nzip/lofi/create <name>`. A drift guard
-compares every path below with `STARTER_TEMPLATE` plus the four files written directly by
-`create_core.ts`.
+compares every path below with the verified snapshot captured from the generator's actual output.
 
 ## Author boundary
 
@@ -113,17 +112,17 @@ M4 may replace selected generated `_lofi` files with imports from the single `@n
   stable external-store semantics; application-specific and replaced by proven package hooks.
 - `src/_lofi/use-device-capabilities.ts` — **generated `_lofi`** — exposes asynchronous browser
   capability and persistence state to Preact; M4 candidate for `@nzip/lofi/pwa` or `@nzip/lofi/ui`.
-- `src/env.d.ts` — **generated `_lofi`** — declares Astro/Vite and lofi build-time environment
-  types; remains generated config-adjacent plumbing.
-- `src/migrations/20260715T194947-notes-to-tasks-6c62fec42c35-ff85ac1d97ee.ts` — **generated
-  `_lofi`** — preserves the reviewed reference schema migration edge; application-specific and
-  author-reviewed when schemas change.
-- `src/migrations/snapshots/20260715T194819-6c62fec42c35.json` — **generated `_lofi`** — records the
-  predecessor schema fingerprint; application-specific migration evidence.
-- `src/migrations/snapshots/20260715T194947-ff85ac1d97ee.json` — **generated `_lofi`** — records the
-  current schema fingerprint; application-specific migration evidence.
-- `src/ui-contract.ts` — **generated `_lofi`** — centralizes accessible names used by product UI and
-  golden tests; application-specific boundary glue.
+- `src/env.d.ts` — **generated config** — declares Astro/Vite and lofi build-time environment types;
+  remains generated config-adjacent plumbing.
+- `src/migrations/20260715T194947-notes-to-tasks-6c62fec42c35-ff85ac1d97ee.ts` — **author-owned** —
+  seeds the reviewed reference schema migration edge; future schema tooling may generate changes,
+  but the application author owns and reviews its migration history.
+- `src/migrations/snapshots/20260715T194819-6c62fec42c35.json` — **author-owned** — seeds the
+  predecessor schema fingerprint; the application owns this generated migration evidence.
+- `src/migrations/snapshots/20260715T194947-ff85ac1d97ee.json` — **author-owned** — seeds the
+  current schema fingerprint; the application owns this generated migration evidence.
+- `src/ui-contract.ts` — **author-owned** — centralizes accessible names used by product UI and
+  golden tests; the generated reference gives the author the initial contract.
 - `tests/author-boundary_test.ts` — **generated `_lofi`** — prevents product files from importing or
   reproducing framework plumbing; remains a generated guard.
 - `tests/testing-contract_test.ts` — **generated `_lofi`** — type-checks the public

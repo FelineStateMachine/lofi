@@ -14,13 +14,6 @@ export type CreateProjectResult = {
   nextCommands: readonly [string, string];
 };
 
-export const CREATE_CORE_FILE_NAMES = {
-  environment: ".env.example",
-  gitignore: ".gitignore",
-  readme: "README.md",
-  denoConfig: "deno.json",
-} as const;
-
 const generatedGitignore = `.env
 .env.*
 !.env.example
@@ -233,20 +226,11 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   try {
     await writeTemplate(staging);
     await rewritePortableAstroConfig(staging);
+    await Deno.writeTextFile(join(staging, ".gitignore"), generatedGitignore);
+    await Deno.writeTextFile(join(staging, ".env.example"), generatedEnvironment);
+    await Deno.writeTextFile(join(staging, "README.md"), generatedReadme(basename(destination)));
     await Deno.writeTextFile(
-      join(staging, CREATE_CORE_FILE_NAMES.gitignore),
-      generatedGitignore,
-    );
-    await Deno.writeTextFile(
-      join(staging, CREATE_CORE_FILE_NAMES.environment),
-      generatedEnvironment,
-    );
-    await Deno.writeTextFile(
-      join(staging, CREATE_CORE_FILE_NAMES.readme),
-      generatedReadme(basename(destination)),
-    );
-    await Deno.writeTextFile(
-      join(staging, CREATE_CORE_FILE_NAMES.denoConfig),
+      join(staging, "deno.json"),
       generatedDenoConfig(options.packagePrefix ?? LOFI_PACKAGE_PREFIX),
     );
 

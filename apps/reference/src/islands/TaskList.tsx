@@ -8,14 +8,26 @@ import { useTasks } from "./use-tasks.ts";
  * under `src/_lofi/` stays the same.
  */
 export default function TaskList() {
-  const { status, error, durability, tasks, create, setCompleted } = useTasks();
+  const { status, error, durability, signedOut, tasks, create, setCompleted } = useTasks();
   const [text, setText] = useState("");
+
+  if (signedOut) {
+    return (
+      <section class="island" data-island="tasks">
+        <header>
+          <p class="eyebrow">Local-first</p>
+          <h2>Example Island: Tasks</h2>
+        </header>
+        <p class="state" role="status">Sign in with your passkey above to open your tasks.</p>
+      </section>
+    );
+  }
 
   return (
     <section class="island" data-island="tasks">
       <header>
         <p class="eyebrow">Local-first</p>
-        <h2>Tasks</h2>
+        <h2>Example Island: Tasks</h2>
       </header>
       <form
         onSubmit={(event) => {
@@ -40,7 +52,15 @@ export default function TaskList() {
       <p class="state" role="status">
         {status === "loading" && "Opening persistent storage…"}
         {status === "error" && `Write failed: ${error}`}
-        {status === "ready" && `${tasks.length} item(s) · last write ${durability}`}
+        {status === "ready" && `${tasks.length} item(s) · ${
+          durability === "global"
+            ? "synced to your account"
+            : durability === "local"
+            ? "saved on this device"
+            : durability === "failed"
+            ? "write failed"
+            : "ready"
+        }`}
       </p>
       <ul aria-label="Tasks">
         {tasks.map((task) => (

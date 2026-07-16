@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "preact/hooks";
 import { schema as s } from "jazz-tools";
 import { referenceApp } from "../app.ts";
 import { getRuntime, runtimeRecreatedEvent } from "../_lofi/runtime.ts";
+import { isSignedOut } from "../_lofi/session.ts";
 import type { TableSnapshot } from "../_lofi/table-store.ts";
 
 /**
@@ -24,6 +25,11 @@ const initial: TableSnapshot<Task> = {
 
 export function useTasks() {
   const [snapshot, setSnapshot] = useState(initial);
+  // With `identity: "device-passkey"`, the runtime refuses to open until the
+  // user signs in. That is not an error — it is the signed-out gate, so the UI
+  // prompts to sign in instead of reporting a failed write. Signing in dispatches
+  // `runtimeRecreatedEvent`, which reconnects us below.
+  const [signedOut, setSignedOut] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +40,7 @@ export function useTasks() {
       unsubscribe?.();
       unsubscribe = undefined;
       setSnapshot(initial);
+      setSignedOut(false);
       void getRuntime().then((runtime) => {
         if (cancelled || generation !== connectionGeneration) return;
         const store = runtime.store(tasksTable);
@@ -42,6 +49,11 @@ export function useTasks() {
         update();
       }, (error) => {
         if (cancelled || generation !== connectionGeneration) return;
+        if (isSignedOut(error)) {
+          setSignedOut(true);
+          setSnapshot(initial);
+          return;
+        }
         setSnapshot({
           ...initial,
           status: "error",
@@ -70,5 +82,5 @@ export function useTasks() {
     await (await store()).update(id, { completed });
   }, [store]);
 
-  return { ...snapshot, tasks: snapshot.rows, create, setCompleted };
+  return { ...snapshot, signedOut, tasks: snapshot.rows, create, setCompleted };
 }

@@ -16,7 +16,9 @@ environment.ASTRO_DEV_BACKGROUND = "1";
 console.log("lofi dev");
 console.log("Storage:     OPFS durable requested; browser gate required");
 console.log("Persistence: pending browser check");
-console.log("Identity:    device-local key; passkey backup blocked by alpha security review");
+console.log(
+  "Identity:    device-passkey account (the key is the account); sign in via AccountGate",
+);
 console.log(
   `Sync:        ${
     environment.JAZZ_APP_ID

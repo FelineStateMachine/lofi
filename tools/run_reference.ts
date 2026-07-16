@@ -1,4 +1,8 @@
-import { environmentNames, validateEnvironment } from "./env_contract.ts";
+import {
+  appChildEnvironment,
+  secretScanChildEnvironment,
+  validateEnvironment,
+} from "./env_contract.ts";
 import { loadEnvironment } from "./load_env.ts";
 
 const INTERNAL_ENV = "apps/reference/.env";
@@ -26,6 +30,7 @@ async function forward(stream: ReadableStream<Uint8Array>, target: WritableStrea
 async function run(args: string[], env: Record<string, string>): Promise<number> {
   const child = new Deno.Command(Deno.execPath(), {
     args,
+    clearEnv: true,
     env,
     stdin: "inherit",
     stdout: "piped",
@@ -99,17 +104,10 @@ if (!validation.ok) {
 for (const warning of validation.warnings) console.warn(`warning: ${warning}`);
 await ensureStableLocalAppId();
 
-const validatedEnvironment = Object.fromEntries(
-  environmentNames
-    .map((name) => [name, environment[name]?.trim() ?? ""] as const)
-    .filter(([, value]) => value.length > 0),
-);
-const childEnvironment = { ...validatedEnvironment };
+const childEnvironment = appChildEnvironment(validation);
 if (command === "dev") childEnvironment.ASTRO_DEV_BACKGROUND = "1";
 if (command === "build") {
   childEnvironment.LOFI_SKIP_JAZZ_MANAGED = "1";
-  childEnvironment.JAZZ_ADMIN_SECRET = "";
-  childEnvironment.BACKEND_SECRET = "";
 }
 
 const forwardedArgs = Deno.args.slice(1).filter((argument, index) => {
@@ -146,6 +144,8 @@ if (command === "build") {
   const revision = new TextDecoder().decode(
     (await new Deno.Command("git", {
       args: ["rev-parse", "--short", "HEAD"],
+      clearEnv: true,
+      env: childEnvironment,
       stdout: "piped",
     }).output()).stdout,
   ).trim();
@@ -169,7 +169,7 @@ if (command === "build") {
   );
   const scanCode = await run(
     ["task", "check:secrets"],
-    validatedEnvironment,
+    secretScanChildEnvironment(environment),
   );
   if (scanCode !== 0) Deno.exit(scanCode);
   console.log(`lofi build: apps/reference/dist (${await routeCount()} routes, ${revision})`);

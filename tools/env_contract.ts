@@ -2,6 +2,22 @@ export const clientEnvironmentNames = ["JAZZ_APP_ID", "JAZZ_SERVER_URL"] as cons
 export const serverEnvironmentNames = ["JAZZ_ADMIN_SECRET", "BACKEND_SECRET"] as const;
 export const environmentNames = [...clientEnvironmentNames, ...serverEnvironmentNames] as const;
 
+const childEnvironmentAllowlist = [
+  "CI",
+  "DENO_DIR",
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "NIX_SSL_CERT_FILE",
+  "NO_PROXY",
+  "PATH",
+  "PLAYWRIGHT_BROWSERS_PATH",
+  "SSL_CERT_FILE",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+] as const;
+
 interface EnvironmentResultBase {
   presentClientNames: string[];
   presentServerNames: string[];
@@ -89,4 +105,47 @@ export function validateEnvironment(
       JAZZ_SERVER_URL: env.JAZZ_SERVER_URL.trim(),
     },
   };
+}
+
+function systemChildEnvironment(
+  source: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const environment: Record<string, string> = {};
+  for (const name of childEnvironmentAllowlist) {
+    const value = source[name];
+    if (value) environment[name] = value;
+  }
+  return environment;
+}
+
+function allowedProcessEnvironment(): Record<string, string> {
+  return Object.fromEntries(
+    childEnvironmentAllowlist.map((name) => [name, Deno.env.get(name) ?? ""]),
+  );
+}
+
+export function appChildEnvironment(
+  validation: Exclude<EnvironmentValidation, { ok: false }>,
+  source: Readonly<Record<string, string>> = allowedProcessEnvironment(),
+): Record<string, string> {
+  const environment = systemChildEnvironment(source);
+  if (validation.mode === "cloud-configured") {
+    environment.JAZZ_APP_ID = validation.client.JAZZ_APP_ID;
+    environment.JAZZ_SERVER_URL = validation.client.JAZZ_SERVER_URL;
+  } else {
+    environment.JAZZ_APP_ID = "";
+    environment.JAZZ_SERVER_URL = "";
+  }
+  environment.JAZZ_ADMIN_SECRET = "";
+  environment.BACKEND_SECRET = "";
+  return environment;
+}
+
+export function secretScanChildEnvironment(
+  loaded: Readonly<Record<string, string>>,
+  source: Readonly<Record<string, string>> = allowedProcessEnvironment(),
+): Record<string, string> {
+  const environment = systemChildEnvironment(source);
+  for (const name of serverEnvironmentNames) environment[name] = loaded[name]?.trim() ?? "";
+  return environment;
 }

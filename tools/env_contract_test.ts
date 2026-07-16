@@ -1,4 +1,8 @@
-import { validateEnvironment } from "./env_contract.ts";
+import {
+  appChildEnvironment,
+  secretScanChildEnvironment,
+  validateEnvironment,
+} from "./env_contract.ts";
 import { loadEnvironment, mergeEnvironment, parseDotenv } from "./load_env.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -40,6 +44,40 @@ Deno.test("validated cloud result projects only the complete public pair", () =>
   assert(result.client.JAZZ_APP_ID === "app", "public app ID should be projected");
   assert(!("JAZZ_ADMIN_SECRET" in result.client), "admin secret must not be projected");
   assert(!("BACKEND_SECRET" in result.client), "backend secret must not be projected");
+});
+
+Deno.test("checkout Astro child receives only the public Jazz pair under Deno Tunnel", () => {
+  const result = validateEnvironment({
+    JAZZ_APP_ID: "app",
+    JAZZ_SERVER_URL: "https://example.test",
+    JAZZ_ADMIN_SECRET: "admin-secret",
+    BACKEND_SECRET: "backend-secret",
+  });
+  assert(result.ok && result.mode === "cloud-configured", "cloud pair should validate");
+  const child = appChildEnvironment(result, {
+    PATH: "/test/bin",
+    DENO_DEPLOY_TOKEN: "deploy-token",
+    JAZZ_ADMIN_SECRET: "admin-secret",
+    BACKEND_SECRET: "backend-secret",
+  });
+  assert(child.JAZZ_APP_ID === "app", "public app ID was dropped");
+  assert(child.JAZZ_SERVER_URL === "https://example.test", "public server URL was dropped");
+  assert(child.JAZZ_ADMIN_SECRET === "", "admin secret reached Astro");
+  assert(child.BACKEND_SECRET === "", "backend secret reached Astro");
+  assert(!("DENO_DEPLOY_TOKEN" in child), "Deno Deploy token reached Astro");
+});
+
+Deno.test("checkout secret scanner receives server values without tunnel credentials", () => {
+  const child = secretScanChildEnvironment({
+    JAZZ_ADMIN_SECRET: "admin-secret",
+    BACKEND_SECRET: "backend-secret",
+  }, {
+    PATH: "/test/bin",
+    DENO_DEPLOY_TOKEN: "deploy-token",
+  });
+  assert(child.JAZZ_ADMIN_SECRET === "admin-secret", "scanner lost the admin secret sentinel");
+  assert(child.BACKEND_SECRET === "backend-secret", "scanner lost the backend secret sentinel");
+  assert(!("DENO_DEPLOY_TOKEN" in child), "Deno Deploy token reached the secret scanner");
 });
 
 Deno.test("dotenv parsing is allowlisted and process values win", () => {

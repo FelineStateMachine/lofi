@@ -13,6 +13,8 @@ test("unsupported durable storage names missing capabilities and the stable-orig
     webLocks: false,
     messageChannel: false,
     durableDriverSupported: false,
+    webAuthn: false,
+    prf: "unavailable",
     displayMode: "browser",
   });
   assert(error.name === "DurableStorageUnsupportedError", "durability error needs a stable name");

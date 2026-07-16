@@ -1,5 +1,12 @@
 #!/usr/bin/env -S deno run -A
 
+/**
+ * The `deno task test` command: runs the generated project's local-first test
+ * suite, retaining browser artifacts under `test-results/`.
+ *
+ * @module
+ */
+
 import { runDeno } from "../tooling/process.ts";
 import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
 

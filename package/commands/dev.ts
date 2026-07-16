@@ -1,5 +1,12 @@
 #!/usr/bin/env -S deno run -A
 
+/**
+ * The `deno task dev` command: runs the Astro development server after lofi
+ * preflight checks and diagnostics.
+ *
+ * @module
+ */
+
 import { runDenoStatus } from "../tooling/process.ts";
 import { validatedCommandEnvironment } from "./shared.ts";
 

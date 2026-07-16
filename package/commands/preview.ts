@@ -1,5 +1,12 @@
 #!/usr/bin/env -S deno run -A
 
+/**
+ * The `deno task preview` command: serves the built `dist/` output locally over
+ * HTTP for previewing the production PWA.
+ *
+ * @module
+ */
+
 import { extname, join, normalize } from "node:path";
 
 const portFlag = Deno.args.findIndex((argument) => argument === "--port");

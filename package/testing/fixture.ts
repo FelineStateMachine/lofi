@@ -18,13 +18,19 @@ import {
 import { sanitizeTraceArchive } from "./trace.ts";
 
 type MemoryStorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
+/**
+ * Playwright context options with `storageState` forbidden, so identity never
+ * leaves memory via an on-disk state file.
+ */
 export type SafeContextOptions = Omit<BrowserContextOptions, "storageState"> & {
   /** Identity state is managed in memory by the fixture. File paths are forbidden. */
   storageState?: never;
 };
 
+/** Identifies which of the fixture's two clients a value belongs to. */
 export type ClientName = "first" | "second";
 
+/** A redacted console, page-error, or failed-request record captured from a client. */
 export interface BrowserDiagnostic {
   readonly client: ClientName;
   readonly kind: "console" | "page-error" | "request-failed";
@@ -33,6 +39,11 @@ export interface BrowserDiagnostic {
   readonly url?: string;
 }
 
+/**
+ * How the two clients obtain identity: `shared` clones the primary's prepared
+ * state (in memory) into the second client, `isolated` prepares each client on
+ * its own.
+ */
 export type IdentityOptions =
   | {
     readonly mode: "shared";
@@ -45,6 +56,7 @@ export type IdentityOptions =
     readonly prepare?: (client: BrowserTestClient) => Promise<void>;
   };
 
+/** Configures where and how redacted failure artifacts are written on capture. */
 export interface FailureArtifactOptions {
   readonly directory: string;
   /** Literal credential values to remove from retained diagnostics. */
@@ -53,6 +65,7 @@ export interface FailureArtifactOptions {
   readonly mask?: (client: BrowserTestClient) => readonly Locator[];
 }
 
+/** Options for constructing a {@link TwoClientFixture} via {@link createTwoClientFixture}. */
 export interface TwoClientFixtureOptions {
   readonly baseURL: string;
   readonly identity: IdentityOptions;
@@ -63,6 +76,7 @@ export interface TwoClientFixtureOptions {
   readonly traceOnFailure?: boolean;
 }
 
+/** Re-exported so callers can catch a missing-Chromium launch failure. */
 export { BrowserUnavailableError };
 
 function validateContextOptions(options: SafeContextOptions | undefined): void {
@@ -73,6 +87,11 @@ function validateContextOptions(options: SafeContextOptions | undefined): void {
   }
 }
 
+/**
+ * One browser client (context + page) whose identity and IndexedDB stay in
+ * memory. Records redacted diagnostics and can go offline/online, restart, and
+ * capture a sanitized trace.
+ */
 export class BrowserTestClient {
   readonly #diagnostics: BrowserDiagnostic[] = [];
   #context: BrowserContext;
@@ -94,22 +113,27 @@ export class BrowserTestClient {
     this.#page = page;
   }
 
+  /** The client's current Playwright browser context. */
   get context(): BrowserContext {
     return this.#context;
   }
 
+  /** The client's current Playwright page. */
   get page(): Page {
     return this.#page;
   }
 
+  /** Whether the client's network is currently forced offline. */
   get offline(): boolean {
     return this.#offline;
   }
 
+  /** Redacted diagnostics collected from the client's pages so far. */
   get diagnostics(): readonly BrowserDiagnostic[] {
     return this.#diagnostics;
   }
 
+  /** Attach diagnostic listeners and, if enabled, begin failure tracing. */
   async startRecording(): Promise<void> {
     if (this.#recording || this.#closed) return;
     this.#attachDiagnostics(this.#page);
@@ -119,11 +143,13 @@ export class BrowserTestClient {
     this.#recording = true;
   }
 
+  /** Force the client's network offline. */
   async goOffline(): Promise<void> {
     await this.#context.setOffline(true);
     this.#offline = true;
   }
 
+  /** Restore the client's network to online. */
   async goOnline(): Promise<void> {
     await this.#context.setOffline(false);
     this.#offline = false;
@@ -168,6 +194,10 @@ export class BrowserTestClient {
     return this.#page;
   }
 
+  /**
+   * Stop tracing and write a sanitized trace archive to `path`. Returns false
+   * when tracing was not active; removes the archive if sanitization fails.
+   */
   async captureTrace(path: string): Promise<boolean> {
     if (!this.#recording || !this.traceOnFailure) return false;
     await this.#context.tracing.stop({ path });
@@ -181,6 +211,7 @@ export class BrowserTestClient {
     return true;
   }
 
+  /** Discard any pending trace and close the client's context. Idempotent. */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -222,12 +253,19 @@ export class BrowserTestClient {
   }
 }
 
+/** The directory and file paths produced by a failure capture. */
 export interface FailureArtifacts {
   readonly directory: string;
   readonly files: readonly string[];
 }
 
+/**
+ * Coordinates a pair of {@link BrowserTestClient}s sharing one browser, with
+ * helpers to take both clients offline/online and to capture redacted,
+ * value-free failure artifacts.
+ */
 export class TwoClientFixture {
+  /** The fixture's two clients, ordered `[first, second]`. */
   readonly clients: readonly [BrowserTestClient, BrowserTestClient];
   #closed = false;
 
@@ -241,22 +279,31 @@ export class TwoClientFixture {
     this.clients = [first, second];
   }
 
+  /** The first client. */
   get first(): BrowserTestClient {
     return this.clients[0];
   }
 
+  /** The second client. */
   get second(): BrowserTestClient {
     return this.clients[1];
   }
 
+  /** Take both clients offline. */
   async goOffline(): Promise<void> {
     await Promise.all(this.clients.map((client) => client.goOffline()));
   }
 
+  /** Restore both clients to online. */
   async goOnline(): Promise<void> {
     await Promise.all(this.clients.map((client) => client.goOnline()));
   }
 
+  /**
+   * Write redacted screenshots, traces, diagnostics, and (optionally) a
+   * value-free state-shape snapshot under a label-named directory. Returns
+   * undefined when no artifact directory was configured.
+   */
   async captureFailure(
     label: string,
     snapshot?: (client: BrowserTestClient) => Promise<ValueFreeState>,
@@ -299,6 +346,10 @@ export class TwoClientFixture {
     return { directory, files };
   }
 
+  /**
+   * Close both clients and, when the fixture owns it, the browser. Idempotent;
+   * rethrows the first client close failure.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -309,6 +360,11 @@ export class TwoClientFixture {
   }
 }
 
+/**
+ * Launch (or reuse) a browser and build a {@link TwoClientFixture}: opens both
+ * clients at `baseURL`, applies the chosen identity mode with state kept in
+ * memory, and starts recording. Cleans up on any setup failure.
+ */
 export async function createTwoClientFixture(
   options: TwoClientFixtureOptions,
 ): Promise<TwoClientFixture> {

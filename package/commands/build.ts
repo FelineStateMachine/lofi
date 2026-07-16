@@ -1,5 +1,13 @@
 #!/usr/bin/env -S deno run -A
 
+/**
+ * The `deno task build` command: builds the static PWA into `dist/` with a
+ * source-hash build id, a service-worker precache manifest, and a scan that
+ * fails the build if server secrets leak into client output.
+ *
+ * @module
+ */
+
 import { extname, join } from "node:path";
 import { LOFI_VERSION } from "../version.ts";
 import { loadEnvironment, serverEnvironmentNames } from "../tooling/environment.ts";

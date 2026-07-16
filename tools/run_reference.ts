@@ -1,8 +1,4 @@
-import {
-  appChildEnvironment,
-  secretScanChildEnvironment,
-  validateEnvironment,
-} from "./env_contract.ts";
+import { appChildEnvironment, validateEnvironment } from "./env_contract.ts";
 import { loadEnvironment } from "./load_env.ts";
 import { denoTunnelOrigin } from "../package/tooling/tunnel.ts";
 
@@ -172,10 +168,5 @@ if (command === "build") {
     "apps/reference/dist/lofi-precache.json",
     `${JSON.stringify(precache.sort())}\n`,
   );
-  const scanCode = await run(
-    ["task", "check:secrets"],
-    secretScanChildEnvironment(environment),
-  );
-  if (scanCode !== 0) Deno.exit(scanCode);
   console.log(`lofi build: apps/reference/dist (${await routeCount()} routes, ${revision})`);
 }

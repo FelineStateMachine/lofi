@@ -25,6 +25,13 @@ const snapshot: InspectorSnapshot = {
     mutationListeners: 1,
     mutationErrors: 0,
   },
+  lifecycle: {
+    mode: "managed",
+    status: "completed",
+    attempts: 2,
+    lastReason: "visibilitychange",
+    transportDetail: "live detail unavailable",
+  },
   multiTab: {
     role: "unavailable",
     detail: "Jazz alpha.53 exposes no supported leader/follower signal",
@@ -37,5 +44,10 @@ test("inspector rows retain truthful unavailable and pending states", () => {
   assert(rows["Pending lofi local"] === "1", "local pending work was omitted");
   assert(rows["Pending lofi global"] === "2", "global pending work was omitted");
   assert(rows["Multi-tab role"] === "unavailable", "multi-tab role was fabricated");
+  assert(rows["Lifecycle action"] === "completed", "foreground recovery action was omitted");
+  assert(
+    rows["Lifecycle transport"] === "live detail unavailable",
+    "foreground recovery fabricated transport state",
+  );
   assert(!JSON.stringify(rows).includes("secret"), "inspector rows exposed a secret-shaped field");
 });

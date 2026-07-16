@@ -24,6 +24,13 @@ export type InspectorSnapshot = {
     mutationListeners: number;
     mutationErrors: number;
   };
+  lifecycle: {
+    mode: "local-only" | "managed";
+    status: "idle" | "offline-deferred" | "recovering" | "completed" | "failed";
+    attempts: number;
+    lastReason: "none" | "pageshow" | "visibilitychange" | "online";
+    transportDetail: "live detail unavailable" | "not configured";
+  };
   multiTab: {
     role: "unavailable" | "leader" | "follower";
     detail: string;
@@ -60,6 +67,11 @@ export function inspectorRows(snapshot: InspectorSnapshot): InspectorRow[] {
     { label: "Vendor subscriptions", value: String(snapshot.runtime.vendorSubscriptions) },
     { label: "Mutation listeners", value: String(snapshot.runtime.mutationListeners) },
     { label: "Mutation errors", value: String(snapshot.runtime.mutationErrors) },
+    { label: "Lifecycle mode", value: snapshot.lifecycle.mode },
+    { label: "Lifecycle action", value: snapshot.lifecycle.status },
+    { label: "Lifecycle attempts", value: String(snapshot.lifecycle.attempts) },
+    { label: "Lifecycle reason", value: snapshot.lifecycle.lastReason },
+    { label: "Lifecycle transport", value: snapshot.lifecycle.transportDetail },
     { label: "Multi-tab role", value: snapshot.multiTab.role },
     { label: "Multi-tab detail", value: snapshot.multiTab.detail },
   ];

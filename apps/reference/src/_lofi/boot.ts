@@ -1,3 +1,4 @@
+import "./lifecycle.ts";
 import { registerProductionServiceWorker } from "./pwa.ts";
 
 if (typeof document !== "undefined") {

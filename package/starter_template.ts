@@ -22,8 +22,15 @@ import deviceCapabilities from "../apps/reference/src/_lofi/device-capabilities.
 import deviceCapabilitiesTest from "../apps/reference/src/_lofi/device-capabilities_test.ts" with {
   type: "text",
 };
+import foregroundRecovery from "../apps/reference/src/_lofi/foreground-recovery.ts" with {
+  type: "text",
+};
+import foregroundRecoveryTest from "../apps/reference/src/_lofi/foreground-recovery_test.ts" with {
+  type: "text",
+};
 import inspector from "../apps/reference/src/_lofi/inspector.ts" with { type: "text" };
 import inspectorTest from "../apps/reference/src/_lofi/inspector_test.ts" with { type: "text" };
+import lifecycle from "../apps/reference/src/_lofi/lifecycle.ts" with { type: "text" };
 import probe from "../apps/reference/src/_lofi/probe.ts" with { type: "text" };
 import pwa from "../apps/reference/src/_lofi/pwa.ts" with { type: "text" };
 import pwaTest from "../apps/reference/src/_lofi/pwa_test.ts" with { type: "text" };
@@ -94,8 +101,11 @@ export const STARTER_TEMPLATE: Readonly<Record<string, string | Uint8Array>> = {
   "src/_lofi/config.ts": config,
   "src/_lofi/device-capabilities.ts": deviceCapabilities,
   "src/_lofi/device-capabilities_test.ts": deviceCapabilitiesTest,
+  "src/_lofi/foreground-recovery.ts": foregroundRecovery,
+  "src/_lofi/foreground-recovery_test.ts": foregroundRecoveryTest,
   "src/_lofi/inspector.ts": inspector,
   "src/_lofi/inspector_test.ts": inspectorTest,
+  "src/_lofi/lifecycle.ts": lifecycle,
   "src/_lofi/probe.ts": probe,
   "src/_lofi/pwa.ts": pwa,
   "src/_lofi/pwa_test.ts": pwaTest,

@@ -306,6 +306,36 @@ async function setReferenceConnection(page: Page, connected: boolean): Promise<v
   }, connected);
 }
 
+async function exerciseForegroundRecovery(page: Page, timeoutMs: number): Promise<void> {
+  const before = await page.evaluate(async () => {
+    const inspector = (globalThis as typeof globalThis & {
+      __LOFI_INSPECTOR__?: {
+        readSnapshot(): Promise<{ lifecycle: { attempts: number } }>;
+      };
+    }).__LOFI_INSPECTOR__;
+    if (!inspector) throw new Error("development inspector is unavailable");
+    return (await inspector.readSnapshot()).lifecycle.attempts;
+  });
+  await page.evaluate(() => globalThis.dispatchEvent(new Event("online")));
+  await page.waitForFunction(
+    async (previousAttempts) => {
+      const inspector = (globalThis as typeof globalThis & {
+        __LOFI_INSPECTOR__?: {
+          readSnapshot(): Promise<{
+            lifecycle: { attempts: number; status: string; transportDetail: string };
+          }>;
+        };
+      }).__LOFI_INSPECTOR__;
+      const lifecycle = (await inspector?.readSnapshot())?.lifecycle;
+      return lifecycle?.attempts === Number(previousAttempts) + 1 &&
+        lifecycle.status === "completed" &&
+        lifecycle.transportDetail === "live detail unavailable";
+    },
+    before,
+    { timeout: timeoutMs },
+  );
+}
+
 async function exerciseReplicaClear(
   browser: Browser,
   url: string,
@@ -975,6 +1005,13 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
         name: "development online settlement",
         detail:
           "The online insert and delete reached global durability before the inspector paused transport.",
+      });
+      await exerciseForegroundRecovery(page, timeoutMs);
+      assertions.push({
+        name: "foreground lifecycle recovery",
+        status: "passed",
+        detail:
+          "An observable online signal requested one public Jazz reconnect without claiming transport state.",
       });
     }
     assertions.push({

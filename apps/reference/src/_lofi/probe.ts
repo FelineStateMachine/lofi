@@ -1,6 +1,7 @@
 import { serverUrl } from "./config.ts";
 import { readDeviceCapabilityReport } from "./device-capabilities.ts";
 import { type InspectorAdapter, type InspectorSnapshot, mountInspector } from "./inspector.ts";
+import { getForegroundRecoveryState, subscribeForegroundRecovery } from "./lifecycle.ts";
 import { getRuntime, getRuntimeDiagnostics, subscribeRuntimeDiagnostics } from "./runtime.ts";
 
 export type LofiDevelopmentBridge = InspectorAdapter;
@@ -31,6 +32,7 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
     readDeviceCapabilityReport(),
   ]);
   const diagnostics = getRuntimeDiagnostics();
+  const lifecycle = getForegroundRecoveryState();
   const authMode = runtime.db.getAuthState().authMode;
   return {
     identity: {
@@ -70,6 +72,10 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
       mutationListeners: diagnostics.activeMutationListeners,
       mutationErrors: diagnostics.mutationErrors,
     },
+    lifecycle: {
+      ...lifecycle,
+      transportDetail: serverUrl ? "live detail unavailable" : "not configured",
+    },
     multiTab: {
       role: "unavailable",
       detail: "Jazz alpha.53 exposes no supported leader/follower signal",
@@ -82,12 +88,14 @@ const bridge: LofiDevelopmentBridge = {
   subscribe(listener) {
     stateListeners.add(listener);
     const unsubscribeRuntime = subscribeRuntimeDiagnostics(listener);
+    const unsubscribeLifecycle = subscribeForegroundRecovery(listener);
     let active = true;
     return () => {
       if (!active) return;
       active = false;
       stateListeners.delete(listener);
       unsubscribeRuntime();
+      unsubscribeLifecycle();
     };
   },
   async setTransportPaused(paused) {

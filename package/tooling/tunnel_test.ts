@@ -1,4 +1,4 @@
-import { denoTunnelOriginFromConfig } from "./tunnel.ts";
+import { denoTunnelOriginFromConfig, denoTunnelOriginFromSource } from "./tunnel.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -29,4 +29,18 @@ Deno.test("unsafe Deploy association cannot become a printed device URL", () => 
     message = error instanceof Error ? error.message : String(error);
   }
   assert(message.includes("safe DNS label"), "unsafe association did not fail closed");
+});
+
+Deno.test("Deno-compatible JSONC can configure the printed tunnel URL", () => {
+  const result = denoTunnelOriginFromSource(`{
+    // Written or edited by the author.
+    "deploy": {
+      "org": "felinestatemachine",
+      "app": "lofi-dev",
+    },
+  }`);
+  assert(
+    result?.url === "https://lofi-dev--local.felinestatemachine.deno.net/",
+    "valid JSONC did not produce the tunnel URL",
+  );
 });

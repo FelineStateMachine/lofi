@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { parse } from "jsr:@std/jsonc@1.0.2";
 
 export type DenoTunnelOrigin = {
   host: string;
@@ -37,7 +38,17 @@ export function denoTunnelOriginFromConfig(config: DenoConfig): DenoTunnelOrigin
   return { host, url: `https://${host}/` };
 }
 
+export function denoTunnelOriginFromSource(source: string): DenoTunnelOrigin | null {
+  return denoTunnelOriginFromConfig(parse(source) as DenoConfig);
+}
+
 export async function denoTunnelOrigin(root = Deno.cwd()): Promise<DenoTunnelOrigin | null> {
-  const source = await Deno.readTextFile(join(root, "deno.json"));
-  return denoTunnelOriginFromConfig(JSON.parse(source) as DenoConfig);
+  let source: string;
+  try {
+    source = await Deno.readTextFile(join(root, "deno.json"));
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    source = await Deno.readTextFile(join(root, "deno.jsonc"));
+  }
+  return denoTunnelOriginFromSource(source);
 }

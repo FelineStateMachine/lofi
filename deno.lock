@@ -1,6 +1,8 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@std/json@^1.0.2": "1.0.3",
+    "jsr:@std/jsonc@1.0.2": "1.0.2",
     "npm:@astrojs/check@0.9.9": "0.9.9_typescript@6.0.3",
     "npm:@astrojs/preact@6.0.1": "6.0.1_preact@10.29.7__preact-render-to-string@6.7.0_@babel+core@7.29.7",
     "npm:astro@7.0.9": "7.0.9_@emnapi+core@1.11.1_@emnapi+runtime@1.11.1",
@@ -10,6 +12,17 @@
     "npm:preact@10.29.7": "10.29.7_preact-render-to-string@6.7.0",
     "npm:typescript@6.0.3": "6.0.3",
     "npm:vite@8.0.1": "8.0.1_@emnapi+core@1.11.1_@emnapi+runtime@1.11.1"
+  },
+  "jsr": {
+    "@std/json@1.0.3": {
+      "integrity": "97d5710996293a027b7aa5f0d1f4fa29f246f269e6b5597e08807613f37d426c"
+    },
+    "@std/jsonc@1.0.2": {
+      "integrity": "909605dae3af22bd75b1cbda8d64a32cf1fd2cf6efa3f9e224aba6d22c0f44c7",
+      "dependencies": [
+        "jsr:@std/json"
+      ]
+    }
   },
   "npm": {
     "@astrojs/check@0.9.9_typescript@6.0.3": {

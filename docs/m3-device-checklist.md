@@ -49,10 +49,15 @@ with these device-gate results:
 - PRF client extension: `available`;
 - passkey backup: `blocked by alpha security review`.
 
+After selecting **Request storage persistence**, the user reported that storage persistence was
+granted on the same Android origin. This confirms that the visible remediation can transition the
+device from `not-granted` to granted; retained-data behavior still requires the lifecycle and
+offline procedures below.
+
 This is capability evidence, not a completed Android row. The screenshot does not identify exact
 hardware, Android or Chrome versions, cache temperature, or Jazz mode. It also does not prove an
-installed launch, a granted persistence request, retained writes, lifecycle recovery, offline cold
-start, or passkey creation/retrieval.
+installed launch, retained writes, lifecycle recovery, offline cold start, or passkey
+creation/retrieval.
 
 ## Per-variant procedure
 

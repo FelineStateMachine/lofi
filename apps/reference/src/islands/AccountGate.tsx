@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
+import { referenceApp } from "../app.ts";
 import { AuthError } from "../_lofi/auth.ts";
 import {
   createPasskeyAccount,
@@ -44,6 +45,9 @@ export default function AccountGate() {
   const [session, setSession] = useState<Session | null>(null);
   const [busy, setBusy] = useState<"create" | "signin" | "signout" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The nickname the user gives their passkey — it becomes the credential's name
+  // in their password manager, so they can tell which account a key unlocks.
+  const [label, setLabel] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -138,11 +142,23 @@ export default function AccountGate() {
         Your passkey is your account. Create one, or sign in with an existing one — the same key
         reaches the same data on every device it can.
       </p>
+      <div class="account-field">
+        <label for="passkey-label">Name this passkey</label>
+        <input
+          id="passkey-label"
+          value={label}
+          onInput={(event) => setLabel(event.currentTarget.value)}
+          placeholder={referenceApp.name}
+          autocomplete="off"
+          disabled={busy !== null}
+        />
+        <p class="account-note">Shown in your password manager. Defaults to the app name.</p>
+      </div>
       <div class="account-actions">
         <button
           type="button"
           disabled={disabled}
-          onClick={() => run("create", () => createPasskeyAccount())}
+          onClick={() => run("create", () => createPasskeyAccount(label.trim() || undefined))}
         >
           {busy === "create" ? "Creating…" : "Create passkey account"}
         </button>

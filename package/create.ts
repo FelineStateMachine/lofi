@@ -1,5 +1,12 @@
 #!/usr/bin/env -S deno run -A
 
+/**
+ * The `deno run -A jsr:@nzip/lofi/create <name>` command: scaffolds a new
+ * local-first PWA project from the validated starter template.
+ *
+ * @module
+ */
+
 import { createProject } from "./create_core.ts";
 
 function usage(): never {

@@ -5,6 +5,8 @@ export type DeviceCapabilityReport = {
   webLocks: boolean;
   messageChannel: boolean;
   durableDriverSupported: boolean;
+  webAuthn: boolean;
+  prf: "available" | "not-reported" | "unknown" | "unavailable";
   persistentPermission: "granted" | "not-granted" | "unavailable" | "error";
   displayMode: "standalone" | "browser";
 };
@@ -17,6 +19,24 @@ function browserStorage(): StorageManagerWithOpfs | undefined {
   return typeof navigator === "undefined"
     ? undefined
     : navigator.storage as StorageManagerWithOpfs | undefined;
+}
+
+type PublicKeyCredentialCapabilities = typeof PublicKeyCredential & {
+  getClientCapabilities?: () => Promise<Record<string, boolean>>;
+};
+
+async function readPrfCapability(
+  webAuthn: boolean,
+): Promise<DeviceCapabilityReport["prf"]> {
+  if (!webAuthn) return "unavailable";
+  const publicKeyCredential = PublicKeyCredential as PublicKeyCredentialCapabilities;
+  if (typeof publicKeyCredential.getClientCapabilities !== "function") return "unknown";
+  try {
+    const capabilities = await publicKeyCredential.getClientCapabilities();
+    return capabilities["extension:prf"] === true ? "available" : "not-reported";
+  } catch {
+    return "unknown";
+  }
 }
 
 export function durableCapabilityReport(): Omit<
@@ -37,6 +57,8 @@ export function durableCapabilityReport(): Omit<
     webLocks,
     messageChannel,
     durableDriverSupported: secureContext && opfs && sharedWorker && webLocks && messageChannel,
+    webAuthn: typeof PublicKeyCredential === "function",
+    prf: "unknown",
     displayMode: typeof globalThis.matchMedia === "function" &&
         globalThis.matchMedia("(display-mode: standalone)").matches
       ? "standalone"
@@ -47,16 +69,18 @@ export function durableCapabilityReport(): Omit<
 export async function readDeviceCapabilityReport(): Promise<DeviceCapabilityReport> {
   const base = durableCapabilityReport();
   const storage = browserStorage();
+  const prf = await readPrfCapability(base.webAuthn);
   if (typeof storage?.persisted !== "function") {
-    return { ...base, persistentPermission: "unavailable" };
+    return { ...base, prf, persistentPermission: "unavailable" };
   }
   try {
     return {
       ...base,
+      prf,
       persistentPermission: await storage.persisted() ? "granted" : "not-granted",
     };
   } catch {
-    return { ...base, persistentPermission: "error" };
+    return { ...base, prf, persistentPermission: "error" };
   }
 }
 

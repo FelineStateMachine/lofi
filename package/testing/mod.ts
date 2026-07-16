@@ -1,3 +1,11 @@
+/**
+ * The `@nzip/lofi/testing` public surface: Playwright-backed helpers for testing
+ * local-first behavior, including two-client fixtures, concurrent offline
+ * convergence, app-owned readiness waits, and value-free failure artifacts.
+ *
+ * @module
+ */
+
 export {
   type BrowserDiagnostic,
   BrowserTestClient,

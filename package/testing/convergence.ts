@@ -1,12 +1,14 @@
 import type { BrowserTestClient } from "./fixture.ts";
 import type { ValueFreeState } from "./safety.ts";
 
+/** Minimal client contract the convergence runner needs: offline state and toggles. */
 export interface OfflineTestClient {
   readonly offline: boolean;
   goOffline(): Promise<void>;
   goOnline(): Promise<void>;
 }
 
+/** Minimal two-client fixture contract required to drive an offline scenario. */
 export interface OfflineTestFixture<Client extends OfflineTestClient> {
   readonly clients: readonly [Client, Client];
   readonly first: Client;
@@ -19,6 +21,11 @@ export interface OfflineTestFixture<Client extends OfflineTestClient> {
   ): Promise<unknown>;
 }
 
+/**
+ * App-owned definition of a concurrent-offline convergence test: the two edits
+ * plus the hooks that assert readiness, apply and locally verify each edit, and
+ * confirm convergence after reconnection.
+ */
 export interface ConcurrentOfflineScenario<
   Edit,
   Client extends OfflineTestClient = BrowserTestClient,
@@ -44,9 +51,11 @@ export interface ConcurrentOfflineScenario<
   readonly failureLabel?: string;
 }
 
+/** Thrown when a convergence scenario fails, naming the stage that failed via {@link stage}. */
 export class ConvergenceScenarioError extends Error {
   override readonly name = "ConvergenceScenarioError";
 
+  /** @param stage the lifecycle stage that was in progress when the scenario failed */
   constructor(readonly stage: string, options?: ErrorOptions) {
     super(`Concurrent offline convergence failed during ${stage}`, options);
   }

@@ -25,6 +25,13 @@ const snapshot: InspectorSnapshot = {
     mutationListeners: 1,
     mutationErrors: 0,
   },
+  lifecycle: {
+    mode: "managed",
+    status: "completed",
+    attempts: 2,
+    lastReason: "visibilitychange",
+    transportDetail: "live detail unavailable",
+  },
   multiTab: {
     role: "unavailable",
     detail: "Jazz alpha.53 exposes no supported leader/follower signal",

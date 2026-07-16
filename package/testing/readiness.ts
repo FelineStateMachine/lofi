@@ -1,5 +1,6 @@
 import type { Page } from "npm:playwright@1.61.1";
 
+/** Options controlling {@link waitForReady}'s description, timeout, and polling. */
 export interface ReadinessOptions {
   /** A useful name for the condition, included when Playwright times out. */
   description?: string;
@@ -9,6 +10,7 @@ export interface ReadinessOptions {
   polling?: "raf" | number;
 }
 
+/** Thrown when the readiness predicate does not become true before the timeout. */
 export class ReadinessError extends Error {
   override readonly name = "ReadinessError";
 

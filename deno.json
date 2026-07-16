@@ -2,6 +2,7 @@
   "name": "@nzip/lofi",
   "version": "0.1.0",
   "license": "MIT",
+  "description": "A local-first mobile PWA meta-framework for Deno: declare a schema, build Preact islands, and ship an installable offline-capable app whose UI always hydrates from local data.",
   "exports": {
     "./build": "./package/commands/build.ts",
     "./create": "./package/create.ts",

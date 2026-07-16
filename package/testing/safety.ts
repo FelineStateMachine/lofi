@@ -1,3 +1,8 @@
+/**
+ * A JSON-like value restricted to booleans, finite numbers, arrays, and plain
+ * objects. Strings are excluded so state snapshots record shape and counts but
+ * never user values or credentials.
+ */
 export type ValueFreeState =
   | null
   | boolean
@@ -67,6 +72,10 @@ export function assertValueFreeState(
   throw new TypeError(`${path} contains an unsupported value`);
 }
 
+/**
+ * Normalize a label into a filesystem-safe artifact directory name, falling
+ * back to `"failure"` when nothing usable remains.
+ */
 export function artifactName(value: string): string {
   const safe = value.toLowerCase().replaceAll(/[^a-z0-9._-]+/g, "-").replaceAll(/^-+|-+$/g, "");
   return safe || "failure";

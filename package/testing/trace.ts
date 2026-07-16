@@ -45,6 +45,11 @@ async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(output).arrayBuffer());
 }
 
+/**
+ * Read a Playwright trace ZIP at `path` into a map of entry name to
+ * decompressed bytes, supporting stored and deflate entries. Throws on
+ * encrypted, malformed, or unsupported-compression archives.
+ */
 export async function readTraceArchive(path: string): Promise<Record<string, Uint8Array>> {
   const bytes = await Deno.readFile(path);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -81,6 +86,10 @@ export async function readTraceArchive(path: string): Promise<Record<string, Uin
   return entries;
 }
 
+/**
+ * Serialize the given entries into a stored (uncompressed) ZIP archive with
+ * CRC-32 checksums, suitable for rewriting a sanitized trace.
+ */
 export function writeTraceArchive(entries: Readonly<Record<string, Uint8Array>>): Uint8Array {
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];

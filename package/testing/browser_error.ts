@@ -1,3 +1,4 @@
+/** Thrown when Playwright's Chromium browser is not installed, with install guidance. */
 export class BrowserUnavailableError extends Error {
   override readonly name = "BrowserUnavailableError";
 
@@ -9,6 +10,10 @@ export class BrowserUnavailableError extends Error {
   }
 }
 
+/**
+ * Rethrow a browser launch failure as a {@link BrowserUnavailableError} when the
+ * message indicates a missing Chromium install; otherwise rethrow it unchanged.
+ */
 export function rethrowBrowserLaunchError(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   if (

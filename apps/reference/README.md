@@ -12,6 +12,8 @@ remains M4 work. The application is deliberately split into two ownership zones.
 - `src/pages/` — product pages and shell content
 - `src/islands/` — product interaction and rendering
 - `src/styles/` — product styling
+- `src/migrations/` — application-owned schema history and migration evidence
+- `src/ui-contract.ts` — accessible names shared by product UI and browser journeys
 - `tests/` — product behavior tests; the generator seeds framework boundary/contract guards here
 
 ## Generated and runtime-owned files

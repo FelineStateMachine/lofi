@@ -55,6 +55,12 @@
   },
   "deploy": {
     "org": "felinestatemachine",
-    "app": "lofi-dev"
+    "app": "lofi-dev",
+    "build": "deno task build",
+    "runtime": {
+      "type": "static",
+      "cwd": "./apps/reference/dist",
+      "spa": true
+    }
   }
 }

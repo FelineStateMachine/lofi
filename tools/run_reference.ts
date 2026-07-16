@@ -4,6 +4,7 @@ import {
   validateEnvironment,
 } from "./env_contract.ts";
 import { loadEnvironment } from "./load_env.ts";
+import { denoTunnelOrigin } from "../package/tooling/tunnel.ts";
 
 const INTERNAL_ENV = "apps/reference/.env";
 const LOCAL_APP_ID = "00000000-0000-0000-0000-00000000f153";
@@ -104,6 +105,7 @@ if (!validation.ok) {
 for (const warning of validation.warnings) console.warn(`warning: ${warning}`);
 await ensureStableLocalAppId();
 
+const tunnel = command === "dev" ? await denoTunnelOrigin() : null;
 const childEnvironment = appChildEnvironment(validation);
 if (command === "dev") childEnvironment.ASTRO_DEV_BACKGROUND = "1";
 if (command === "build") {
@@ -124,6 +126,9 @@ if (command === "dev") {
     }`,
   );
   console.log("PWA: development service worker disabled");
+  console.log(
+    `HTTPS dev: ${tunnel?.url ?? "deno task --tunnel dev (select a Deno Deploy application once)"}`,
+  );
 }
 
 const exitCode = await run(

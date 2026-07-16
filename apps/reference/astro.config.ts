@@ -38,9 +38,9 @@ export default defineConfig({
       }),
     ],
     server: {
-      // Deno Tunnel terminates HTTPS on a stable project-owned *.deno.net origin.
-      // Keep this narrower than `true`, which would expose source through DNS rebinding.
-      allowedHosts: [".deno.net"],
+      // Running a public development tunnel is an explicit author decision. Do not add a
+      // second framework hostname policy on top of the dev server they chose to expose.
+      allowedHosts: true,
       fs: { allow: [workspaceRoot] },
     },
     define: {

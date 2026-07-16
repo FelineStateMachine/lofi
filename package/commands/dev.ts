@@ -1,9 +1,11 @@
 #!/usr/bin/env -S deno run -A
 
 import { runDenoStatus } from "../tooling/process.ts";
+import { denoTunnelOrigin } from "../tooling/tunnel.ts";
 import { validatedCommandEnvironment } from "./shared.ts";
 
 const environment = await validatedCommandEnvironment();
+const tunnel = await denoTunnelOrigin();
 environment.ASTRO_DEV_BACKGROUND = "1";
 
 console.log("lofi dev");
@@ -18,7 +20,9 @@ console.log(
   }`,
 );
 console.log("PWA:         development service worker disabled");
-console.log("HTTPS dev:   deno task --tunnel dev (stable Deno Deploy project origin)");
+console.log(
+  `HTTPS dev:   ${tunnel?.url ?? "deno task --tunnel dev (select a Deno Deploy application once)"}`,
+);
 console.log("PWA device:  build and publish with nzip for production service-worker evidence");
 
 const forwarded = Deno.args[0] === "--" ? Deno.args.slice(1) : Deno.args;

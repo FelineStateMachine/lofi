@@ -92,6 +92,11 @@ M4 may replace selected generated `_lofi` files with imports from the single `@n
   vendor state or exposing secret-shaped fields; follows the inspector.
 - `src/_lofi/lifecycle.ts` — **generated `_lofi`** — binds browser lifecycle events to the reference
   runtime's public reconnect method; M4 candidate for `@nzip/lofi/sync`.
+- `src/_lofi/passkey-check.ts` — **generated `_lofi`** — runs the explicit origin-only WebAuthn
+  create, discoverable retrieval, and sibling-RP rejection checks without becoming application
+  identity or recovery; remains generated device-validation code.
+- `src/_lofi/passkey-check_test.ts` — **generated `_lofi`** — verifies exact RP IDs, discoverable
+  retrieval options, and sibling derivation; follows the passkey origin check.
 - `src/_lofi/probe.ts` — **generated `_lofi`** — connects the development inspector to runtime,
   storage, lifecycle, and safe control actions; may remain package development tooling.
 - `src/_lofi/pwa.ts` — **generated `_lofi`** — owns service-worker registration, install prompting,

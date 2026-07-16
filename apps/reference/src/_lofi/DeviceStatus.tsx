@@ -1,4 +1,11 @@
 import { useEffect, useState } from "preact/hooks";
+import {
+  createTestPasskey,
+  hasStoredTestPasskey,
+  PasskeyCheckError,
+  retrieveTestPasskey,
+  verifySiblingRpRejected,
+} from "./passkey-check.ts";
 import { applyPwaUpdate, getPwaState, requestPwaInstall, subscribePwaState } from "./pwa.ts";
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "./ui-mutation.ts";
@@ -6,8 +13,31 @@ import { settleUiMutation } from "./ui-mutation.ts";
 export default function DeviceStatus() {
   const { report, requestPersistence } = useDeviceCapabilities();
   const [pwa, setPwa] = useState(getPwaState);
+  const [passkey, setPasskey] = useState("checking");
+  const [hasPasskey, setHasPasskey] = useState(false);
+  const [siblingRp, setSiblingRp] = useState("not-checked");
   useEffect(() => subscribePwaState(setPwa), []);
+  useEffect(() => {
+    const stored = hasStoredTestPasskey();
+    setHasPasskey(stored);
+    setPasskey(stored ? "created" : "not-created");
+  }, []);
   if (!report) return <p class="device-status">Checking durable-storage capabilities…</p>;
+
+  const runPasskeyCheck = async (
+    pending: string,
+    action: () => Promise<{ status: string }>,
+    update: (status: string) => void = setPasskey,
+    onSuccess?: () => void,
+  ) => {
+    update(pending);
+    try {
+      update((await action()).status);
+      onSuccess?.();
+    } catch (error) {
+      update(error instanceof PasskeyCheckError ? error.code : "unknown");
+    }
+  };
 
   return (
     <section class="device-status" aria-labelledby="device-status-title">
@@ -78,6 +108,14 @@ export default function DeviceStatus() {
           <dt>Passkey backup</dt>
           <dd>blocked by alpha security review</dd>
         </div>
+        <div>
+          <dt>Test passkey</dt>
+          <dd>{passkey}</dd>
+        </div>
+        <div>
+          <dt>Sibling RP guard</dt>
+          <dd>{siblingRp}</dd>
+        </div>
       </dl>
       <button type="button" onClick={() => void settleUiMutation(requestPersistence())}>
         Request storage persistence
@@ -92,6 +130,38 @@ export default function DeviceStatus() {
       )}
       {pwa.worker === "update-available" && (
         <button type="button" onClick={applyPwaUpdate}>Apply app update</button>
+      )}
+      {report.webAuthn && report.credentialOrigin.status === "stable" &&
+        !hasPasskey && (
+        <button
+          type="button"
+          onClick={() =>
+            void runPasskeyCheck(
+              "creating",
+              createTestPasskey,
+              setPasskey,
+              () => setHasPasskey(true),
+            )}
+        >
+          Create test passkey
+        </button>
+      )}
+      {report.webAuthn && report.credentialOrigin.status === "stable" &&
+        hasPasskey && (
+        <button
+          type="button"
+          onClick={() => void runPasskeyCheck("retrieving", retrieveTestPasskey)}
+        >
+          Retrieve test passkey
+        </button>
+      )}
+      {report.webAuthn && report.credentialOrigin.status === "stable" && (
+        <button
+          type="button"
+          onClick={() => void runPasskeyCheck("checking", verifySiblingRpRejected, setSiblingRp)}
+        >
+          Verify sibling RP rejection
+        </button>
       )}
       {pwa.install === "manual-ios" && (
         <p>
@@ -122,6 +192,11 @@ export default function DeviceStatus() {
       <p>
         Clearing site data destroys the device-local identity unless a separate recovery mechanism
         has been verified. This reference does not claim passkey recovery.
+      </p>
+      <p>
+        The test passkey proves this origin can create and retrieve a browser credential. It is not
+        used for application identity, backup, or recovery; only its opaque credential ID is kept in
+        this origin's local storage for retrieval.
       </p>
     </section>
   );

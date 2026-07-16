@@ -31,6 +31,10 @@ import foregroundRecoveryTest from "../apps/reference/src/_lofi/foreground-recov
 import inspector from "../apps/reference/src/_lofi/inspector.ts" with { type: "text" };
 import inspectorTest from "../apps/reference/src/_lofi/inspector_test.ts" with { type: "text" };
 import lifecycle from "../apps/reference/src/_lofi/lifecycle.ts" with { type: "text" };
+import passkeyCheck from "../apps/reference/src/_lofi/passkey-check.ts" with { type: "text" };
+import passkeyCheckTest from "../apps/reference/src/_lofi/passkey-check_test.ts" with {
+  type: "text",
+};
 import probe from "../apps/reference/src/_lofi/probe.ts" with { type: "text" };
 import pwa from "../apps/reference/src/_lofi/pwa.ts" with { type: "text" };
 import pwaTest from "../apps/reference/src/_lofi/pwa_test.ts" with { type: "text" };
@@ -106,6 +110,8 @@ export const STARTER_TEMPLATE: Readonly<Record<string, string | Uint8Array>> = {
   "src/_lofi/inspector.ts": inspector,
   "src/_lofi/inspector_test.ts": inspectorTest,
   "src/_lofi/lifecycle.ts": lifecycle,
+  "src/_lofi/passkey-check.ts": passkeyCheck,
+  "src/_lofi/passkey-check_test.ts": passkeyCheckTest,
   "src/_lofi/probe.ts": probe,
   "src/_lofi/pwa.ts": pwa,
   "src/_lofi/pwa_test.ts": pwaTest,

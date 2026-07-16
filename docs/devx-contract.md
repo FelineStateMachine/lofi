@@ -1,6 +1,6 @@
 # lofi developer-experience contract
 
-Status: **v0 validated through M1; M2 implementation in progress**\
+Status: **v0 validated through the M2 source layers; combined promotion review in progress**\
 Scope: **M0 contract, M1 feasibility, and M2 DevX graduation**\
 Last reviewed: **2026-07-15**
 
@@ -26,8 +26,8 @@ honesty of the graduated reference application.
 
 ### North-star generated-project journey
 
-This is the eventual product experience. The generator itself is M2 work and is not claimed as an M1
-deliverable.
+This is the product experience validated from M2 source. The registry command remains unavailable
+until the first explicitly authorized publish and registry-backed smoke.
 
 ```sh
 deno run -A jsr:@nzip/lofi/create my-app
@@ -35,10 +35,10 @@ cd my-app
 deno task dev
 ```
 
-The planned JSR surface is one package, `@nzip/lofi`, with one version and publish operation.
-Framework and tooling boundaries are subpath exports—starting with `./create`, `./core`, `./sync`,
-`./auth`, `./ui`, `./pwa`, and `./testing`—rather than lockstep packages. See
-[ADR 0005](decisions/0005-publish-one-nzip-lofi-package.md).
+The JSR surface is one package, `@nzip/lofi`, with one version and publish operation. M2 validates
+the command subpaths plus `./testing`; remaining runtime subpaths such as `./core`, `./sync`,
+`./auth`, `./ui`, and `./pwa` graduate only when M4 proves their seams through another application.
+See [ADR 0005](decisions/0005-publish-one-nzip-lofi-package.md).
 
 From there the developer makes a retained local write, reloads it, works offline, runs checks,
 builds, previews, and opens the same stable secure origin on a physical device.
@@ -92,34 +92,34 @@ required global runtime for a generated application.
 
 ## Measurable promises
 
-| ID              | Promise                                                        | v0 budget or condition                                                                                                                                          | Evidence owner                    | M1 gate | Status    |
-| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------- | --------- |
-| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                                                                                 | M2                                | no      | proposed  |
-| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                                                                                          | #2 and #6                         | yes     | validated |
-| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                                                                                   | M2                                | no      | proposed  |
-| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                                                                                         | integrated M1 prototype           | yes     | validated |
-| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                                                                                   | #6                                | yes     | validated |
-| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one vendor subscription per shared query after five edits.                                                       | #5 and #6                         | yes     | validated |
-| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.                                                                         | integrated prototype              | yes     | validated |
-| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.                                                                | #5, #6, integration               | yes     | validated |
-| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.                                                               | #7                                | yes     | validated |
-| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                                                                                          | #4 and #7                         | yes     | validated |
-| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                                                                            | #7 and integration                | yes     | validated |
-| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named.                                                            | #7                                | yes     | validated |
-| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.                                                             | #3, #7, final build               | yes     | validated |
-| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                                                                                | #3, #4, #6                        | yes     | validated |
-| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI identifies the device-local key, blocks the rejected alpha passkey path, and defines any future phrase as an identity bearer secret rather than data backup. | #8                                | yes     | revised   |
-| DX-DEVICE-01    | Device/auth tests use a stable, appropriately isolated origin. | M1 proves a stable HTTPS PWA scope for OPFS; installed-app RP-ID preservation and identity isolation remain required before any replacement passkey ceremony.   | #4 and #8                         | yes     | revised   |
-| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                                                                             | M3                                | no      | proposed  |
-| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                                                                                    | feasibility #4; full M3           | no      | proposed  |
-| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                                                                                  | #6                                | yes     | validated |
-| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                                                                                  | feasibility #7; M2 implementation | no      | proposed  |
+| ID              | Promise                                                        | v0 budget or condition                                                                                                                                          | Evidence owner            | M1 gate | Status    |
+| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ------- | --------- |
+| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                                                                                 | M2 Layer 2                | no      | validated |
+| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                                                                                          | #2 and #6                 | yes     | validated |
+| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                                                                                   | M2 Layer 2 golden journey | no      | validated |
+| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                                                                                         | integrated M1 prototype   | yes     | validated |
+| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                                                                                   | #6                        | yes     | validated |
+| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one vendor subscription per shared query after five edits.                                                       | #5 and #6                 | yes     | validated |
+| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.                                                                         | integrated prototype      | yes     | validated |
+| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.                                                                | #5, #6, integration       | yes     | validated |
+| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.                                                               | #7                        | yes     | validated |
+| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                                                                                          | #4 and #7                 | yes     | validated |
+| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                                                                            | #7 and integration        | yes     | validated |
+| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named.                                                            | #7                        | yes     | validated |
+| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.                                                             | #3, #7, final build       | yes     | validated |
+| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                                                                                | #3, #4, #6                | yes     | validated |
+| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI identifies the device-local key, blocks the rejected alpha passkey path, and defines any future phrase as an identity bearer secret rather than data backup. | #8                        | yes     | revised   |
+| DX-DEVICE-01    | Device/auth tests use a stable, appropriately isolated origin. | M1 proves a stable HTTPS PWA scope for OPFS; installed-app RP-ID preservation and identity isolation remain required before any replacement passkey ceremony.   | #4 and #8                 | yes     | revised   |
+| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                                                                             | M3                        | no      | proposed  |
+| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                                                                                    | feasibility #4; full M3   | no      | proposed  |
+| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                                                                                  | #6                        | yes     | validated |
+| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                                                                                  | #7 and M2 Layer 3         | no      | validated |
 
 ## Canonical command surface and output contract
 
-These are product outputs, not claims that every command is implemented at Contract v0. The M1
-prototype must implement `dev`, `check`, `test`, `build`, and `preview`; `create` and the complete
-`doctor` experience graduate in M2.
+These outputs are implemented and verified from M2 source. The `create` registry invocation remains
+conditional on an explicitly authorized publish and registry-backed smoke; the generated command
+surface itself is covered by the source-backed golden journey.
 
 | Command                                    | Success output must contain                                | Failure output must contain                                                |
 | ------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -217,9 +217,9 @@ Missing public configuration selects local-only mode if #7 verifies support. Par
 cloud configuration is `invalid`, stops the relevant command, and cannot be projected into client
 config. Server-only values without client configuration remain isolated and produce a warning.
 
-Root-repository ignore and leak tests do not satisfy the generated-project/release-artifact portion
-of #3. That acceptance item remains open until the M1 prototype produces a build to inspect; the M2
-generator gets its own fixture inspection.
+Root-repository ignore and leak tests are supplemented by generated-project fixture inspection,
+production build scanning, and retained-artifact scans. Publication still requires a fresh registry
+smoke and release-artifact review; source acceptance does not imply that a package exists on JSR.
 
 ## Escape-hatch policy
 
@@ -282,14 +282,15 @@ Jazz version, Preact strategy, Astro/Deno path, durability policy, and identity 
 runtime alternatives are removed from the final tree; their evidence remains in decisions and
 merge-commit history.
 
-Package extraction, the generator, full inspector/testing SDK, and production PWA hardening remain
-M2 or later work.
+M2 has graduated the single-package command surface, generator, development inspector, and
+readiness-first browser-testing helpers. Production PWA/device hardening remains M3 work; remaining
+runtime package seams and a second consumer remain M4 work.
 
 ## M2 layered graduation
 
-M2 integrates into the `m2` branch as three separately reviewed layers. Each layer must pass its own
-checks and independent pull-request review before merge. The combined branch is re-reviewed before
-it may merge into `dev`.
+M2 integrated into the `m2` branch as three separately reviewed layers. Each layer passed its own
+checks and independent pull-request review before merge. The combined branch is now being
+re-reviewed before it may merge into `dev`.
 
 Layer verification runs outside the product and framework surface. An independent agent checks the
 exact pushed head in a detached Git worktree, runs `deno task check` plus the layer's applicable
@@ -305,9 +306,10 @@ clean-room and review boundary before promotion to `dev`.
 | 2 — public command path            | #13, #14; completes #11 | Non-interactive creation plus actionable `dev`/`doctor`; the same journey runs against generated output.            |
 | 3 — testing and inspection         | #12, #10                | Reusable offline/convergence controls and truthful developer diagnostics without leaking machinery into product UI. |
 
-Layer 1 does not close #11: checkout-mode evidence is necessary, but the generated-project journey
-cannot pass until Layer 2 implements the public create command. Remaining abstraction leaks are
-tracked in `docs/m2-abstraction-leaks.md` rather than hidden behind premature package APIs.
+Layer 1 alone did not close #11: checkout-mode evidence was necessary, and Layer 2 subsequently
+passed the source-backed generated-project journey. Registry-backed acceptance remains conditional
+on explicit publication authorization. Remaining abstraction leaks are tracked in
+`docs/m2-abstraction-leaks.md` rather than hidden behind premature package APIs.
 
 Layer 2 has two distinct package gates. Before publication, the generated-project journey invokes
 the real local `./create` entrypoint and uses an explicitly test-only file-URL package override so

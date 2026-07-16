@@ -9,6 +9,7 @@
     "./dev": "./package/commands/dev.ts",
     "./doctor": "./package/commands/doctor.ts",
     "./preview": "./package/commands/preview.ts",
+    "./provision": "./package/commands/provision.ts",
     "./testing": "./package/testing/mod.ts",
     "./test": "./package/commands/run_tests.ts"
   },
@@ -20,6 +21,7 @@
     "astro/config": "npm:astro@7.0.9/config",
     "jazz-tools": "npm:jazz-tools@2.0.0-alpha.53",
     "jazz-tools/dev/vite": "npm:jazz-tools@2.0.0-alpha.53/dev/vite",
+    "jazz-tools/passphrase": "npm:jazz-tools@2.0.0-alpha.53/passphrase",
     "playwright": "npm:playwright@1.61.1",
     "preact": "npm:preact@10.29.7",
     "preact/hooks": "npm:preact@10.29.7/hooks",

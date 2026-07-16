@@ -17,12 +17,12 @@ console.log("lofi dev");
 console.log("Storage:     OPFS durable requested; browser gate required");
 console.log("Persistence: pending browser check");
 console.log(
-  "Identity:    device-passkey account (the key is the account); sign in via AccountGate",
+  "Identity:    local-first account; opens immediately, back up + sync via AccountGate",
 );
 console.log(
   `Sync:        ${
     environment.JAZZ_APP_ID
-      ? "managed configured; live connection detail unavailable"
+      ? "managed configured; users elect to back up and sync per account"
       : "local-only"
   }`,
 );

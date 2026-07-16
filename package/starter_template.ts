@@ -38,6 +38,8 @@ export const STARTER_FILES: readonly string[] = [
   "src/_lofi/probe.ts",
   "src/_lofi/pwa.ts",
   "src/_lofi/pwa_test.ts",
+  "src/_lofi/recovery.ts",
+  "src/_lofi/recovery_test.ts",
   "src/_lofi/resource-lifecycle.ts",
   "src/_lofi/resource-lifecycle_test.ts",
   "src/_lofi/runtime.ts",

@@ -105,8 +105,8 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
     assert(
-      lofiSpecifiers.length === 7,
-      `expected one package prefix, five commands, and testing, received ${lofiSpecifiers.length}`,
+      lofiSpecifiers.length === 8,
+      `expected one package prefix, six commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.1.1/")),

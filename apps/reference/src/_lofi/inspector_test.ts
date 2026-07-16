@@ -9,7 +9,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const snapshot: InspectorSnapshot = {
-  identity: { state: "device-local key active", backup: "blocked by alpha security review" },
+  identity: { state: "device-local key active", backup: "recovery phrase" },
   storage: { driver: "persistent open", persistence: "granted", fallback: "none" },
   sync: {
     mode: "managed configured",

@@ -32,6 +32,7 @@ test-results/
 
 const generatedEnvironment =
   `# Optional public Jazz cloud configuration. Leave both blank for local-only mode.
+# Run \`deno task jazz:provision\` to generate a managed Jazz app and fill these in.
 JAZZ_APP_ID=
 JAZZ_SERVER_URL=
 
@@ -49,12 +50,19 @@ This local-first PWA was created with \`@nzip/lofi\`.
 deno task dev
 \`\`\`
 
-The default project runs local-only with durable browser storage. To enable managed sync, copy
-\`.env.example\` to \`.env\` and set both public Jazz values. Run \`deno task doctor\` before boot when
-you want configuration diagnostics without starting the application.
+The default project runs local-only with durable browser storage — it opens instantly on a private,
+on-device account with no sign-in. To enable managed sync and account backup, run
+\`deno task jazz:provision\` (it generates a managed Jazz app and writes \`.env\`), then rebuild. Run
+\`deno task doctor\` before boot when you want configuration diagnostics without starting the app.
 
-Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Schema and sync tasks:
-\`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
+## Accounts: back up & recover
+
+With a Jazz app configured, the \`AccountGate\` island lets a user back up and sync their local account
+and recover it from a 24-word recovery phrase. The account they already have carries over — electing
+to sync never changes its identity. See the framework side in \`src/_lofi/session.ts\`.
+
+Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
+\`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
 
 ## Hosting
 
@@ -78,6 +86,7 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
   "@nzip/lofi/dev": { subpath: "dev", localPath: "commands/dev.ts" },
   "@nzip/lofi/doctor": { subpath: "doctor", localPath: "commands/doctor.ts" },
   "@nzip/lofi/preview": { subpath: "preview", localPath: "commands/preview.ts" },
+  "@nzip/lofi/provision": { subpath: "provision", localPath: "commands/provision.ts" },
   "@nzip/lofi/test": { subpath: "test", localPath: "commands/run_tests.ts" },
   "@nzip/lofi/testing": { subpath: "testing", localPath: "testing/mod.ts" },
 };

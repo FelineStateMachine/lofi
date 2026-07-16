@@ -427,64 +427,9 @@ export async function decryptAtRest(
   return new Uint8Array(plaintext);
 }
 
-// --- Account identity ("the key is the account") -----------------------------
-
-// A fixed salt so the same credential always derives the same account for lofi.
-// App scoping comes from the credential itself (bound to the app's origin).
-const ACCOUNT_SECRET_SALT = new TextEncoder().encode("lofi:account-secret:v1");
-
-/**
- * Derives the account secret **deterministically** from the passkey via PRF, in
- * Jazz's 32-byte base64url auth-secret format. The same portable credential
- * reconstructs the *same* account on any device — so the key is the account, and
- * the account lives wherever the key does. Nothing is stored server-side and no
- * recovery is implied: without the key, the account is gone.
- *
- * Requires a `stable` origin and a PRF-capable client; throws `origin-rejected`
- * or `prf-unavailable` otherwise (never a fabricated secret). Feed the result to
- * Jazz as the account secret (e.g. via `BrowserAuthSecretStore.saveSecret`).
- */
-export async function deriveAuthSecret(dependencies: AuthDependencies = {}): Promise<string> {
-  const prfSecret = await derivePrfSecret(ACCOUNT_SECRET_SALT, dependencies);
-  return await hkdfAccountSecret(prfSecret);
-}
-
-// HKDF-SHA-256 expands the raw PRF secret into Jazz's 32-byte base64url
-// auth-secret format. Kept separate so both `deriveAuthSecret` and
-// `deriveAccount` produce byte-identical secrets from the same PRF result.
-async function hkdfAccountSecret(prfSecret: Uint8Array): Promise<string> {
-  const material = await crypto.subtle.importKey(
-    "raw",
-    prfSecret as BufferSource,
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: new Uint8Array(0),
-      info: new TextEncoder().encode("lofi:account-secret"),
-    },
-    material,
-    256,
-  );
-  return toBase64Url(new Uint8Array(bits));
-}
-
-/** An account secret paired with the credential that unlocked it. */
-export type PasskeyAccount = { secret: string; credential: DeviceCredential };
-
-/**
- * Signs in with a passkey in **one** ceremony: derives the deterministic Jazz
- * account secret (as {@link deriveAuthSecret}) and reports the asserting
- * credential (its `rpId` and whether it is `portable`), so the UI can show which
- * key unlocked the account and whether it roams. Same guarantees and failures as
- * {@link deriveAuthSecret}: a `stable`/`local-only` origin and a PRF result, or a
- * thrown `origin-rejected` / `prf-unavailable` — never a fabricated secret.
- */
-export async function deriveAccount(dependencies: AuthDependencies = {}): Promise<PasskeyAccount> {
-  const { prfSecret, credential } = await prfAssertion(ACCOUNT_SECRET_SALT, dependencies);
-  return { secret: await hkdfAccountSecret(prfSecret), credential };
-}
+// Account identity is not derived from a credential in lofi. The account is a
+// local-first secret (see `session.ts`), backed up by a recovery phrase and,
+// optionally, protected at rest by the PRF key above. Deriving the *account*
+// from a passkey was removed: it cannot preserve a pre-existing local-only
+// account's data, since a derived key is a different account. This module stays
+// a device-credential + at-rest-key primitive, nothing more.

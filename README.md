@@ -19,9 +19,19 @@ That's the whole onboarding. You now have an installable, offline-capable local-
 write, reload it, go offline, and the UI keeps working because it reads from durable local storage,
 not the network.
 
+Want sync and account backup from the start? Scaffold with `--sync`:
+
+```sh
+deno run -A jsr:@nzip/lofi/create --sync my-app
+```
+
+It provisions a managed Jazz app and writes the project's `.env`, so the app can offer synced,
+recoverable accounts immediately.
+
 > Requires **Deno 2.9+**, the only global runtime. With no `.env` the app runs local-only (stated
-> explicitly at boot); for managed sync, copy `.env.example` and set the public `JAZZ_APP_ID` /
-> `JAZZ_SERVER_URL` pair. Server-only secrets never reach client output.
+> explicitly at boot). For managed sync + backup, run `deno task jazz:provision` (or scaffold with
+> `create --sync`) to generate a Jazz app and write the `.env` — or set the public `JAZZ_APP_ID` /
+> `JAZZ_SERVER_URL` pair by hand. Server-only secrets never reach client output.
 
 ## What a generated project looks like
 
@@ -50,16 +60,17 @@ framework runtime; product work never needs to touch it.
 
 Every generated project ships this task surface (`deno task <name>`):
 
-| Command                                 | What it does                                                |
-| --------------------------------------- | ----------------------------------------------------------- |
-| `dev`                                   | Astro dev server; prints storage, identity, and sync state. |
-| `doctor`                                | Value-free readiness report — no secrets, no faked claims.  |
-| `test`                                  | Deterministic local-first tests (no hand-timed sleeps).     |
-| `build`                                 | Static production build into `dist/`.                       |
-| `preview`                               | Serves the production build locally.                        |
-| `deploy` / `deploy:create`              | Host the static build on Deno Deploy.                       |
-| `schema:validate` / `schema:deploy`     | Validate and publish your Jazz schema.                      |
-| `migrations:create` / `migrations:push` | Author and push schema migrations.                          |
+| Command                                 | What it does                                                  |
+| --------------------------------------- | ------------------------------------------------------------- |
+| `dev`                                   | Astro dev server; prints storage, identity, and sync state.   |
+| `doctor`                                | Value-free readiness report — no secrets, no faked claims.    |
+| `test`                                  | Deterministic local-first tests (no hand-timed sleeps).       |
+| `build`                                 | Static production build into `dist/`.                         |
+| `preview`                               | Serves the production build locally.                          |
+| `deploy` / `deploy:create`              | Host the static build on Deno Deploy.                         |
+| `jazz:provision`                        | Generate a managed Jazz app and write `.env` for sync/backup. |
+| `schema:validate` / `schema:deploy`     | Validate and publish your Jazz schema.                        |
+| `migrations:create` / `migrations:push` | Author and push schema migrations.                            |
 
 ## Testing local-first behavior
 
@@ -92,9 +103,15 @@ Version pins are deliberate: the data layer is an alpha, so every bump is a revi
 
 ## Status
 
-Early release, pre-1.0. Passkey backup and recovery are intentionally absent — the pinned Jazz alpha
-exposes a rejected credential design — so a fresh project uses a device-local identity and does not
-imply recoverability.
+Early release, pre-1.0. Identity is **local-first**: a new app opens on a private, on-device account
+with no sign-in and no network. When a managed Jazz app is configured (`deno task jazz:provision`),
+the user can elect to back up and sync that account and recover it from a 24-word **recovery
+phrase** — the same account, made portable. Electing to sync preserves everything created while
+local-only, because the account identity never changes. lofi holds no recoverable account material
+server-side: the phrase is the backup, so keeping it is the user's custody. (The passkey/PRF module
+in `src/_lofi/auth.ts` remains as an optional at-rest-encryption primitive; deriving the account
+_from_ a credential was removed because it cannot preserve a pre-existing local-only account's
+data.)
 
 ---
 

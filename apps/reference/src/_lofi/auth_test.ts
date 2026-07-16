@@ -3,9 +3,7 @@ import {
   AuthError,
   classifyCredentialOrigin,
   decryptAtRest,
-  deriveAccount,
   deriveAtRestKey,
-  deriveAuthSecret,
   derivePrfSecret,
   encryptAtRest,
   enrollDeviceCredential,
@@ -262,96 +260,4 @@ test("enrollDeviceCredential reports portable false without the BE flag or authe
     credentials: noAuthData,
   });
   assert(missing.portable === false, "an unreadable credential must default to not portable");
-});
-
-test("deriveAuthSecret derives a deterministic Jazz auth-secret from the PRF result", async () => {
-  const first = crypto.getRandomValues(new Uint8Array(32));
-  const credentials = fakeCredentials({
-    get: () =>
-      Promise.resolve({
-        rawId: rawIdBuffer(),
-        getClientExtensionResults: () => ({ prf: { results: { first: first.buffer } } }),
-      } as unknown as Credential),
-  });
-  const secret = await deriveAuthSecret({ credentials, rpId: "app.example.com" });
-  assert(secret.length === 43, "a 32-byte base64url secret must be 43 characters");
-  assert(/^[A-Za-z0-9_-]+$/.test(secret), "the secret must be base64url with no padding");
-
-  const decoded = atob(secret.replaceAll("-", "+").replaceAll("_", "/"));
-  assert(decoded.length === 32, "the secret must decode to 32 bytes");
-
-  const again = await deriveAuthSecret({ credentials, rpId: "app.example.com" });
-  assert(again === secret, "the same PRF input must derive the same secret");
-
-  const other = crypto.getRandomValues(new Uint8Array(32));
-  const otherCredentials = fakeCredentials({
-    get: () =>
-      Promise.resolve({
-        rawId: rawIdBuffer(),
-        getClientExtensionResults: () => ({ prf: { results: { first: other.buffer } } }),
-      } as unknown as Credential),
-  });
-  const otherSecret = await deriveAuthSecret({
-    credentials: otherCredentials,
-    rpId: "app.example.com",
-  });
-  assert(otherSecret !== secret, "a different PRF input must derive a different secret");
-});
-
-test("deriveAuthSecret throws prf-unavailable when the client returns no PRF result", async () => {
-  const credentials = fakeCredentials({
-    get: () =>
-      Promise.resolve({
-        rawId: rawIdBuffer(),
-        getClientExtensionResults: () => ({}),
-      } as unknown as Credential),
-  });
-  await expectAuthError(
-    () => deriveAuthSecret({ credentials, rpId: "app.example.com" }),
-    "prf-unavailable",
-  );
-});
-
-test("deriveAccount returns the account secret and the asserting credential", async () => {
-  const first = crypto.getRandomValues(new Uint8Array(32));
-  const credentials = fakeCredentials({
-    get: () =>
-      Promise.resolve({
-        rawId: rawIdBuffer(),
-        response: { getAuthenticatorData: () => authenticatorData(true) },
-        getClientExtensionResults: () => ({ prf: { results: { first: first.buffer } } }),
-      } as unknown as Credential),
-  });
-  const account = await deriveAccount({ credentials, rpId: "app.example.com" });
-
-  // The secret must equal what deriveAuthSecret derives from the same PRF result,
-  // so a device that enrolled via one path signs in via the other to one account.
-  const viaAuthSecret = await deriveAuthSecret({
-    credentials: fakeCredentials({
-      get: () =>
-        Promise.resolve({
-          rawId: rawIdBuffer(),
-          getClientExtensionResults: () => ({ prf: { results: { first: first.buffer } } }),
-        } as unknown as Credential),
-    }),
-    rpId: "app.example.com",
-  });
-  assert(account.secret === viaAuthSecret, "deriveAccount must match deriveAuthSecret's secret");
-  assert(account.credential.id === "AQIDBA", "the credential id must be the base64url rawId");
-  assert(account.credential.rpId === "app.example.com", "the credential must carry the rpId");
-  assert(account.credential.portable === true, "the BE flag must surface as portable");
-});
-
-test("deriveAccount throws prf-unavailable when the client returns no PRF result", async () => {
-  const credentials = fakeCredentials({
-    get: () =>
-      Promise.resolve({
-        rawId: rawIdBuffer(),
-        getClientExtensionResults: () => ({}),
-      } as unknown as Credential),
-  });
-  await expectAuthError(
-    () => deriveAccount({ credentials, rpId: "app.example.com" }),
-    "prf-unavailable",
-  );
 });

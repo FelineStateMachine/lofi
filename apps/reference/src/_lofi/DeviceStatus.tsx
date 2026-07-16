@@ -1,5 +1,4 @@
 import { useEffect, useState } from "preact/hooks";
-import { referenceApp } from "../app.ts";
 import { serverUrl } from "./config.ts";
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "./ui-mutation.ts";
@@ -33,31 +32,26 @@ export default function DeviceStatus() {
 
   useEffect(() => subscribePwaState(setPwa), []);
   useEffect(() => {
-    let active = true;
-    const refresh = () => {
-      void readSession().then((next) => {
-        if (active) setSession(next);
-      });
-    };
+    const refresh = () => setSession(readSession());
     refresh();
-    // Re-read after a sign-in / sign-out recreates the runtime.
+    // Re-read after electing to sync or restoring an account recreates the runtime.
     globalThis.addEventListener(runtimeRecreatedEvent, refresh);
-    return () => {
-      active = false;
-      globalThis.removeEventListener(runtimeRecreatedEvent, refresh);
-    };
+    return () => globalThis.removeEventListener(runtimeRecreatedEvent, refresh);
   }, []);
 
   if (!report) return <p class="device-status">Checking device capabilities…</p>;
 
-  const passkey = referenceApp.identity === "device-passkey";
   const synced = Boolean(serverUrl);
-  const origin = session?.capability?.origin;
-  const portability = !passkey
-    ? "stays on this device"
-    : session?.profile
-    ? (session.profile.portable ? "roams across your devices" : "this device only")
-    : "known once you sign in";
+  const syncState = session?.syncing
+    ? "syncing to your account"
+    : session?.syncAvailable
+    ? "available — not yet backed up"
+    : "local-only";
+  const backupState = session?.backedUp
+    ? "recovery phrase"
+    : session?.syncAvailable
+    ? "not backed up"
+    : "local-only";
 
   return (
     <section class="device-status" aria-labelledby="device-status-title">
@@ -98,7 +92,7 @@ export default function DeviceStatus() {
           Hook in: <code>src/_lofi/config.ts</code>, <code>runtime.ts</code>
         </p>
         <dl>
-          <Row label="Sync" value={synced ? "syncing to your account" : "local-only"} />
+          <Row label="Sync" value={syncState} />
           <Row label="Managed server" value={synced ? "configured" : "not configured"} />
         </dl>
         {!synced && (
@@ -115,19 +109,10 @@ export default function DeviceStatus() {
           Hook in: <code>src/_lofi/auth.ts</code>, <code>session.ts</code>
         </p>
         <dl>
-          <Row label="Identity" value={passkey ? "passkey account" : "device-local key"} />
-          {passkey && (
-            <Row
-              label="Status"
-              value={session ? (session.signedIn ? "signed in" : "signed out") : "…"}
-            />
-          )}
+          <Row label="Identity" value="local-first account" />
+          <Row label="Backup" value={backupState} />
           <Row label="WebAuthn" value={available(report.webAuthn)} />
-          <Row label="PRF (account derivation)" value={report.prf} />
-          {passkey && origin && (
-            <Row label={`Origin (${origin.rpId || "unknown"})`} value={origin.status} />
-          )}
-          {passkey && <Row label="Account portability" value={portability} />}
+          <Row label="PRF (at-rest key)" value={report.prf} />
         </dl>
       </div>
 

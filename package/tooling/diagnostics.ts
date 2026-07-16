@@ -88,13 +88,15 @@ export async function doctorReport(
     {
       name: "Identity",
       status: "ok",
-      detail: "device-local key; passkey backup blocked by alpha security review",
+      detail: validation.mode === "cloud-configured"
+        ? "local-first account; users can back up and recover via a recovery phrase"
+        : "local-first account; local-only until a managed Jazz app is configured",
     },
     {
       name: "Sync",
       status: validation.mode === "cloud-configured" ? "ok" : "pending",
       detail: validation.mode === "cloud-configured"
-        ? "managed adapter configured; live connection detail unavailable"
+        ? "managed adapter configured; users elect to back up and sync per account"
         : "local-only; no transport convergence claim",
     },
     {

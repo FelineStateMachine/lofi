@@ -1,4 +1,4 @@
-import { serverUrl } from "./config.ts";
+import { serverUrl, syncing } from "./config.ts";
 import { readDeviceCapabilityReport } from "./device-capabilities.ts";
 import { type InspectorAdapter, type InspectorSnapshot, mountInspector } from "./inspector.ts";
 import { getForegroundRecoveryState, subscribeForegroundRecovery } from "./lifecycle.ts";
@@ -43,7 +43,7 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
         : authMode === "anonymous"
         ? "anonymous"
         : "unavailable",
-      backup: "blocked by alpha security review",
+      backup: syncing() ? "recovery phrase" : "local-only",
     },
     storage: {
       driver: diagnostics.storageState === "persistent-driver-open"

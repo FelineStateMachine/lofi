@@ -3,7 +3,7 @@ export const DEVELOPMENT_INSPECTOR_MARKER = "lofi-development-inspector";
 export type InspectorSnapshot = {
   identity: {
     state: "device-local key active" | "anonymous" | "external" | "unavailable";
-    backup: "blocked by alpha security review" | "configured" | "unavailable";
+    backup: "recovery phrase" | "local-only" | "unavailable";
   };
   storage: {
     driver: "persistent requested" | "persistent open" | "failed";

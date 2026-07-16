@@ -1,13 +1,14 @@
 /**
- * Account session for the `device-passkey` identity: the glue between the
- * WebAuthn primitive in `auth.ts` and the runtime's account secret.
+ * Account session for lofi's local-first identity: the glue between the account
+ * secret the runtime opens and the user's choice to back it up and sync.
  *
- * "The key is the account", so signing in *is* deriving the account secret from
- * the passkey (a user-gesture WebAuthn ceremony), caching it, and recreating the
- * runtime so data opens. Signing out forgets the cached secret on this device —
- * it never deletes the passkey and makes no recovery claim. When identity is
- * `device-local`, there is nothing to sign into and {@link readSession} always
- * reports signed-in.
+ * First boot is **local-only** — a random per-device account opens immediately,
+ * with no ceremony and no network. From there the user can *elect* to back up
+ * and sync: revealing a recovery phrase (the portable, honest backup of the
+ * exact same account) and turning on replication to the managed Jazz app. The
+ * account identity never changes, so electing to sync preserves every write made
+ * while local-only. Restoring a phrase on a new device reconstructs the same
+ * account and its synced data flows back down.
  *
  * The small, honest UI that drives this lives in author space
  * (`src/islands/AccountGate.tsx`) — this module is the framework side.
@@ -16,164 +17,87 @@
  */
 
 import { BrowserAuthSecretStore } from "jazz-tools";
-import { referenceApp } from "../app.ts";
-import { appId, serverUrl } from "./config.ts";
-import {
-  type AuthCapability,
-  AuthError,
-  deriveAccount,
-  type DeviceCredential,
-  enrollDeviceCredential,
-  getAuthCapability,
-} from "./auth.ts";
-import { recreateRuntime, runtimeRecreatedEvent, shutdownRuntime } from "./runtime.ts";
+import { appId, setSyncElected, syncAvailable, syncElected, syncing } from "./config.ts";
+import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
+import { recreateRuntime, runtimeRecreatedEvent } from "./runtime.ts";
 
-/** A signed-in identity, remembered locally so the status UI can name the key. */
-export type AccountProfile = {
-  /** The relying-party id (origin hostname) the account's passkey is bound to. */
-  rpId: string;
-  /** Whether the passkey roams across devices (backup-eligible). */
-  portable: boolean;
-  /** The nickname the passkey was enrolled with. */
-  label: string;
-};
-
-/** A snapshot of the account gate: what to render and what the client can do. */
+/** A snapshot of the account: what is possible and what the user has chosen. */
 export type Session = {
-  /** The configured identity model (`app.ts`). */
-  identity: "device-local" | "device-passkey";
-  /** Whether this identity requires a passkey sign-in before data opens. */
-  requiresPasskey: boolean;
-  /** Whether an account secret is available (data can open). */
-  signedIn: boolean;
-  /** Whether writes replicate to a managed account (cloud configured). */
+  /** Whether a managed Jazz app is configured, so backup + sync is possible at all. */
+  syncAvailable: boolean;
+  /** Whether the user has elected to back up and sync this account on this device. */
+  backedUp: boolean;
+  /** Whether writes replicate right now (available *and* elected). */
   syncing: boolean;
-  /** Device/browser/origin capability, or `null` for `device-local`. */
-  capability: AuthCapability | null;
-  /** The remembered account on this device, if any. */
-  profile: AccountProfile | null;
 };
 
-const profileKey = `lofi:account-profile:${appId}`;
-
-function loadProfile(): AccountProfile | null {
-  if (typeof localStorage === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(profileKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<AccountProfile>;
-    if (typeof parsed?.rpId !== "string") return null;
-    return {
-      rpId: parsed.rpId,
-      portable: parsed.portable === true,
-      label: typeof parsed.label === "string" ? parsed.label : referenceApp.name,
-    };
-  } catch {
-    return null;
-  }
+/** Reads the current session. Synchronous — it never prompts or touches the network. */
+export function readSession(): Session {
+  return { syncAvailable, backedUp: syncElected(), syncing: syncing() };
 }
 
-function saveProfile(profile: AccountProfile): void {
-  try {
-    localStorage?.setItem(profileKey, JSON.stringify(profile));
-  } catch {
-    // A private-mode storage failure must not fail the sign-in itself.
-  }
+// The account secret the runtime is already using. `getOrCreateSecret` is a
+// read-through: the runtime created it on first boot, so this returns that same
+// secret rather than minting a new one.
+async function currentSecret(): Promise<string> {
+  return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
 }
 
-function clearProfile(): void {
-  try {
-    localStorage?.removeItem(profileKey);
-  } catch {
-    // Nothing to clean up if storage is unavailable.
-  }
+/**
+ * Reveals the current account's recovery phrase — the same 32-byte secret encoded
+ * as words. Show it for the user to write down; never persist it. Works whether
+ * or not sync is on, but only matters once the account syncs, since the phrase
+ * recovers what has been backed up.
+ */
+export async function revealRecoveryPhrase(): Promise<string> {
+  return toRecoveryPhrase(await currentSecret());
 }
 
-/** Reads the current session without prompting for any credential. */
-export async function readSession(): Promise<Session> {
-  const identity = referenceApp.identity;
-  const syncing = Boolean(serverUrl);
-  if (identity !== "device-passkey") {
-    return {
-      identity,
-      requiresPasskey: false,
-      signedIn: true,
-      syncing,
-      capability: null,
-      profile: null,
-    };
-  }
-  const [capability, cached] = await Promise.all([
-    getAuthCapability(),
-    BrowserAuthSecretStore.loadSecret({ appId }),
-  ]);
-  return {
-    identity,
-    requiresPasskey: true,
-    signedIn: Boolean(cached),
-    syncing,
-    capability,
-    profile: loadProfile(),
-  };
-}
-
-// Caches the derived secret, remembers the credential, and reopens the runtime
-// so every consumer reconnects against the now-available account.
-async function activate(
-  credential: DeviceCredential,
-  secret: string,
-  label: string,
-): Promise<Session> {
-  await BrowserAuthSecretStore.saveSecret(secret, { appId });
-  saveProfile({ rpId: credential.rpId, portable: credential.portable, label });
+/**
+ * Elects to back up and sync this account: replication to the managed Jazz app
+ * turns on and the existing local data pushes up under the same identity. Pair
+ * it with {@link revealRecoveryPhrase} so the user has a way back in. No-op when
+ * no Jazz app is configured.
+ */
+export async function enableSyncBackup(): Promise<Session> {
+  setSyncElected(true);
   await recreateRuntime();
   globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));
-  return await readSession();
+  return readSession();
 }
 
 /**
- * Registers a brand-new passkey and derives the account it represents. Use this
- * for a first-time account; the `label` names the key in the user's password
- * manager. Prefer a portable (roaming) passkey so the account reaches other
- * devices — {@link Session.profile} reports which kind was created.
+ * Stops replicating this account to the server and returns to local-only. The
+ * local data and the account are untouched — this only detaches the network, so
+ * electing to sync again resumes against the same account.
  */
-export async function createPasskeyAccount(label: string = referenceApp.name): Promise<Session> {
-  // create() reports backup-eligibility from its attestation; the follow-up
-  // derive uses PRF (a get()), which is the portable way to obtain the secret.
-  const enrolled = await enrollDeviceCredential({ label });
-  const account = await deriveAccount();
-  return await activate(
-    { ...account.credential, portable: enrolled.portable },
-    account.secret,
-    label,
-  );
-}
-
-/**
- * Signs in with an existing passkey in a single ceremony — the key reconstructs
- * the same account it always derives. Throws `prf-unavailable` if the client
- * cannot do PRF and `cancelled` if the user dismisses the prompt.
- */
-export async function signInWithPasskey(): Promise<Session> {
-  const account = await deriveAccount();
-  const label = loadProfile()?.label ?? referenceApp.name;
-  return await activate(account.credential, account.secret, label);
-}
-
-/**
- * Forgets the cached account on this device and returns to the signed-out gate.
- * The passkey itself is untouched — signing in again re-derives the same
- * account. There is no server-side account, so nothing else is revoked.
- */
-export async function signOut(): Promise<Session> {
-  await shutdownRuntime();
-  await BrowserAuthSecretStore.clearSecret({ appId });
-  clearProfile();
+export async function stopSyncBackup(): Promise<Session> {
+  setSyncElected(false);
+  await recreateRuntime();
   globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));
-  return await readSession();
+  return readSession();
 }
 
-/** True when an error means "no account secret yet" — render the sign-in gate. */
-export function isSignedOut(error: unknown): boolean {
-  return error instanceof AuthError && error.code === "credential-missing";
+/**
+ * Recovers an account from its recovery phrase: the phrase reconstructs the
+ * exact account secret, which replaces the one on this device. Sync is elected
+ * so the recovered account's data syncs back down, and the runtime is recreated
+ * to open it. Throws {@link RecoveryError} on a malformed phrase — the account is
+ * never replaced with a fabricated secret.
+ *
+ * This overwrites whatever account this device currently holds, so a caller
+ * should confirm the intent before discarding a local-only account's data.
+ */
+export async function restoreFromRecoveryPhrase(phrase: string): Promise<Session> {
+  const secret = fromRecoveryPhrase(phrase);
+  await BrowserAuthSecretStore.saveSecret(secret, { appId });
+  setSyncElected(true);
+  await recreateRuntime();
+  globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));
+  return readSession();
+}
+
+/** True when an error is a recovery-phrase problem the user can fix and retry. */
+export function isRecoveryError(error: unknown): error is RecoveryError {
+  return error instanceof RecoveryError;
 }

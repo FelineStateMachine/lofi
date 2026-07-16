@@ -1,8 +1,6 @@
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
-import { referenceApp } from "../app.ts";
-import { AuthError } from "./auth.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
-import { appId, databaseConfig, serverUrl } from "./config.ts";
+import { appId, databaseConfig, syncing } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
   createTableStore,
@@ -54,19 +52,14 @@ function notifyDiagnostics(state = slot()): void {
   for (const listener of state.diagnosticListeners) listener();
 }
 
-// "device-local": a random per-device secret, created on demand — identity
-// never waits. "device-passkey" (default): the passkey is the account, so the
-// secret is derived from the credential's PRF and cached. Booting the database
-// waits for that cached secret; the auth gate (see `session.ts`) runs the
-// passkey ceremony on a user gesture, saves the secret, and recreates the
-// runtime. Return boots find the cached secret and open without a ceremony.
+// Local-first: a random per-device secret, created on demand and cached — so
+// the account opens immediately on first boot, offline, with no ceremony. The
+// same secret opens the same account whether or not sync is attached, so a
+// later election to back up and sync (see `session.ts`) keeps all existing
+// data. Recovering from a phrase replaces the cached secret and recreates the
+// runtime, so the restored account's synced data opens under the same identity.
 async function resolveAccountSecret(): Promise<string> {
-  if (referenceApp.identity !== "device-passkey") {
-    return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
-  }
-  const cached = await BrowserAuthSecretStore.loadSecret({ appId });
-  if (cached) return cached;
-  throw new AuthError("credential-missing", "Sign in with your passkey to open your account.");
+  return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
 }
 
 async function createClient(state: RuntimeSlot): Promise<Db> {
@@ -105,7 +98,7 @@ function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
       let store = stores.get(table);
       if (!store) {
         store = createTableStore(db, table, state.diagnostics, {
-          syncConfigured: Boolean(serverUrl),
+          syncConfigured: syncing(),
           onDiagnosticsChange: () => notifyDiagnostics(state),
         }) as TableStore<TableRow, unknown>;
         stores.set(table, store);

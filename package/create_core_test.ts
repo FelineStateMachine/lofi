@@ -99,8 +99,8 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       );
     }
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
-    assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.1.0/");
-    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.1.0/testing");
+    assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.1.1/");
+    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.1.1/testing");
     const lofiSpecifiers = Object.entries(config.imports)
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
@@ -109,7 +109,7 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       `expected one package prefix, five commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
-      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.1.0/")),
+      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.1.1/")),
       "generated lofi commands do not resolve through one exact package version",
     );
   } finally {

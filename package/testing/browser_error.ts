@@ -1,7 +1,12 @@
 /** Thrown when Playwright's Chromium browser is not installed, with install guidance. */
 export class BrowserUnavailableError extends Error {
+  /** Always `"BrowserUnavailableError"`. */
   override readonly name = "BrowserUnavailableError";
 
+  /**
+   * Builds the error with a fixed install-guidance message.
+   * @param options standard error options, e.g. a `cause` to chain the launch failure.
+   */
   constructor(options?: ErrorOptions) {
     super(
       "Playwright Chromium is not installed. Run `deno run -A npm:playwright@1.61.1 install chromium` and retry.",

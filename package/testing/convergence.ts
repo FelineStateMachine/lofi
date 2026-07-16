@@ -3,18 +3,30 @@ import type { ValueFreeState } from "./safety.ts";
 
 /** Minimal client contract the convergence runner needs: offline state and toggles. */
 export interface OfflineTestClient {
+  /** Whether the client's network is currently forced offline. */
   readonly offline: boolean;
+  /** Force this client's network offline. */
   goOffline(): Promise<void>;
+  /** Restore this client's network. */
   goOnline(): Promise<void>;
 }
 
 /** Minimal two-client fixture contract required to drive an offline scenario. */
 export interface OfflineTestFixture<Client extends OfflineTestClient> {
+  /** Both clients, ordered `[first, second]`. */
   readonly clients: readonly [Client, Client];
+  /** The first client. */
   readonly first: Client;
+  /** The second client. */
   readonly second: Client;
+  /** Take both clients offline. */
   goOffline(): Promise<void>;
+  /** Bring both clients back online. */
   goOnline(): Promise<void>;
+  /**
+   * Capture a redacted failure artifact, optionally including a value-free
+   * per-client snapshot. Returns an opaque handle describing what was written.
+   */
   captureFailure(
     label: string,
     snapshot?: (client: Client) => Promise<ValueFreeState>,
@@ -30,12 +42,15 @@ export interface ConcurrentOfflineScenario<
   Edit,
   Client extends OfflineTestClient = BrowserTestClient,
 > {
+  /** The two concurrent edits, one applied on each client while offline. */
   readonly edits: readonly [Edit, Edit];
   /** Overall defensive deadline. Defaults to 60 seconds. */
   readonly timeoutMs?: number;
   /** App-owned, deterministic readiness assertion (locator/waitForFunction/etc.). */
   readonly ready: (client: Client, signal: AbortSignal) => Promise<void>;
+  /** Apply one client's edit while it is offline. */
   readonly apply: (client: Client, edit: Edit, signal: AbortSignal) => Promise<void>;
+  /** Assert the edit is visible locally on its own client before reconnection. */
   readonly locallyApplied: (client: Client, edit: Edit, signal: AbortSignal) => Promise<void>;
   /** Use this hook for page/client restart while offline work is pending. */
   readonly whilePending?: (
@@ -47,15 +62,22 @@ export interface ConcurrentOfflineScenario<
     fixture: OfflineTestFixture<Client>,
     signal: AbortSignal,
   ) => Promise<void>;
+  /** Optional value-free snapshot taken per client when a failure is captured. */
   readonly snapshot?: (client: Client) => Promise<ValueFreeState>;
+  /** Label for any captured failure artifact. Defaults to a generic name. */
   readonly failureLabel?: string;
 }
 
 /** Thrown when a convergence scenario fails, naming the stage that failed via {@link stage}. */
 export class ConvergenceScenarioError extends Error {
+  /** Always `"ConvergenceScenarioError"`. */
   override readonly name = "ConvergenceScenarioError";
 
-  /** @param stage the lifecycle stage that was in progress when the scenario failed */
+  /**
+   * Builds the error, recording which lifecycle stage was in progress.
+   * @param stage the lifecycle stage that was in progress when the scenario failed
+   * @param options standard error options, e.g. a `cause` from the failing hook
+   */
   constructor(readonly stage: string, options?: ErrorOptions) {
     super(`Concurrent offline convergence failed during ${stage}`, options);
   }

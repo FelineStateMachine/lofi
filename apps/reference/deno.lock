@@ -5,7 +5,6 @@
     "npm:@astrojs/preact@6.0.1": "6.0.1_preact@10.29.7__preact-render-to-string@6.7.0_@babel+core@7.29.7",
     "npm:astro@7.0.9": "7.0.9_@emnapi+core@1.11.1_@emnapi+runtime@1.11.1",
     "npm:jazz-tools@2.0.0-alpha.53": "2.0.0-alpha.53",
-    "npm:playwright@1.61.1": "1.61.1",
     "npm:preact@10.29.7": "10.29.7_preact-render-to-string@6.7.0",
     "npm:typescript@6.0.3": "6.0.3",
     "npm:vite@8.0.1": "8.0.1_@emnapi+core@1.11.1_@emnapi+runtime@1.11.1"
@@ -1935,11 +1934,6 @@
         "tiny-inflate"
       ]
     },
-    "fsevents@2.3.2": {
-      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
-      "os": ["darwin"],
-      "scripts": true
-    },
     "fsevents@2.3.3": {
       "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
       "os": ["darwin"],
@@ -2395,20 +2389,6 @@
     },
     "picomatch@4.0.5": {
       "integrity": "sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A=="
-    },
-    "playwright-core@1.61.1": {
-      "integrity": "sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==",
-      "bin": true
-    },
-    "playwright@1.61.1": {
-      "integrity": "sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==",
-      "dependencies": [
-        "playwright-core"
-      ],
-      "optionalDependencies": [
-        "fsevents@2.3.2"
-      ],
-      "bin": true
     },
     "pluralize-esm@9.0.5": {
       "integrity": "sha512-Kb2dcpMsIutFw2hYrN0EhsAXOUJTd6FVMIxvNAkZCMQLVt9NGZqQczvGpYDxNWCZeCWLHUPxQIBudWzt1h7VVA=="
@@ -2872,7 +2852,7 @@
         "tinyglobby"
       ],
       "optionalDependencies": [
-        "fsevents@2.3.3"
+        "fsevents"
       ],
       "bin": true
     },
@@ -2887,7 +2867,7 @@
         "tinyglobby"
       ],
       "optionalDependencies": [
-        "fsevents@2.3.3"
+        "fsevents"
       ],
       "optionalPeers": [
         "esbuild@0.28.1"
@@ -3121,7 +3101,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@nzip/lofi@0.1.0",
+      "jsr:@nzip/lofi@0.1.1",
       "npm:@astrojs/check@0.9.9",
       "npm:@astrojs/preact@6.0.1",
       "npm:astro@7.0.9",
@@ -3131,7 +3111,7 @@
       "npm:vite@8.0.1"
     ],
     "links": {
-      "jsr:@nzip/lofi@0.1.0": {
+      "jsr:@nzip/lofi@0.1.1": {
         "dependencies": [
           "npm:@astrojs/check@0.9.9",
           "npm:@astrojs/preact@6.0.1",

@@ -12,8 +12,14 @@ export interface ReadinessOptions {
 
 /** Thrown when the readiness predicate does not become true before the timeout. */
 export class ReadinessError extends Error {
+  /** Always `"ReadinessError"`. */
   override readonly name = "ReadinessError";
 
+  /**
+   * Builds the error, embedding the condition that failed to become ready.
+   * @param description the readiness condition that timed out, named in the message
+   * @param options standard error options, e.g. a `cause` from the underlying timeout
+   */
   constructor(description: string, options?: ErrorOptions) {
     super(`Page did not become ready: ${description}`, options);
   }

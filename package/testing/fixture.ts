@@ -32,10 +32,15 @@ export type ClientName = "first" | "second";
 
 /** A redacted console, page-error, or failed-request record captured from a client. */
 export interface BrowserDiagnostic {
+  /** Which of the two clients produced this diagnostic. */
   readonly client: ClientName;
+  /** What surfaced it: a console message, an uncaught page error, or a failed request. */
   readonly kind: "console" | "page-error" | "request-failed";
+  /** Console severity (e.g. `"error"`, `"warning"`), when applicable. */
   readonly level?: string;
+  /** The redacted message text. */
   readonly message: string;
+  /** The associated URL, for `request-failed` records. */
   readonly url?: string;
 }
 
@@ -58,6 +63,7 @@ export type IdentityOptions =
 
 /** Configures where and how redacted failure artifacts are written on capture. */
 export interface FailureArtifactOptions {
+  /** Directory the redacted artifacts are written into on capture. */
   readonly directory: string;
   /** Literal credential values to remove from retained diagnostics. */
   readonly secretValues?: readonly string[];
@@ -67,10 +73,15 @@ export interface FailureArtifactOptions {
 
 /** Options for constructing a {@link TwoClientFixture} via {@link createTwoClientFixture}. */
 export interface TwoClientFixtureOptions {
+  /** The origin both clients open and enroll identity against. */
   readonly baseURL: string;
+  /** How the two clients obtain identity (`shared` or `isolated`). */
   readonly identity: IdentityOptions;
+  /** An existing browser to reuse; when omitted the fixture launches and owns one. */
   readonly browser?: Browser;
+  /** Extra context options (a disk `storageState` is forbidden to keep identity in memory). */
   readonly context?: SafeContextOptions;
+  /** Where and how to write redacted artifacts if the test fails. */
   readonly artifacts?: FailureArtifactOptions;
   /** Defaults to true. Tracing begins only after identity preparation. */
   readonly traceOnFailure?: boolean;
@@ -100,6 +111,7 @@ export class BrowserTestClient {
   #recording = false;
   #closed = false;
 
+  /** Constructed by {@link createTwoClientFixture}; not intended for direct use. */
   constructor(
     readonly name: ClientName,
     context: BrowserContext,
@@ -255,7 +267,9 @@ export class BrowserTestClient {
 
 /** The directory and file paths produced by a failure capture. */
 export interface FailureArtifacts {
+  /** The directory the artifacts were written into. */
   readonly directory: string;
+  /** Absolute paths of every file written (screenshots, traces, diagnostics). */
   readonly files: readonly string[];
 }
 
@@ -269,6 +283,7 @@ export class TwoClientFixture {
   readonly clients: readonly [BrowserTestClient, BrowserTestClient];
   #closed = false;
 
+  /** Constructed by {@link createTwoClientFixture}; not intended for direct use. */
   constructor(
     readonly browser: Browser,
     readonly ownsBrowser: boolean,

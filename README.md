@@ -10,8 +10,8 @@ Built on [Jazz 2](https://jazz.tools) (CRDT data + sync) · [Preact](https://pre
 [Astro](https://astro.build) · the [Deno](https://deno.com) toolchain.
 
 > **Status: working prototype, pre-release.** Nothing is published yet. M0 (DevX contract) and M1
-> (feasibility) are complete and merged; M2 (DevX vertical slice) is in active development. See the
-> [roadmap](#roadmap).
+> (feasibility) are complete; all three M2 source layers are merged on `m2` and undergoing combined
+> promotion review. See the [roadmap](#roadmap).
 
 ## Why lofi
 
@@ -42,8 +42,9 @@ required global runtime and a command surface of exactly seven verbs: `create`, 
 
 ## Try it today (checkout journey)
 
-The M2 branch now contains the source generator and its package-owned commands, but the package is
-not published while Layer 2 is under review. The currently available journey runs from a checkout:
+The `m2` branch contains the accepted source generator, package-owned commands, development
+inspector, and browser-testing helpers. The package is not published until explicitly authorized and
+the registry-backed smoke passes, so the currently available journey runs from a checkout:
 
 ```sh
 git clone https://github.com/FelineStateMachine/lofi.git
@@ -68,9 +69,9 @@ deno task dev
 | `deno task build`   | Production build through the supported Deno path.                        |
 | `deno task preview` | Serves the production build.                                             |
 
-`create` and `doctor` are implemented in the M2 source package. They graduate only after the
-generated-project golden journey, clean-room review, and registry-backed smoke pass; their output
-contracts are specified in the
+`create` and `doctor` have graduated through the source-backed generated-project golden journey and
+clean-room review. The public JSR invocation remains unavailable until publication and its
+registry-backed smoke pass; the output contracts are specified in the
 [DevX contract](docs/devx-contract.md#canonical-command-surface-and-output-contract).
 
 ## How this repository works
@@ -88,18 +89,18 @@ graduates only by producing evidence against them.
 
 Notable honest outcomes so far: the Jazz 2 alpha passkey-backup ceremony was **rejected** on
 security grounds rather than demoed
-([decision 0004](docs/decisions/0004-reject-alpha53-passkey-backup.md)), and transport reconnection
-is reported as _unavailable_ rather than faked, because the pinned API exposes no such signal.
+([decision 0004](docs/decisions/0004-reject-alpha53-passkey-backup.md)), and live transport state is
+reported as _unavailable_ rather than faked, because the pinned API exposes no supported signal.
 
 ## Roadmap
 
-| Milestone                     | Goal                                                                                               | Status         |
-| ----------------------------- | -------------------------------------------------------------------------------------------------- | -------------- |
-| **M0 — DevX contract**        | Define the golden path, command surface, environment contract, and measurable acceptance criteria. | ✅ Done        |
-| **M1 — Feasibility spikes**   | Prove Jazz 2, Preact, OPFS, identity, Astro islands, and Deno behavior with go/no-go decisions.    | ✅ Done        |
-| **M2 — DevX vertical slice**  | `create`, `dev`, `doctor`, diagnostics, inspector, and testing workflows around a reference app.   | 🚧 In progress |
-| **M3 — Mobile PWA hardening** | Install, persistence, offline cold start, lifecycle recovery, and physical-device validation.      | ⏳ Queued      |
-| **M4 — Framework extraction** | Extract proven seams into `@nzip/lofi` subpath exports; validate them through a second app.        | ⏳ Queued      |
+| Milestone                       | Goal                                                                                                 | Status              |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------- |
+| **M0 — DevX contract**          | Define the golden path, command surface, environment contract, and measurable acceptance criteria.   | ✅ Done             |
+| **M1 — Feasibility spikes**     | Prove Jazz 2, Preact, OPFS, identity, Astro islands, and Deno behavior with go/no-go decisions.      | ✅ Done             |
+| **M2 — DevX vertical slice**    | `create`, `dev`, `doctor`, diagnostics, inspector, and testing workflows around a reference app.     | 🧪 Promotion review |
+| **M3 — Mobile PWA hardening**   | Install, persistence, offline cold start, lifecycle recovery, and physical-device validation.        | ⏳ Queued           |
+| **M4 — Runtime API extraction** | Extract remaining proven runtime seams as `@nzip/lofi` subpaths; validate them through a second app. | ⏳ Queued           |
 
 The definition of done for the whole prototype is the [north star](#the-north-star) journey passing
 its contract budgets end-to-end, on real devices.

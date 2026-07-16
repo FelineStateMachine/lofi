@@ -1,12 +1,22 @@
 export type DeviceCapabilityReport = {
   secureContext: boolean;
+  serviceWorker: boolean;
   opfs: boolean;
   sharedWorker: boolean;
   webLocks: boolean;
   messageChannel: boolean;
   durableDriverSupported: boolean;
+  credentialOrigin: CredentialOriginReport;
+  webAuthn: boolean;
+  prf: "available" | "not-reported" | "unknown" | "unavailable";
   persistentPermission: "granted" | "not-granted" | "unavailable" | "error";
   displayMode: "standalone" | "browser";
+};
+
+export type CredentialOriginReport = {
+  status: "stable" | "local-only" | "unverified" | "blocked";
+  rpId: string;
+  action: string;
 };
 
 type StorageManagerWithOpfs = StorageManager & {
@@ -19,6 +29,66 @@ function browserStorage(): StorageManagerWithOpfs | undefined {
     : navigator.storage as StorageManagerWithOpfs | undefined;
 }
 
+function isIpAddress(hostname: string): boolean {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+}
+
+export function classifyCredentialOrigin(url: URL): CredentialOriginReport {
+  const rpId = url.hostname;
+  if (url.protocol === "http:" && (rpId === "localhost" || rpId === "127.0.0.1")) {
+    return {
+      status: "local-only",
+      rpId,
+      action: "use `deno task --tunnel dev` before enrolling a device credential",
+    };
+  }
+  if (url.protocol !== "https:" || !rpId || isIpAddress(rpId)) {
+    return {
+      status: "blocked",
+      rpId,
+      action:
+        "use the stable HTTPS URL printed by `deno task --tunnel dev` before enrolling a device credential",
+    };
+  }
+  if (rpId.endsWith(".deno.net") || rpId.endsWith(".n.zip")) {
+    return {
+      status: "stable",
+      rpId,
+      action: "keep this hostname for the lifetime of any device credential",
+    };
+  }
+  return {
+    status: "unverified",
+    rpId,
+    action: "confirm this custom hostname is permanent before enrolling a device credential",
+  };
+}
+
+function currentCredentialOrigin(): CredentialOriginReport {
+  if (typeof location === "undefined") {
+    return { status: "blocked", rpId: "", action: "open the application in a browser" };
+  }
+  return classifyCredentialOrigin(new URL(location.href));
+}
+
+type PublicKeyCredentialCapabilities = typeof PublicKeyCredential & {
+  getClientCapabilities?: () => Promise<Record<string, boolean>>;
+};
+
+async function readPrfCapability(
+  webAuthn: boolean,
+): Promise<DeviceCapabilityReport["prf"]> {
+  if (!webAuthn) return "unavailable";
+  const publicKeyCredential = PublicKeyCredential as PublicKeyCredentialCapabilities;
+  if (typeof publicKeyCredential.getClientCapabilities !== "function") return "unknown";
+  try {
+    const capabilities = await publicKeyCredential.getClientCapabilities();
+    return capabilities["extension:prf"] === true ? "available" : "not-reported";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function durableCapabilityReport(): Omit<
   DeviceCapabilityReport,
   "persistentPermission"
@@ -26,17 +96,22 @@ export function durableCapabilityReport(): Omit<
   const storage = browserStorage();
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   const secureContext = globalThis.isSecureContext === true;
+  const serviceWorker = typeof navigator !== "undefined" && "serviceWorker" in navigator;
   const opfs = typeof storage?.getDirectory === "function";
   const sharedWorker = typeof globalThis.SharedWorker === "function";
   const webLocks = typeof locks?.request === "function";
   const messageChannel = typeof globalThis.MessageChannel === "function";
   return {
     secureContext,
+    serviceWorker,
     opfs,
     sharedWorker,
     webLocks,
     messageChannel,
     durableDriverSupported: secureContext && opfs && sharedWorker && webLocks && messageChannel,
+    credentialOrigin: currentCredentialOrigin(),
+    webAuthn: typeof PublicKeyCredential === "function",
+    prf: "unknown",
     displayMode: typeof globalThis.matchMedia === "function" &&
         globalThis.matchMedia("(display-mode: standalone)").matches
       ? "standalone"
@@ -47,17 +122,39 @@ export function durableCapabilityReport(): Omit<
 export async function readDeviceCapabilityReport(): Promise<DeviceCapabilityReport> {
   const base = durableCapabilityReport();
   const storage = browserStorage();
+  const prf = await readPrfCapability(base.webAuthn);
   if (typeof storage?.persisted !== "function") {
-    return { ...base, persistentPermission: "unavailable" };
+    return { ...base, prf, persistentPermission: "unavailable" };
   }
   try {
     return {
       ...base,
+      prf,
       persistentPermission: await storage.persisted() ? "granted" : "not-granted",
     };
   } catch {
-    return { ...base, persistentPermission: "error" };
+    return { ...base, prf, persistentPermission: "error" };
   }
+}
+
+export class CredentialOriginUnsupportedError extends Error {
+  override name = "CredentialOriginUnsupportedError";
+  readonly report: CredentialOriginReport;
+
+  constructor(report = currentCredentialOrigin()) {
+    super(
+      `Device credential enrollment is blocked for RP ID ${
+        report.rpId || "(missing)"
+      }; ${report.action}.`,
+    );
+    this.report = report;
+  }
+}
+
+export function assertStableCredentialOrigin(): string {
+  const report = currentCredentialOrigin();
+  if (report.status !== "stable") throw new CredentialOriginUnsupportedError(report);
+  return report.rpId;
 }
 
 export async function requestPersistentStorage(): Promise<DeviceCapabilityReport> {

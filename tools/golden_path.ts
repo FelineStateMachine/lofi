@@ -494,8 +494,9 @@ async function deleteItem(page: Page, body: string): Promise<void> {
 async function waitForProductionPwa(page: Page, timeoutMs: number): Promise<void> {
   await page.waitForFunction(
     () => {
-      return (globalThis as typeof globalThis & { __LOFI_PWA_STATE__?: string })
-        .__LOFI_PWA_STATE__ === "ready";
+      return (globalThis as typeof globalThis & {
+        __LOFI_PWA_STATE__?: { worker?: string };
+      }).__LOFI_PWA_STATE__?.worker === "ready";
     },
     undefined,
     { timeout: timeoutMs },

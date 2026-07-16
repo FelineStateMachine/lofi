@@ -49,6 +49,7 @@ declare global {
 const subscribers = new Set<(state: PwaState) => void>();
 let deferredInstallPrompt: InstallPromptEvent | undefined;
 let waitingWorker: ServiceWorker | undefined;
+let reloadForUpdate = false;
 let initialized = false;
 
 let state: PwaState = {
@@ -109,6 +110,7 @@ export async function requestPwaInstall(): Promise<PwaInstallState> {
 
 export function applyPwaUpdate(): boolean {
   if (!waitingWorker) return false;
+  reloadForUpdate = true;
   waitingWorker.postMessage({ type: "LOFI_SKIP_WAITING" });
   return true;
 }
@@ -206,7 +208,9 @@ export function registerProductionServiceWorker(): void {
   }
   update({ worker: "registering" });
   watchWorkerMessages();
-  navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloadForUpdate) location.reload();
+  });
   const workerUrl = new URL("./sw.js", document.baseURI);
   void (async () => {
     const registration = await navigator.serviceWorker.register(workerUrl, {

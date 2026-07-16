@@ -23,6 +23,10 @@ export default function DeviceStatus() {
           <dd>{report.secureContext ? "secure" : "not secure"}</dd>
         </div>
         <div>
+          <dt>Service worker</dt>
+          <dd>{report.serviceWorker ? "available" : "missing"}</dd>
+        </div>
+        <div>
           <dt>OPFS</dt>
           <dd>{report.opfs ? "available" : "missing"}</dd>
         </div>
@@ -53,6 +57,22 @@ export default function DeviceStatus() {
         <div>
           <dt>Identity</dt>
           <dd>device-local key</dd>
+        </div>
+        <div>
+          <dt>Credential origin</dt>
+          <dd>{report.credentialOrigin.status}</dd>
+        </div>
+        <div>
+          <dt>Future RP ID</dt>
+          <dd>{report.credentialOrigin.rpId || "unavailable"}</dd>
+        </div>
+        <div>
+          <dt>WebAuthn</dt>
+          <dd>{report.webAuthn ? "available" : "missing"}</dd>
+        </div>
+        <div>
+          <dt>PRF client extension</dt>
+          <dd>{report.prf}</dd>
         </div>
         <div>
           <dt>Passkey backup</dt>
@@ -96,6 +116,9 @@ export default function DeviceStatus() {
         OPFS capability and eviction protection are separate. A declined persistence request does
         not mean the Jazz driver is using memory.
       </p>
+      {report.credentialOrigin.status !== "stable" && (
+        <p role="alert">Credential origin: {report.credentialOrigin.action}.</p>
+      )}
       <p>
         Clearing site data destroys the device-local identity unless a separate recovery mechanism
         has been verified. This reference does not claim passkey recovery.

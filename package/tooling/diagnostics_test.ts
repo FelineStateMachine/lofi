@@ -26,8 +26,12 @@ Deno.test("doctor reports value-free local capability states without booting Ast
       "doctor must defer browser-only storage facts",
     );
     assert(
-      report.diagnostics.some((item) => item.name === "Device URL" && item.status === "pending"),
-      "doctor must report the stable device URL gap",
+      report.diagnostics.some((item) =>
+        item.name === "Device URL" &&
+        item.status === "pending" &&
+        item.remediation?.includes("deno task --tunnel dev")
+      ),
+      "doctor must report the first-class Deno Tunnel action",
     );
   } finally {
     await Deno.remove(cwd, { recursive: true });

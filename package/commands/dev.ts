@@ -18,7 +18,8 @@ console.log(
   }`,
 );
 console.log("PWA:         development service worker disabled");
-console.log("Device:      stable HTTPS URL not configured; device preview graduates in M3");
+console.log("HTTPS dev:   deno task --tunnel dev (stable Deno Deploy project origin)");
+console.log("PWA device:  build and publish with nzip for production service-worker evidence");
 
 const forwarded = Deno.args[0] === "--" ? Deno.args.slice(1) : Deno.args;
 const status = await runDenoStatus(

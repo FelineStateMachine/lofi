@@ -105,7 +105,8 @@ export async function doctorReport(
     {
       name: "Device URL",
       status: "pending",
-      detail: "not configured; stable HTTPS device preview graduates in M3",
+      detail: "Deno Tunnel is the first-class stable HTTPS development origin",
+      remediation: "run `deno task --tunnel dev`; the Deno CLI prints the project URL",
     },
   );
 

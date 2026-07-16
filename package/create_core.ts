@@ -54,6 +54,17 @@ The default project runs local-only with durable browser storage. To enable mana
 you want configuration diagnostics without starting the application.
 
 Public tasks: \`dev\`, \`doctor\`, \`check\`, \`test\`, \`build\`, and \`preview\`.
+
+For a stable HTTPS origin on a physical device, create or select a Deno Deploy application once,
+set only \`JAZZ_APP_ID\` and \`JAZZ_SERVER_URL\` in its Local environment when cloud sync is wanted,
+then run:
+
+\`\`\`sh
+deno task --tunnel dev
+\`\`\`
+
+Deno Tunnel keeps the project hostname stable across restarts and reflects local edits live. Use a
+production build published through nzip for install, service-worker, and offline cold-start evidence.
 `;
 }
 

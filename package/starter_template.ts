@@ -16,6 +16,8 @@ import deviceCapabilities from "../apps/reference/src/_lofi/device-capabilities.
 import deviceCapabilitiesTest from "../apps/reference/src/_lofi/device-capabilities_test.ts" with {
   type: "text",
 };
+import inspector from "../apps/reference/src/_lofi/inspector.ts" with { type: "text" };
+import inspectorTest from "../apps/reference/src/_lofi/inspector_test.ts" with { type: "text" };
 import probe from "../apps/reference/src/_lofi/probe.ts" with { type: "text" };
 import pwa from "../apps/reference/src/_lofi/pwa.ts" with { type: "text" };
 import pwaTest from "../apps/reference/src/_lofi/pwa_test.ts" with { type: "text" };
@@ -57,6 +59,9 @@ import uiContract from "../apps/reference/src/ui-contract.ts" with { type: "text
 import authorBoundaryTest from "../apps/reference/tests/author-boundary_test.ts" with {
   type: "text",
 };
+import testingContractTest from "../apps/reference/tests/testing-contract_test.ts" with {
+  type: "text",
+};
 import tsconfig from "../apps/reference/tsconfig.json" with { type: "text" };
 
 /** Every source-controlled file copied from the validated reference app into a new project. */
@@ -73,6 +78,8 @@ export const STARTER_TEMPLATE: Readonly<Record<string, string>> = {
   "src/_lofi/config.ts": config,
   "src/_lofi/device-capabilities.ts": deviceCapabilities,
   "src/_lofi/device-capabilities_test.ts": deviceCapabilitiesTest,
+  "src/_lofi/inspector.ts": inspector,
+  "src/_lofi/inspector_test.ts": inspectorTest,
   "src/_lofi/probe.ts": probe,
   "src/_lofi/pwa.ts": pwa,
   "src/_lofi/pwa_test.ts": pwaTest,
@@ -96,5 +103,6 @@ export const STARTER_TEMPLATE: Readonly<Record<string, string>> = {
   "src/styles/global.css": globalStyles,
   "src/ui-contract.ts": uiContract,
   "tests/author-boundary_test.ts": authorBoundaryTest,
+  "tests/testing-contract_test.ts": testingContractTest,
   "tsconfig.json": tsconfig,
 };

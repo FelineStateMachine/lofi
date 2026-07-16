@@ -27,6 +27,9 @@ export type RuntimeDiagnostics = {
   totalMutationListeners: number;
   unsubscribeCalls: number;
   localWaitCalls: number;
+  pendingLocalWrites: number;
+  pendingGlobalWrites: number;
+  lastWriteDurability: "none" | "local" | "global" | "failed";
   mutationErrors: number;
 };
 
@@ -39,6 +42,7 @@ export class ChecklistStore {
   readonly #db: Db;
   readonly #diagnostics: RuntimeDiagnostics;
   readonly #syncConfigured: boolean;
+  readonly #diagnosticsChanged: () => void;
   readonly #listeners = new Set<Listener>();
   #vendorUnsubscribe: (() => void) | null = null;
   #writeGeneration = 0;
@@ -49,10 +53,16 @@ export class ChecklistStore {
     error: null,
   };
 
-  constructor(db: Db, diagnostics: RuntimeDiagnostics, syncConfigured = Boolean(serverUrl)) {
+  constructor(
+    db: Db,
+    diagnostics: RuntimeDiagnostics,
+    syncConfigured = Boolean(serverUrl),
+    diagnosticsChanged: () => void = () => undefined,
+  ) {
     this.#db = db;
     this.#diagnostics = diagnostics;
     this.#syncConfigured = syncConfigured;
+    this.#diagnosticsChanged = diagnosticsChanged;
   }
 
   getSnapshot = (): ChecklistSnapshot => this.#snapshot;
@@ -60,6 +70,7 @@ export class ChecklistStore {
   subscribe = (listener: Listener): () => void => {
     this.#listeners.add(listener);
     this.#diagnostics.activeConsumers = this.#listeners.size;
+    this.#diagnosticsChanged();
     if (this.#listeners.size === 1) this.#openVendorSubscription();
     this.#emit();
     let active = true;
@@ -68,6 +79,7 @@ export class ChecklistStore {
       active = false;
       this.#listeners.delete(listener);
       this.#diagnostics.activeConsumers = this.#listeners.size;
+      this.#diagnosticsChanged();
       if (this.#listeners.size === 0) this.#closeVendorSubscription();
       else this.#emit();
     };
@@ -100,25 +112,35 @@ export class ChecklistStore {
 
   reportMutationError(event: MutationErrorEvent): void {
     this.#diagnostics.mutationErrors += 1;
+    this.#diagnosticsChanged();
     this.#fail(new Error(`${event.code}: ${event.reason}`));
   }
 
   close(): void {
     this.#listeners.clear();
     this.#diagnostics.activeConsumers = 0;
+    this.#diagnosticsChanged();
     this.#closeVendorSubscription();
   }
 
   async #settle(mutation: MutationHandle): Promise<void> {
     const generation = ++this.#writeGeneration;
+    let localPending = true;
+    this.#diagnostics.pendingLocalWrites += 1;
+    this.#diagnosticsChanged();
     this.#set({ status: "ready", durability: "none", error: null });
     try {
       await mutation.wait({ tier: "local" });
+      localPending = false;
+      this.#diagnostics.pendingLocalWrites -= 1;
       this.#diagnostics.localWaitCalls += 1;
+      this.#diagnosticsChanged();
       if (generation === this.#writeGeneration) {
         this.#set({ durability: "local", error: null });
       }
       if (this.#syncConfigured) {
+        this.#diagnostics.pendingGlobalWrites += 1;
+        this.#diagnosticsChanged();
         void mutation.wait({ tier: "global" }).then(
           () => {
             if (generation === this.#writeGeneration) {
@@ -127,12 +149,18 @@ export class ChecklistStore {
           },
           (error) => {
             this.#diagnostics.mutationErrors += 1;
+            this.#diagnosticsChanged();
             this.#fail(error);
           },
-        );
+        ).finally(() => {
+          this.#diagnostics.pendingGlobalWrites -= 1;
+          this.#diagnosticsChanged();
+        });
       }
     } catch (error) {
+      if (localPending) this.#diagnostics.pendingLocalWrites -= 1;
       this.#diagnostics.mutationErrors += 1;
+      this.#diagnosticsChanged();
       this.#fail(error);
       throw error;
     }
@@ -152,6 +180,7 @@ export class ChecklistStore {
       });
       this.#diagnostics.activeVendorSubscriptions += 1;
       this.#diagnostics.totalVendorSubscriptions += 1;
+      this.#diagnosticsChanged();
     } catch (error) {
       this.#fail(error);
     }
@@ -163,10 +192,15 @@ export class ChecklistStore {
     this.#diagnostics.unsubscribeCalls += 1;
     this.#vendorUnsubscribe = null;
     this.#diagnostics.activeVendorSubscriptions -= 1;
+    this.#diagnosticsChanged();
   }
 
   #set(change: Partial<ChecklistSnapshot>): void {
     this.#snapshot = { ...this.#snapshot, ...change };
+    if (change.durability) {
+      this.#diagnostics.lastWriteDurability = change.durability;
+      this.#diagnosticsChanged();
+    }
     this.#emit();
   }
 
@@ -177,6 +211,8 @@ export class ChecklistStore {
       durability: "failed",
       error: error instanceof Error ? error.message : String(error),
     };
+    this.#diagnostics.lastWriteDurability = "failed";
+    this.#diagnosticsChanged();
     this.#emit();
   }
 

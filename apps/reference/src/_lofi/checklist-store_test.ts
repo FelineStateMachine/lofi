@@ -18,6 +18,9 @@ function diagnostics(): RuntimeDiagnostics {
     totalMutationListeners: 1,
     unsubscribeCalls: 0,
     localWaitCalls: 0,
+    pendingLocalWrites: 0,
+    pendingGlobalWrites: 0,
+    lastWriteDurability: "none",
     mutationErrors: 0,
   };
 }
@@ -139,12 +142,19 @@ test("two consumers share one task subscription and clean up idempotently", () =
   assertCount(counts.unsubscribeCalls, 1, "cleanup must remain externally diagnosable");
 });
 
-test("every checklist mutation waits for local durability", async () => {
+test("every checklist mutation exposes pending work and waits for local durability", async () => {
   const db = fakeDb();
   const counts = diagnostics();
   const store = new ChecklistStore(db.value, counts);
 
-  await store.create("first");
+  const deferred = db.deferNextWrite();
+  const first = store.create("first");
+  await Promise.resolve();
+  assertCount(counts.pendingLocalWrites, 1, "an unsettled local write must be observable");
+  assert(String(counts.lastWriteDurability) === "none", "pending work must not claim durability");
+  deferred.resolve();
+  await first;
+  assertCount(counts.pendingLocalWrites, 0, "a retained local write must leave no pending work");
   await store.update("task-1", "edited");
   await store.setCompleted("task-1", true);
   await store.delete("task-1");
@@ -155,6 +165,10 @@ test("every checklist mutation waits for local durability", async () => {
     "create, edit, complete, and delete must reach the Jazz boundary",
   );
   assert(store.getSnapshot().durability === "local", "the UI may claim local after the wait");
+  assert(
+    String(counts.lastWriteDurability) === "local",
+    "diagnostics must expose local durability",
+  );
   assertCount(
     db.globalWaitCalls(),
     0,

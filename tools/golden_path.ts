@@ -1,6 +1,16 @@
 import { join, resolve } from "node:path";
+import {
+  type BrowserTestClient,
+  createTwoClientFixture,
+  runConcurrentOfflineConvergence,
+} from "@nzip/lofi/testing";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
-import { environmentNames, validateEnvironment } from "./env_contract.ts";
+import {
+  clientEnvironmentNames,
+  environmentNames,
+  serverEnvironmentNames,
+  validateEnvironment,
+} from "./env_contract.ts";
 import {
   artifactPaths,
   type CapturedProcess,
@@ -21,6 +31,8 @@ import {
 } from "./golden_path_core.ts";
 import { loadEnvironment } from "./load_env.ts";
 import { checklistUi } from "../apps/reference/src/ui-contract.ts";
+import { redactDiagnosticText } from "../package/testing/safety.ts";
+import { readTraceArchive, sanitizeTraceArchive } from "../package/testing/trace.ts";
 import { assert } from "./assert.ts";
 
 export type GoldenPathCommands = {
@@ -76,6 +88,10 @@ const disposableBody = "Golden path disposable item";
 const offlineDevelopmentBody = "Golden path development offline item";
 const offlineProductionBody = "Golden path production offline item";
 const offlineProductionSyncedBody = "Golden path production offline item synced";
+const replicaClearBody = "Golden path replica-clear disposable item";
+const convergenceTextSeedBody = "Golden path two-client text item";
+const convergenceEditedBody = "Golden path two-client text item edited";
+const convergenceCompletionBody = "Golden path two-client completion item";
 
 function taskArgs(task: string, extra: string[] = []): string[] {
   return ["task", task, ...(extra.length > 0 ? ["--", ...extra] : [])];
@@ -127,7 +143,6 @@ async function addItem(page: Page, island: string, body: string): Promise<void> 
       { cause: error },
     );
   }
-  await textbox.fill(body);
   const add = section.getByRole("button", { name: checklistUi.addFrom(island) });
   try {
     await add.waitFor({ state: "visible" });
@@ -139,6 +154,7 @@ async function addItem(page: Page, island: string, body: string): Promise<void> 
       { cause: error },
     );
   }
+  await textbox.fill(body);
   await add.click();
 }
 
@@ -155,25 +171,95 @@ async function assertRuntimeCardinality(
   islandLabels: readonly string[],
 ): Promise<void> {
   assert(islandLabels.length === 2, "golden path cardinality requires two mounted islands");
-  await page.waitForFunction(() => {
-    const probe = (globalThis as typeof globalThis & {
-      __LOFI_REFERENCE__?: {
-        diagnostics(): {
-          storageState: string;
-          activeClients: number;
-          activeConsumers: number;
-          activeVendorSubscriptions: number;
-          activeMutationListeners: number;
-        };
+  await page.waitForFunction(async () => {
+    const inspector = (globalThis as typeof globalThis & {
+      __LOFI_INSPECTOR__?: {
+        readSnapshot(): Promise<{
+          storage: { driver: string };
+          runtime: {
+            clients: number;
+            consumers: number;
+            vendorSubscriptions: number;
+            mutationListeners: number;
+          };
+        }>;
       };
-    }).__LOFI_REFERENCE__;
-    const diagnostics = probe?.diagnostics();
-    return diagnostics?.storageState === "persistent-driver-open" &&
-      diagnostics.activeClients === 1 &&
-      diagnostics.activeConsumers === 2 &&
-      diagnostics.activeVendorSubscriptions === 1 &&
-      diagnostics.activeMutationListeners === 1;
+    }).__LOFI_INSPECTOR__;
+    const snapshot = await inspector?.readSnapshot();
+    return snapshot?.storage.driver === "persistent open" &&
+      snapshot.runtime.clients === 1 &&
+      snapshot.runtime.consumers === 2 &&
+      snapshot.runtime.vendorSubscriptions === 1 &&
+      snapshot.runtime.mutationListeners === 1;
   });
+}
+
+async function restartClientThroughInspector(
+  page: Page,
+  islandLabels: readonly string[],
+  retainedItem: string,
+  timeoutMs: number,
+): Promise<void> {
+  const identity = await armIdentityComparison(page);
+  const before = await page.evaluate(() => ({
+    timeOrigin: performance.timeOrigin,
+    url: location.href,
+  }));
+  const navigated = page.waitForEvent("domcontentloaded", { timeout: timeoutMs });
+  await page.getByRole("button", { name: "Restart client" }).click();
+  await navigated;
+  const after = await page.evaluate(() => ({
+    timeOrigin: performance.timeOrigin,
+    url: location.href,
+  }));
+  assert(after.timeOrigin !== before.timeOrigin, "inspector restart did not replace the document");
+  assert(after.url === before.url, "inspector restart changed the application URL");
+  assert(
+    await identityComparisonMatches(page, identity.token),
+    "inspector restart changed the device identity",
+  );
+  await waitForItem(page, islandLabels, retainedItem);
+  for (const label of islandLabels) {
+    const island = page.locator("[data-island]").filter({ hasText: label });
+    await island.getByRole("status").filter({ hasText: "1 item(s)" }).waitFor({
+      state: "visible",
+      timeout: timeoutMs,
+    });
+  }
+  await assertRuntimeCardinality(page, islandLabels);
+}
+
+async function armIdentityComparison(page: Page): Promise<{ token: string; present: boolean }> {
+  const token = crypto.randomUUID();
+  const present = await page.evaluate(async (comparisonToken) => {
+    const identity = JSON.stringify(
+      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)),
+    );
+    const hex = Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    (globalThis as typeof globalThis & { name: string }).name =
+      `lofi-golden:${comparisonToken}:${hex}`;
+    return identity !== "[]";
+  }, token);
+  return { token, present };
+}
+
+async function identityComparisonMatches(page: Page, token: string): Promise<boolean> {
+  return await page.evaluate(async (comparisonToken) => {
+    const browserGlobal = globalThis as typeof globalThis & { name: string };
+    const expected = browserGlobal.name;
+    browserGlobal.name = "";
+    const identity = JSON.stringify(
+      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)),
+    );
+    const hex = Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    return expected === `lofi-golden:${comparisonToken}:${hex}`;
+  }, token);
 }
 
 async function exerciseHmr(
@@ -212,16 +298,61 @@ async function exerciseHmr(
 
 async function setReferenceConnection(page: Page, connected: boolean): Promise<void> {
   await page.evaluate(async (shouldConnect) => {
-    const probe = (globalThis as typeof globalThis & {
-      __LOFI_REFERENCE__?: {
-        disconnect(): Promise<void>;
-        reconnect(): Promise<void>;
-      };
-    }).__LOFI_REFERENCE__;
-    if (!probe) throw new Error("development reference probe is unavailable");
-    if (shouldConnect) await probe.reconnect();
-    else await probe.disconnect();
+    const inspector = (globalThis as typeof globalThis & {
+      __LOFI_INSPECTOR__?: { setTransportPaused(paused: boolean): Promise<void> };
+    }).__LOFI_INSPECTOR__;
+    if (!inspector) throw new Error("development inspector is unavailable");
+    await inspector.setTransportPaused(!shouldConnect);
   }, connected);
+}
+
+async function exerciseReplicaClear(
+  browser: Browser,
+  url: string,
+  islandLabels: readonly string[],
+  timeoutMs: number,
+): Promise<void> {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    await page.getByRole("textbox", { name: checklistUi.newItem }).first().waitFor({
+      state: "visible",
+    });
+    await assertRuntimeCardinality(page, islandLabels);
+    await addItem(page, islandLabels[0], replicaClearBody);
+    await waitForItem(page, islandLabels, replicaClearBody);
+    await waitForLocalDurability(page);
+    const identity = await armIdentityComparison(page);
+    assert(identity.present, "replica-clear fixture did not create an identity state");
+    const navigated = page.waitForEvent("domcontentloaded", { timeout: timeoutMs });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Clear local replica" }).click();
+    await navigated;
+    await waitForItemAbsent(page, islandLabels, replicaClearBody);
+    assert(
+      await identityComparisonMatches(page, identity.token),
+      "replica clear changed the device-local identity",
+    );
+  } finally {
+    await context.close();
+  }
+}
+
+async function inspectorMarkerFiles(root: string): Promise<string[]> {
+  const matches: string[] = [];
+  async function visit(path: string): Promise<void> {
+    for await (const entry of Deno.readDir(path)) {
+      const child = join(path, entry.name);
+      if (entry.isDirectory) await visit(child);
+      else if (entry.isFile) {
+        const content = await Deno.readTextFile(child).catch(() => "");
+        if (content.includes("lofi-development-inspector")) matches.push(child);
+      }
+    }
+  }
+  await visit(root);
+  return matches.sort();
 }
 
 async function observeReconnectSettlement(
@@ -244,7 +375,7 @@ async function observeReconnectSettlement(
     const failure = page.getByRole("status").filter({ hasText: checklistUi.writeFailed }).first();
     await global.or(failure).waitFor({
       state: "visible",
-      timeout: Math.min(timeoutMs, 10_000),
+      timeout: timeoutMs,
     });
     if (await failure.isVisible()) {
       throw new Error((await failure.textContent()) ?? "Write failed");
@@ -252,7 +383,7 @@ async function observeReconnectSettlement(
     return {
       name: "development reconnect settlement",
       status: "passed",
-      detail: "The configured development server exposed global settlement after network return.",
+      detail: "The configured server exposed global settlement after reconnection.",
     };
   } catch {
     throw new Error(
@@ -278,7 +409,10 @@ async function journeyEnvironment(
     );
   }
   const allowlisted = { ...isolated };
-  for (const name of environmentNames) allowlisted[name] = configured[name]?.trim() ?? "";
+  for (const name of clientEnvironmentNames) {
+    allowlisted[name] = configured[name]?.trim() ?? "";
+  }
+  for (const name of serverEnvironmentNames) allowlisted[name] = "";
   return await installNodeSentinel(allowlisted, artifactRoot);
 }
 
@@ -332,6 +466,11 @@ async function assertCompleted(page: Page, body: string): Promise<void> {
   const name = checklistUi.complete(body);
   const checkboxes = page.getByRole("checkbox", { name });
   await checkboxes.first().waitFor({ state: "visible" });
+  await page.waitForFunction((accessibleName) => {
+    const matches = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+      .filter((element) => element.getAttribute("aria-label") === accessibleName);
+    return matches.length === 2 && matches.every((element) => element.checked);
+  }, name);
   assert(await checkboxes.count() === 2, `expected two completion controls for ${body}`);
   assert(
     await checkboxes.evaluateAll((elements) =>
@@ -366,6 +505,118 @@ async function waitForProductionPwa(page: Page, timeoutMs: number): Promise<void
   });
 }
 
+async function waitForChecklistReady(page: Page, timeoutMs: number): Promise<void> {
+  await page.getByRole("textbox", { name: checklistUi.newItem }).first().waitFor({
+    state: "visible",
+    timeout: timeoutMs,
+  });
+  await page.getByRole("status").filter({ hasText: /\d+ item\(s\)/ }).first().waitFor({
+    state: "visible",
+    timeout: timeoutMs,
+  });
+}
+
+async function valueFreeClientState(client: BrowserTestClient) {
+  const renderedRows = await client.page.locator("[data-task-id]").count();
+  const completedControls = await client.page.locator('input[type="checkbox"]:checked').count();
+  return { offline: client.offline, renderedRows, completedControls };
+}
+
+async function exerciseTwoClientCloudConvergence(
+  browser: Browser,
+  url: string,
+  islandLabels: readonly string[],
+  timeoutMs: number,
+  artifactRoot: string,
+  redactValues: readonly string[],
+): Promise<void> {
+  const fixture = await createTwoClientFixture({
+    baseURL: url,
+    browser,
+    identity: {
+      mode: "shared",
+      async preparePrimary(client) {
+        await waitForProductionPwa(client.page, timeoutMs);
+        await waitForChecklistReady(client.page, timeoutMs);
+      },
+    },
+    artifacts: {
+      directory: join(artifactRoot, "two-client-convergence"),
+      secretValues: redactValues,
+    },
+  });
+  try {
+    await Promise.all(fixture.clients.map(async (client) => {
+      await waitForProductionPwa(client.page, timeoutMs);
+      await waitForChecklistReady(client.page, timeoutMs);
+    }));
+    await addItem(fixture.first.page, islandLabels[0], convergenceTextSeedBody);
+    await waitForItem(fixture.first.page, islandLabels, convergenceTextSeedBody);
+    await addItem(fixture.first.page, islandLabels[0], convergenceCompletionBody);
+    await waitForItem(fixture.first.page, islandLabels, convergenceCompletionBody);
+    await observeReconnectSettlement(fixture.first.page, timeoutMs, true);
+    await waitForItem(fixture.second.page, islandLabels, convergenceTextSeedBody);
+    await waitForItem(fixture.second.page, islandLabels, convergenceCompletionBody);
+
+    type ConvergenceEdit = { kind: "text" } | { kind: "completion" };
+    await runConcurrentOfflineConvergence<ConvergenceEdit, BrowserTestClient>(fixture, {
+      edits: [{ kind: "text" }, { kind: "completion" }],
+      async ready(client) {
+        await waitForProductionPwa(client.page, timeoutMs);
+        await waitForItem(client.page, islandLabels, convergenceTextSeedBody);
+        await waitForItem(client.page, islandLabels, convergenceCompletionBody);
+      },
+      async apply(client, edit) {
+        if (edit.kind === "text") {
+          await updateItem(client.page, convergenceTextSeedBody, convergenceEditedBody);
+        } else {
+          await completeItem(client.page, convergenceCompletionBody);
+        }
+      },
+      async locallyApplied(client, edit) {
+        if (edit.kind === "text") {
+          await waitForItem(client.page, islandLabels, convergenceEditedBody);
+        } else {
+          await assertCompleted(client.page, convergenceCompletionBody);
+        }
+        await waitForLocalDurability(client.page);
+      },
+      async whilePending(current) {
+        await current.first.reloadPage();
+        await waitForProductionPwa(current.first.page, timeoutMs);
+        await waitForItem(current.first.page, islandLabels, convergenceEditedBody);
+
+        await current.second.restartPage();
+        await waitForProductionPwa(current.second.page, timeoutMs);
+        await waitForItem(current.second.page, islandLabels, convergenceCompletionBody);
+        await assertCompleted(current.second.page, convergenceCompletionBody);
+      },
+      async converged(current) {
+        for (const client of current.clients) {
+          await waitForItem(client.page, islandLabels, convergenceEditedBody);
+          await assertCompleted(client.page, convergenceCompletionBody);
+        }
+      },
+      snapshot: valueFreeClientState,
+      failureLabel: "cloud-two-client-convergence",
+    });
+
+    for (const body of [convergenceEditedBody, convergenceCompletionBody]) {
+      await deleteItem(fixture.first.page, body);
+      await waitForItemAbsent(fixture.first.page, islandLabels, body);
+      await observeReconnectSettlement(fixture.first.page, timeoutMs, true);
+      await waitForItemAbsent(fixture.second.page, islandLabels, body);
+    }
+  } catch (error) {
+    await fixture.captureFailure("cloud-two-client-cleanup", valueFreeClientState).catch(() => {
+      // The original convergence or cleanup failure remains authoritative.
+    });
+    throw error;
+  } finally {
+    await fixture.close();
+  }
+}
+
 async function screenshotFailure(page: Page | null, path: string): Promise<void> {
   if (!page || page.isClosed()) return;
   try {
@@ -373,6 +624,49 @@ async function screenshotFailure(page: Page | null, path: string): Promise<void>
   } catch {
     // Process logs and the trace remain authoritative when the page itself is unavailable.
   }
+}
+
+function byteSequencePresent(haystack: Uint8Array, needle: Uint8Array): boolean {
+  if (needle.length === 0 || haystack.length < needle.length) return false;
+  outer:
+  for (let offset = 0; offset <= haystack.length - needle.length; offset++) {
+    for (let index = 0; index < needle.length; index++) {
+      if (haystack[offset + index] !== needle[index]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
+
+async function sanitizeRetainedTrace(
+  path: string,
+  configuredValues: readonly string[],
+): Promise<void> {
+  await sanitizeTraceArchive(
+    path,
+    (value) => redactDiagnosticText(value, configuredValues),
+  );
+  const entries = await readTraceArchive(path);
+  assert(
+    Object.keys(entries).every((name) => !name.startsWith("resources/")),
+    "sanitized trace retained a response/source resource",
+  );
+  const encoder = new TextEncoder();
+  for (const configured of configuredValues.filter(Boolean)) {
+    const needle = encoder.encode(configured);
+    assert(
+      Object.values(entries).every((bytes) => !byteSequencePresent(bytes, needle)),
+      "sanitized trace retained a configured environment value",
+    );
+  }
+  const traceText = Object.entries(entries)
+    .filter(([name]) => name.endsWith(".trace"))
+    .map(([, bytes]) => new TextDecoder().decode(bytes))
+    .join("\n");
+  assert(
+    !/"identity"\s*:\s*"[^"\n]+"/.test(traceText),
+    "sanitized trace retained an identity-valued Playwright result",
+  );
 }
 
 function commandFailure(record: CommandRecord): Error {
@@ -425,7 +719,14 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   const commands = { ...defaultCommands, ...options.commands };
   const islandLabels = options.islandLabels ?? ["North island", "South island"];
   const environment = await journeyEnvironment(sourceRoot, environmentMode, artifacts.root);
-  const redactValues = environmentNames.map((name) => environment[name]).filter(Boolean);
+  const configuredEnvironment = await loadEnvironment(join(sourceRoot, ".env"));
+  const redactValues = [
+    ...new Set(
+      environmentNames.flatMap((name) => [configuredEnvironment[name], environment[name]]).filter(
+        Boolean,
+      ),
+    ),
+  ];
   const commit = await sourceRevision(revisionRoot, environment);
   const commandRecords: CommandRecord[] = [...options.initialCommands ?? []];
   const assertions: JourneyAssertion[] = [];
@@ -496,6 +797,19 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail: "No forbidden runtime, worker, transport, Workbox, or capability plumbing found.",
     });
+    if (environmentMode === "cloud-from-root") {
+      assert(
+        clientEnvironmentNames.every((name) => Boolean(environment[name])) &&
+          serverEnvironmentNames.every((name) => environment[name] === ""),
+        "cloud child environment did not isolate server credentials",
+      );
+      assertions.push({
+        name: "cloud credential isolation",
+        status: "passed",
+        detail:
+          "The application child received only the public Jazz pair; server credentials were explicitly blank.",
+      });
+    }
 
     if (commands.doctor) {
       const doctor = await runCapturedCommand({
@@ -526,7 +840,7 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     browserVersion = browser.version();
     report.runtime.browser = browserVersion;
     context = await browser.newContext();
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+    await context.tracing.start({ screenshots: false, snapshots: false, sources: false });
     page = await context.newPage();
 
     const port = reserveLocalPort();
@@ -552,6 +866,38 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     await page.getByRole("status").filter({ hasText: /\d+ item\(s\)/ }).first().waitFor({
       state: "visible",
     });
+    const inspector = page.locator('[data-lofi-inspector="lofi-development-inspector"]');
+    await inspector.waitFor({ state: "attached" });
+    const inspectorSnapshot = await page.evaluate(async () => {
+      const bridge = (globalThis as typeof globalThis & {
+        __LOFI_INSPECTOR__?: { readSnapshot(): Promise<unknown> };
+      }).__LOFI_INSPECTOR__;
+      if (!bridge) throw new Error("development inspector bridge is unavailable");
+      return await bridge.readSnapshot();
+    });
+    const serializedInspector = JSON.stringify(inspectorSnapshot);
+    assert(
+      serializedInspector.includes("live detail unavailable") ||
+        serializedInspector.includes("not configured"),
+      "inspector must name unavailable transport precision",
+    );
+    assert(
+      !/secret|token|password/i.test(serializedInspector),
+      "inspector snapshot exposed secrets",
+    );
+    if (environmentMode === "isolated-local") {
+      assert(
+        await page.getByRole("button", { name: "Transport pause unavailable in local-only" })
+          .isDisabled(),
+        "local-only inspector must disable cloud transport controls",
+      );
+    }
+    assertions.push({
+      name: "development inspector",
+      status: "passed",
+      detail:
+        "The development-only surface exposed value-free storage, durability, runtime, and explicitly unavailable vendor signals.",
+    });
     devReadyMs = Math.round(performance.now() - devStarted);
     assertions.push({
       name: "development readiness",
@@ -576,6 +922,13 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail:
         "The local write survived reload and both islands kept one shared runtime subscription.",
+    });
+
+    await restartClientThroughInspector(page, islandLabels, retainedBody, timeoutMs);
+    assertions.push({
+      name: "inspector client restart",
+      status: "passed",
+      detail: "The development-only client restart retained data and restored runtime cardinality.",
     });
 
     const hmr = await exerciseHmr(
@@ -609,21 +962,36 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
 
     await addItem(page, islandLabels[0], disposableBody);
     await waitForItem(page, islandLabels, disposableBody);
+    if (environmentMode === "cloud-from-root") {
+      await observeReconnectSettlement(page, timeoutMs, true);
+    }
     await deleteItem(page, disposableBody);
     await waitForItemAbsent(page, islandLabels, disposableBody);
+    if (environmentMode === "cloud-from-root") {
+      const online = await observeReconnectSettlement(page, timeoutMs, true);
+      assertions.push({
+        ...online,
+        name: "development online settlement",
+        detail:
+          "The online insert and delete reached global durability before the inspector paused transport.",
+      });
+    }
     assertions.push({
       name: "accessible CRUD",
       status: "passed",
       detail: "Create, update, complete, and delete worked through named author-facing controls.",
     });
 
-    if (environmentMode === "cloud-from-root") await setReferenceConnection(page, false);
-    await context.setOffline(true);
+    if (environmentMode === "cloud-from-root") {
+      await setReferenceConnection(page, false);
+    } else {
+      await context.setOffline(true);
+    }
     await addItem(page, islandLabels[1], offlineDevelopmentBody);
     await waitForItem(page, islandLabels, offlineDevelopmentBody);
     await waitForLocalDurability(page);
-    await context.setOffline(false);
     if (environmentMode === "cloud-from-root") await setReferenceConnection(page, true);
+    else await context.setOffline(false);
     assertions.push(
       await observeReconnectSettlement(page, timeoutMs, environmentMode === "cloud-from-root"),
     );
@@ -632,8 +1000,20 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     assertions.push({
       name: "development offline write",
       status: "passed",
-      detail: "A loaded page accepted a local write offline and retained it after network return.",
+      detail: environmentMode === "cloud-from-root"
+        ? "A loaded page accepted a local write while Jazz transport was paused and retained it after transport resumed."
+        : "A loaded page accepted a local write offline and retained it after network return.",
     });
+
+    if (environmentMode === "isolated-local") {
+      await exerciseReplicaClear(browser, devUrl, islandLabels, timeoutMs);
+      assertions.push({
+        name: "inspector replica clear",
+        status: "passed",
+        detail:
+          "A confirmation-gated clear removed an isolated OPFS replica while preserving its in-memory-compared identity state.",
+      });
+    }
 
     const devStderrPath = dev.stderrPath;
     await dev.stop();
@@ -674,6 +1054,20 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail: "check, test, and build completed through Deno tasks.",
     });
+    const productionRoot = join(
+      projectRoot,
+      options.source === "create" ? "dist" : "apps/reference/dist",
+    );
+    const inspectorFiles = await inspectorMarkerFiles(productionRoot);
+    assert(
+      inspectorFiles.length === 0,
+      `production build contains development inspector markers: ${inspectorFiles.join(", ")}`,
+    );
+    assertions.push({
+      name: "production inspector exclusion",
+      status: "passed",
+      detail: "The production bundle contains no development-inspector marker.",
+    });
 
     preview = startReadyProcess({
       cwd: projectRoot,
@@ -689,6 +1083,10 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     const previewUrl = await preview.ready;
     assert(new URL(previewUrl).origin === new URL(devUrl).origin, "preview must reuse dev origin");
     await page.goto(previewUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+    assert(
+      await page.locator('[data-lofi-inspector="lofi-development-inspector"]').count() === 0,
+      "production preview mounted the development inspector",
+    );
     await waitForItem(page, islandLabels, updatedBody);
     await waitForProductionPwa(page, timeoutMs);
     await page.reload({ waitUntil: "domcontentloaded", timeout: timeoutMs });
@@ -721,6 +1119,23 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     });
 
     if (environmentMode === "cloud-from-root") {
+      await exerciseTwoClientCloudConvergence(
+        browser,
+        previewUrl,
+        islandLabels,
+        timeoutMs,
+        artifacts.root,
+        redactValues,
+      );
+      assertions.push({
+        name: "cloud two-client convergence",
+        status: "passed",
+        detail:
+          "Two isolated OPFS replicas shared one in-memory-restored identity, retained orthogonal offline edits through reload/page restart, converged after reconnect, and cleaned up globally.",
+      });
+    }
+
+    if (environmentMode === "cloud-from-root") {
       for (const body of [updatedBody, offlineDevelopmentBody, offlineProductionSyncedBody]) {
         await deleteItem(page, body);
         await waitForItemAbsent(page, islandLabels, body);
@@ -746,7 +1161,31 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   } finally {
     if (context) {
       await context.setOffline(false).catch(() => undefined);
-      await context.tracing.stop({ path: artifacts.trace }).catch(() => undefined);
+      try {
+        await context.tracing.stop({ path: artifacts.trace });
+        await sanitizeRetainedTrace(artifacts.trace, redactValues);
+        assertions.push({
+          name: "trace artifact safety",
+          status: "passed",
+          detail:
+            "The snapshot-free retained trace omitted response/source resources, identity-valued results, and configured environment values.",
+        });
+      } catch (error) {
+        await Deno.remove(artifacts.trace).catch(() => undefined);
+        const traceFailure = new Error(
+          `retained trace could not be made value-free: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          { cause: error },
+        );
+        if (!failure) failure = traceFailure;
+        report.status = "failed";
+        assertions.push({
+          name: "trace artifact safety",
+          status: "failed",
+          detail: traceFailure.message,
+        });
+      }
     }
     await preview?.stop().catch(() => undefined);
     await dev?.stop().catch(() => undefined);

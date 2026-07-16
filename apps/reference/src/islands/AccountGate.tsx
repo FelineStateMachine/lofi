@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import {
+  confirmPhraseAccess,
+  createBackupPasskey,
   enableSyncBackup,
+  isAuthError,
   isRecoveryError,
   readSession,
   restoreFromRecoveryPhrase,
@@ -21,26 +24,41 @@ import {
  * phrase only matters once there is somewhere to sync to.
  */
 
+type Busy = "enable" | "stop" | "reveal" | "restore" | "protect";
+
 // Turns any thrown value into a sentence a person can act on.
 function describe(error: unknown): string {
+  if (isAuthError(error)) {
+    switch (error.code) {
+      case "cancelled":
+        return "Passkey prompt dismissed — your recovery phrase was not shown.";
+      case "unsupported":
+        return "This browser does not support passkeys.";
+      default:
+        return error.message;
+    }
+  }
   if (isRecoveryError(error)) return error.message;
   return error instanceof Error ? error.message : String(error);
 }
 
 export default function AccountGate() {
   const [session, setSession] = useState<Session | null>(null);
-  const [busy, setBusy] = useState<"enable" | "stop" | "reveal" | "restore" | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phrase, setPhrase] = useState<string | null>(null);
   const [phraseInput, setPhraseInput] = useState("");
   const [restoring, setRestoring] = useState(false);
+  // Set when a backup proceeded without a passkey guard (WebAuthn unavailable),
+  // so the phrase block can say so honestly rather than imply a confirmation.
+  const [unguarded, setUnguarded] = useState(false);
 
   useEffect(() => {
     setSession(readSession());
   }, []);
 
   const run = useCallback(
-    (kind: "enable" | "stop" | "reveal" | "restore", action: () => Promise<unknown>) => {
+    (kind: Busy, action: () => Promise<unknown>) => {
       setBusy(kind);
       setError(null);
       void action().then(
@@ -67,6 +85,12 @@ export default function AccountGate() {
         words down and keep them somewhere safe. Anyone with them can open this account; lose every
         copy and the account cannot be recovered.
       </p>
+      {unguarded && (
+        <p class="account-note">
+          A passkey could not be created on this browser or origin, so this reveal was not confirmed
+          with one. Save the phrase carefully.
+        </p>
+      )}
       <ol class="account-words" aria-label="Recovery phrase">
         {phrase.split(" ").map((word, index) => <li key={index}>{word}</li>)}
       </ol>
@@ -89,13 +113,19 @@ export default function AccountGate() {
         </header>
         <p>
           This account replicates to your managed Jazz app and can be recovered with its phrase.
-          Reveal the phrase again any time to save it on another device.
+          {session.phraseGuarded
+            ? " Revealing the phrase asks for your passkey first."
+            : " Reveal the phrase again any time to save it on another device."}
         </p>
         <div class="account-actions">
           <button
             type="button"
             disabled={disabled}
-            onClick={() => run("reveal", () => revealRecoveryPhrase().then(setPhrase))}
+            onClick={() =>
+              run("reveal", async () => {
+                await confirmPhraseAccess();
+                setPhrase(await revealRecoveryPhrase());
+              })}
           >
             {busy === "reveal"
               ? "Revealing…"
@@ -103,6 +133,20 @@ export default function AccountGate() {
               ? "Show phrase again"
               : "Show recovery phrase"}
           </button>
+          {!session.phraseGuarded && (
+            <button
+              type="button"
+              class="account-secondary"
+              disabled={disabled}
+              onClick={() =>
+                run("protect", async () => {
+                  setUnguarded(!(await createBackupPasskey()));
+                  return readSession();
+                })}
+            >
+              {busy === "protect" ? "Setting up…" : "Protect phrase with a passkey"}
+            </button>
+          )}
           <button
             type="button"
             class="account-secondary"
@@ -130,7 +174,7 @@ export default function AccountGate() {
       <p>
         You are working on a private, on-device account — no sign-in, nothing sent anywhere. Back it
         up to sync across your devices and recover it if this one is lost. Your existing data comes
-        along.
+        along. You will create a passkey first, so revealing your recovery phrase asks for it.
       </p>
       <div class="account-actions">
         <button
@@ -138,8 +182,8 @@ export default function AccountGate() {
           disabled={disabled}
           onClick={() =>
             run("enable", async () => {
-              const words = await revealRecoveryPhrase();
-              setPhrase(words);
+              setUnguarded(!(await createBackupPasskey()));
+              setPhrase(await revealRecoveryPhrase());
               return await enableSyncBackup();
             })}
         >

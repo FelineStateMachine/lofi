@@ -19,6 +19,7 @@
 import { BrowserAuthSecretStore } from "jazz-tools";
 import { appId, setSyncElected, syncAvailable, syncElected, syncing } from "./config.ts";
 import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
+import { authenticateDeviceCredential, AuthError, enrollDeviceCredential } from "./auth.ts";
 import { recreateRuntime, runtimeRecreatedEvent } from "./runtime.ts";
 
 /** A snapshot of the account: what is possible and what the user has chosen. */
@@ -29,11 +30,46 @@ export type Session = {
   backedUp: boolean;
   /** Whether writes replicate right now (available *and* elected). */
   syncing: boolean;
+  /**
+   * Whether a passkey guards the recovery phrase on this device — revealing it
+   * then requires a user-verifying ceremony. This confirms the person is present;
+   * it does **not** encrypt the account secret held on the device.
+   */
+  phraseGuarded: boolean;
 };
+
+// A per-device flag recording that the user enrolled a passkey to guard the
+// recovery phrase. The passkey itself is a resident credential on the device;
+// this only remembers to ask for it before revealing the phrase.
+const phraseGuardKey = `lofi:phrase-passkey:${appId}`;
+
+function phraseGuarded(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(phraseGuardKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setPhraseGuarded(guarded: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (guarded) localStorage.setItem(phraseGuardKey, "1");
+    else localStorage.removeItem(phraseGuardKey);
+  } catch {
+    // A private-mode storage failure must not break the ceremony itself.
+  }
+}
 
 /** Reads the current session. Synchronous — it never prompts or touches the network. */
 export function readSession(): Session {
-  return { syncAvailable, backedUp: syncElected(), syncing: syncing() };
+  return {
+    syncAvailable,
+    backedUp: syncElected(),
+    syncing: syncing(),
+    phraseGuarded: phraseGuarded(),
+  };
 }
 
 // The account secret the runtime is already using. `getOrCreateSecret` is a
@@ -41,6 +77,41 @@ export function readSession(): Session {
 // secret rather than minting a new one.
 async function currentSecret(): Promise<string> {
   return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
+}
+
+/**
+ * Enrolls a passkey to guard the recovery phrase on this device. Enrollment is a
+ * user-verifying ceremony, so it doubles as the confirmation for the reveal that
+ * immediately follows. Returns `true` when a guard was set; `false` (without
+ * throwing) when this browser or origin cannot enroll a passkey, so the caller
+ * can still show the phrase while telling the user it is unguarded. Re-throws a
+ * `cancelled` ceremony so the caller can abort.
+ */
+export async function createBackupPasskey(label?: string): Promise<boolean> {
+  try {
+    await enrollDeviceCredential(label ? { label } : {});
+    setPhraseGuarded(true);
+    return true;
+  } catch (error) {
+    if (
+      error instanceof AuthError &&
+      (error.code === "unsupported" || error.code === "origin-rejected")
+    ) {
+      setPhraseGuarded(false);
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Runs the user-verifying passkey ceremony that must precede revealing the phrase
+ * on a guarded device. A no-op when the device is not guarded. Throws `cancelled`
+ * if the user dismisses the prompt — the phrase is then not revealed.
+ */
+export async function confirmPhraseAccess(): Promise<void> {
+  if (!phraseGuarded()) return;
+  await authenticateDeviceCredential();
 }
 
 /**
@@ -100,4 +171,9 @@ export async function restoreFromRecoveryPhrase(phrase: string): Promise<Session
 /** True when an error is a recovery-phrase problem the user can fix and retry. */
 export function isRecoveryError(error: unknown): error is RecoveryError {
   return error instanceof RecoveryError;
+}
+
+/** True when an error came from a passkey ceremony (enroll / confirm). */
+export function isAuthError(error: unknown): error is AuthError {
+  return error instanceof AuthError;
 }

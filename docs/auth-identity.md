@@ -46,27 +46,37 @@ The same 32-byte secret encodes as a 24-word recovery phrase (`RecoveryPhrase.fr
 recovery phrase = words( account secret )      # the phrase *is* the account
 ```
 
-- **Back up** → reveal the phrase once and write it down. It is the exact same account, offline and
-  portable.
+- **Back up** → create a passkey, then reveal the phrase once and write it down. It is the exact
+  same account, offline and portable.
 - **Recover** → type the phrase on any device → the same secret → the same account → its synced data
   flows back down, decrypted (Jazz E2E-encrypts synced data keyed on the account).
 
 Restoring replaces whatever account the device currently holds, so the UI confirms before discarding
 a local-only account's un-backed-up data.
 
+### Passkey confirmation on reveal
+
+Backing up enrols a passkey (`enrollDeviceCredential`), and revealing the phrase afterwards runs a
+user-verifying passkey ceremony (`confirmPhraseAccess`) — so the recovery phrase, a bearer secret,
+is not handed out without confirming the person is present. Stated honestly: this is a
+**confirmation**, not encryption. The account secret still lives in device storage so the app can
+open instantly; the passkey does not encrypt it. A device where WebAuthn is unavailable can still
+back up, and the UI says the reveal was unconfirmed. (For real at-rest encryption of the secret, the
+PRF primitive in `src/_lofi/auth.ts` is available — see below.)
+
 ### Boot flow
 
 - **First boot** → local-only account opens immediately. No gate.
-- **Back up & sync** (a click) → reveal the recovery phrase to save → turn on sync → the runtime
-  recreates and the account replicates.
+- **Back up & sync** (a click) → create a passkey → reveal the recovery phrase to save → turn on
+  sync → the runtime recreates and the account replicates.
 - **Return boots** → the same cached secret opens the same account, synced or not.
 - **A new device** → restore from the recovery phrase → the account and its synced data appear.
 - **Stop syncing** → detaches the network and returns to local-only; the account and data are
   untouched, and electing again resumes against the same account.
 
-The framework side lives in `src/_lofi/session.ts` (`readSession`, `revealRecoveryPhrase`,
-`enableSyncBackup`, `stopSyncBackup`, `restoreFromRecoveryPhrase`); the gate is the author-owned
-example you can restyle or replace.
+The framework side lives in `src/_lofi/session.ts` (`readSession`, `createBackupPasskey`,
+`confirmPhraseAccess`, `revealRecoveryPhrase`, `enableSyncBackup`, `stopSyncBackup`,
+`restoreFromRecoveryPhrase`); the gate is the author-owned example you can restyle or replace.
 
 ## Custody and recovery — stated plainly
 

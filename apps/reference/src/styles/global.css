@@ -1,0 +1,241 @@
+:root {
+  color: #eff8f2;
+  background: #18231f;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 78rem;
+  min-height: 100vh;
+  padding: 4rem 1.5rem;
+}
+
+.hero {
+  max-width: 58rem;
+}
+
+.eyebrow {
+  color: #9bc9b1;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: clamp(2.6rem, 7vw, 6.5rem);
+  letter-spacing: -0.055em;
+  line-height: 0.9;
+  margin: 0.7rem 0 1.5rem;
+}
+
+.hero > p:last-child {
+  color: #bed0c6;
+  font-size: 1.15rem;
+  line-height: 1.6;
+  max-width: 48rem;
+}
+
+.island-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  margin-top: 3rem;
+}
+
+.island {
+  background: #22332c;
+  border: 1px solid #3b594c;
+  border-radius: 0.7rem;
+  min-height: 24rem;
+  padding: 1.4rem;
+}
+
+.island h2 {
+  font-size: 1.5rem;
+  margin: 0.25rem 0 1.5rem;
+}
+
+.device-status {
+  background: #1d2b25;
+  border: 1px solid #3b594c;
+  border-radius: 0.7rem;
+  margin-top: 1rem;
+  padding: 1.4rem;
+}
+
+.device-status h2 {
+  margin: 0.25rem 0 1rem;
+}
+
+.device-status dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.device-status dl div {
+  background: #18231f;
+  padding: 0.75rem;
+}
+
+.device-status dt {
+  color: #9bc9b1;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.device-status dd {
+  margin: 0.25rem 0 0;
+}
+
+label {
+  display: block;
+  font-weight: 750;
+  margin-bottom: 0.5rem;
+}
+
+.composer,
+.edit-form,
+.task-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+button {
+  border: 1px solid #68927e;
+  border-radius: 0.35rem;
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+}
+
+input[type="text"],
+input:not([type]) {
+  background: #f3faf6;
+  color: #122019;
+  flex: 1;
+  min-width: 0;
+}
+
+button {
+  background: #99e5bd;
+  color: #122019;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #d5f26a;
+  outline-offset: 2px;
+}
+
+.button-danger {
+  background: transparent;
+  color: #ffd6d6;
+}
+
+.state {
+  color: #bed0c6;
+  min-height: 1.5rem;
+}
+
+ul {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  padding: 0;
+}
+
+.task {
+  align-items: center;
+  background: #18231f;
+  border-left: 3px solid #99e5bd;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.75rem 0.9rem;
+}
+
+.task-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.task-toggle input {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.task-toggle span {
+  overflow-wrap: anywhere;
+}
+
+.task-complete .task-toggle span {
+  color: #9bc9b1;
+  text-decoration: line-through;
+}
+
+.edit-form {
+  grid-column: 1 / -1;
+}
+
+.identity-note {
+  background: #1d2b25;
+  border: 1px solid #3b594c;
+  border-radius: 0.7rem;
+  color: #bed0c6;
+  line-height: 1.6;
+  margin-top: 1rem;
+  padding: 1rem 1.4rem;
+}
+
+.identity-note strong {
+  color: #eff8f2;
+}
+
+.visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+footer {
+  color: #9bc9b1;
+  margin-top: 2rem;
+}
+
+@media (max-width: 40rem) {
+  main {
+    padding: 2.5rem 1rem;
+  }
+
+  .composer,
+  .edit-form,
+  .task-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task {
+    grid-template-columns: 1fr;
+  }
+}

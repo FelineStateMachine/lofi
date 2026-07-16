@@ -26,7 +26,7 @@ indicative floor rather than an equivalent-UI bundle claim.
 
 ## Consequences
 
-- Jazz alpha churn is isolated to `apps/prototype/src/runtime` and schema/config files.
+- Jazz alpha churn is isolated to `apps/reference/src/_lofi` and schema/config files.
 - Component authors get context-free hooks that work across independent Astro islands.
 - The adapter owns query snapshot identity, cleanup, mutation error mapping, and HMR lifecycle.
 - Deferred asynchronous subscription failures remain limited by Jazz's public API and must not be

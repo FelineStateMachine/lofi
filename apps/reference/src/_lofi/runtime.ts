@@ -1,4 +1,6 @@
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
+import { referenceApp } from "../app.ts";
+import { deriveAuthSecret } from "./auth.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { appId, databaseConfig, serverUrl } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
@@ -52,10 +54,25 @@ function notifyDiagnostics(state = slot()): void {
   for (const listener of state.diagnosticListeners) listener();
 }
 
+// Device-local (default): a random per-device secret. "device-passkey" makes
+// the passkey the account — the secret is derived from the credential's PRF, so
+// a portable key reconstructs the same account on every device. The derived
+// secret is cached, so only the first boot on a device runs a passkey ceremony.
+async function resolveAccountSecret(): Promise<string> {
+  if (referenceApp.identity !== "device-passkey") {
+    return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
+  }
+  const cached = await BrowserAuthSecretStore.loadSecret({ appId });
+  if (cached) return cached;
+  const secret = await deriveAuthSecret();
+  await BrowserAuthSecretStore.saveSecret(secret, { appId });
+  return secret;
+}
+
 async function createClient(state: RuntimeSlot): Promise<Db> {
   try {
     assertDurableBrowser();
-    const secret = await BrowserAuthSecretStore.getOrCreateSecret({ appId });
+    const secret = await resolveAccountSecret();
     const db = await createDb(databaseConfig(secret));
     state.diagnostics.storageState = "persistent-driver-open";
     state.diagnostics.clientsCreated += 1;

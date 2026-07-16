@@ -4,6 +4,7 @@ import {
   classifyCredentialOrigin,
   decryptAtRest,
   deriveAtRestKey,
+  deriveAuthSecret,
   derivePrfSecret,
   encryptAtRest,
   enrollDeviceCredential,
@@ -17,6 +18,14 @@ const test = (globalThis as unknown as {
 // A base64url-decoding rawId ("AQIDBA" is bytes 1,2,3,4) shared by the fakes.
 function rawIdBuffer(): ArrayBuffer {
   return new Uint8Array([1, 2, 3, 4]).buffer;
+}
+
+// A 37-byte authenticator-data buffer (rpIdHash[32] + flags + signCount[4]).
+// The WebAuthn "backup eligible" (BE) flag is bit 0x08 of byte index 32.
+function authenticatorData(backupEligible: boolean): ArrayBuffer {
+  const bytes = new Uint8Array(37);
+  if (backupEligible) bytes[32] |= 0x08;
+  return bytes.buffer;
 }
 
 // A minimal fake CredentialsContainer whose create/get are supplied per test.
@@ -205,5 +214,99 @@ test("enrollDeviceCredential maps SecurityError to origin-rejected", async () =>
   await expectAuthError(
     () => enrollDeviceCredential({ credentials, rpId: "app.example.com" }),
     "origin-rejected",
+  );
+});
+
+test("enrollDeviceCredential names the passkey with the label and reports portable", async () => {
+  let captured: PublicKeyCredentialUserEntity | undefined;
+  const credentials = fakeCredentials({
+    create: (options) => {
+      captured = options.publicKey?.user;
+      return Promise.resolve({
+        rawId: rawIdBuffer(),
+        response: { getAuthenticatorData: () => authenticatorData(true) },
+      } as unknown as Credential);
+    },
+  });
+  const credential = await enrollDeviceCredential({
+    rpId: "app.example.com",
+    label: "work account",
+    credentials,
+  });
+  assert(captured?.name === "work account", "the label must become user.name");
+  assert(captured?.displayName === "work account", "the label must become user.displayName");
+  assert(credential.portable === true, "a backup-eligible credential must be portable");
+});
+
+test("enrollDeviceCredential reports portable false without the BE flag or authenticator data", async () => {
+  const clearBit = fakeCredentials({
+    create: () =>
+      Promise.resolve({
+        rawId: rawIdBuffer(),
+        response: { getAuthenticatorData: () => authenticatorData(false) },
+      } as unknown as Credential),
+  });
+  const cleared = await enrollDeviceCredential({ rpId: "app.example.com", credentials: clearBit });
+  assert(cleared.portable === false, "a device-bound credential must not be portable");
+
+  const noAuthData = fakeCredentials({
+    create: () =>
+      Promise.resolve({
+        rawId: rawIdBuffer(),
+        response: {},
+      } as unknown as Credential),
+  });
+  const missing = await enrollDeviceCredential({
+    rpId: "app.example.com",
+    credentials: noAuthData,
+  });
+  assert(missing.portable === false, "an unreadable credential must default to not portable");
+});
+
+test("deriveAuthSecret derives a deterministic Jazz auth-secret from the PRF result", async () => {
+  const first = crypto.getRandomValues(new Uint8Array(32));
+  const credentials = fakeCredentials({
+    get: () =>
+      Promise.resolve({
+        rawId: rawIdBuffer(),
+        getClientExtensionResults: () => ({ prf: { results: { first: first.buffer } } }),
+      } as unknown as Credential),
+  });
+  const secret = await deriveAuthSecret({ credentials, rpId: "app.example.com" });
+  assert(secret.length === 43, "a 32-byte base64url secret must be 43 characters");
+  assert(/^[A-Za-z0-9_-]+$/.test(secret), "the secret must be base64url with no padding");
+
+  const decoded = atob(secret.replaceAll("-", "+").replaceAll("_", "/"));
+  assert(decoded.length === 32, "the secret must decode to 32 bytes");
+
+  const again = await deriveAuthSecret({ credentials, rpId: "app.example.com" });
+  assert(again === secret, "the same PRF input must derive the same secret");
+
+  const other = crypto.getRandomValues(new Uint8Array(32));
+  const otherCredentials = fakeCredentials({
+    get: () =>
+      Promise.resolve({
+        rawId: rawIdBuffer(),
+        getClientExtensionResults: () => ({ prf: { results: { first: other.buffer } } }),
+      } as unknown as Credential),
+  });
+  const otherSecret = await deriveAuthSecret({
+    credentials: otherCredentials,
+    rpId: "app.example.com",
+  });
+  assert(otherSecret !== secret, "a different PRF input must derive a different secret");
+});
+
+test("deriveAuthSecret throws prf-unavailable when the client returns no PRF result", async () => {
+  const credentials = fakeCredentials({
+    get: () =>
+      Promise.resolve({
+        rawId: rawIdBuffer(),
+        getClientExtensionResults: () => ({}),
+      } as unknown as Credential),
+  });
+  await expectAuthError(
+    () => deriveAuthSecret({ credentials, rpId: "app.example.com" }),
+    "prf-unavailable",
   );
 });

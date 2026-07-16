@@ -45,6 +45,13 @@ export type DeviceCredential = {
   id: string;
   /** The relying-party id the credential is bound to. */
   rpId: string;
+  /**
+   * Whether the credential is backup-eligible — i.e. it syncs/roams across the
+   * user's devices (a password-manager or platform-synced passkey) rather than
+   * being bound to this one device. With "the key is the account", a portable
+   * credential means the account travels with it; a device-bound one does not.
+   */
+  portable: boolean;
 };
 
 /** Injected browser surfaces, so the flows are unit-testable without a device. */
@@ -52,6 +59,16 @@ export type AuthDependencies = {
   credentials?: CredentialsContainer;
   rpId?: string;
   trustedOrigins?: readonly string[];
+};
+
+/** Options for {@link enrollDeviceCredential}. */
+export type EnrollOptions = AuthDependencies & {
+  /**
+   * A human-readable nickname for the credential. It becomes the passkey's
+   * name/displayName, so the user can identify which account it belongs to in
+   * their password manager or OS passkey list. Defaults to the app name.
+   */
+  label?: string;
 };
 
 /** A precise, non-leaking failure reason for a credential operation. */
@@ -104,6 +121,21 @@ function rawId(credential: Credential | null): Uint8Array {
     throw new AuthError("credential-missing");
   }
   return new Uint8Array(credential.rawId);
+}
+
+// Reads the WebAuthn "backup eligible" (BE) flag from the authenticator data of
+// a create() attestation or a get() assertion. BE=1 means the credential can
+// roam/sync across the user's devices. Best-effort: false when unreadable.
+function isPortable(credential: Credential | null): boolean {
+  const response = (credential as
+    | Credential & {
+      response?: { getAuthenticatorData?: () => ArrayBuffer; authenticatorData?: ArrayBuffer };
+    }
+    | null)?.response;
+  const authData = response?.getAuthenticatorData?.() ?? response?.authenticatorData;
+  if (!authData) return false;
+  const bytes = new Uint8Array(authData);
+  return bytes.length >= 33 && (bytes[32] & 0x08) !== 0;
 }
 
 function mapError(error: unknown): AuthError {
@@ -227,18 +259,20 @@ export async function getAuthCapability(
 /**
  * Enrolls a resident, user-verifying device passkey with the PRF extension
  * enabled. Refuses unless the current origin is `stable` (pass `rpId` to test).
- * Returns the opaque credential id to persist.
+ * The returned `portable` flag says whether the credential roams across devices;
+ * `label` names it in the user's password manager. Returns the opaque id.
  */
 export async function enrollDeviceCredential(
-  dependencies: AuthDependencies = {},
+  options: EnrollOptions = {},
 ): Promise<DeviceCredential> {
-  const rpId = requireStableRpId(dependencies);
-  const credentials = dependencies.credentials ?? browserCredentials();
+  const rpId = requireStableRpId(options);
+  const credentials = options.credentials ?? browserCredentials();
+  const label = options.label ?? referenceApp.name;
   try {
     const credential = await credentials.create({
       publicKey: {
         rp: { id: rpId, name: referenceApp.name },
-        user: { id: randomBytes(), name: referenceApp.name, displayName: referenceApp.name },
+        user: { id: randomBytes(), name: label, displayName: label },
         challenge: randomBytes(),
         pubKeyCredParams: [
           { type: "public-key", alg: -7 },
@@ -254,7 +288,7 @@ export async function enrollDeviceCredential(
         extensions: { prf: {} } as CreateExtensions,
       },
     });
-    return { id: toBase64Url(rawId(credential)), rpId };
+    return { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) };
   } catch (error) {
     throw mapError(error);
   }
@@ -270,7 +304,7 @@ export async function authenticateDeviceCredential(
     const credential = await credentials.get({
       publicKey: { rpId, challenge: randomBytes(), userVerification: "required", timeout: 60_000 },
     });
-    return { id: toBase64Url(rawId(credential)), rpId };
+    return { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) };
   } catch (error) {
     throw mapError(error);
   }
@@ -365,4 +399,43 @@ export async function decryptAtRest(
     blob.ciphertext as BufferSource,
   );
   return new Uint8Array(plaintext);
+}
+
+// --- Account identity ("the key is the account") -----------------------------
+
+// A fixed salt so the same credential always derives the same account for lofi.
+// App scoping comes from the credential itself (bound to the app's origin).
+const ACCOUNT_SECRET_SALT = new TextEncoder().encode("lofi:account-secret:v1");
+
+/**
+ * Derives the account secret **deterministically** from the passkey via PRF, in
+ * Jazz's 32-byte base64url auth-secret format. The same portable credential
+ * reconstructs the *same* account on any device — so the key is the account, and
+ * the account lives wherever the key does. Nothing is stored server-side and no
+ * recovery is implied: without the key, the account is gone.
+ *
+ * Requires a `stable` origin and a PRF-capable client; throws `origin-rejected`
+ * or `prf-unavailable` otherwise (never a fabricated secret). Feed the result to
+ * Jazz as the account secret (e.g. via `BrowserAuthSecretStore.saveSecret`).
+ */
+export async function deriveAuthSecret(dependencies: AuthDependencies = {}): Promise<string> {
+  const prfSecret = await derivePrfSecret(ACCOUNT_SECRET_SALT, dependencies);
+  const material = await crypto.subtle.importKey(
+    "raw",
+    prfSecret as BufferSource,
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode("lofi:account-secret"),
+    },
+    material,
+    256,
+  );
+  return toBase64Url(new Uint8Array(bits));
 }

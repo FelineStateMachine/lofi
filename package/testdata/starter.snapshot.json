@@ -39,7 +39,7 @@
   "src/islands/AccountGate.tsx": "e6de6be7148f12b5b113109a70efa12c6fe3020a1a3ce6b5f522fe96cb75898e",
   "src/islands/TaskList.tsx": "81d7fc95248baf4f51e1d53374d7b4700bf165049e846fdcc2694cbeb873652c",
   "src/islands/use-tasks.ts": "95573b22d5dd1e0e8303ae4536df9a4f0cb27f0c1243aa6c70a6366cc6b7530f",
-  "src/pages/index.astro": "9c1a7446045fb89acd2a0f0c3bad89244871556fb39ddf2669b4a2a495a8208f",
+  "src/pages/index.astro": "6bcbcbd1c1aad8d55855e5f52473b7a7711c439d4877ef54fe7f6f5d4f88ec3c",
   "src/permissions.ts": "dcb00b7f0576d04ad527b8892b8096573b107c3130ed6d835243251c406a38b7",
   "src/schema.ts": "f2c555b088ded8eea2653f5d955fc9aae69dfd588e891adf509e99052f1e9949",
   "src/styles/global.css": "27e98368f3fa1c57befc038cc9bf36f800fef192e368f4c393327ac96bfdd448",

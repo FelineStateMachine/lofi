@@ -122,8 +122,9 @@ its contract budgets end-to-end, on real devices.
 ```text
 lofi/
 ├── docs/
-│   ├── devx-contract.md   # The product contract: promises, budgets, statuses
-│   └── decisions/         # Evidence-backed decision records (ADR-style)
+│   ├── devx-contract.md         # The product contract: promises, budgets, statuses
+│   ├── generated-project-map.md # Ownership and role of every generated file
+│   └── decisions/               # Evidence-backed decision records (ADR-style)
 ├── apps/reference/        # The integrated app graduated from M1 and reshaped in M2
 ├── package/               # The single @nzip/lofi package source and generated-project commands
 ├── spikes/                # M1 feasibility experiments, kept for evidence

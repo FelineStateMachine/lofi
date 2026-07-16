@@ -14,6 +14,13 @@ export type CreateProjectResult = {
   nextCommands: readonly [string, string];
 };
 
+export const CREATE_CORE_FILE_NAMES = {
+  environment: ".env.example",
+  gitignore: ".gitignore",
+  readme: "README.md",
+  denoConfig: "deno.json",
+} as const;
+
 const generatedGitignore = `.env
 .env.*
 !.env.example
@@ -66,6 +73,9 @@ deno task --tunnel dev
 Deno Tunnel keeps the project hostname stable across restarts and reflects local edits live. Use a
 production build published through nzip for install, service-worker, and offline cold-start
 evidence.
+
+Generated file ownership is documented in the
+[lofi generated project map](https://github.com/FelineStateMachine/lofi/blob/main/docs/generated-project-map.md).
 `;
 }
 
@@ -223,11 +233,20 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   try {
     await writeTemplate(staging);
     await rewritePortableAstroConfig(staging);
-    await Deno.writeTextFile(join(staging, ".gitignore"), generatedGitignore);
-    await Deno.writeTextFile(join(staging, ".env.example"), generatedEnvironment);
-    await Deno.writeTextFile(join(staging, "README.md"), generatedReadme(basename(destination)));
     await Deno.writeTextFile(
-      join(staging, "deno.json"),
+      join(staging, CREATE_CORE_FILE_NAMES.gitignore),
+      generatedGitignore,
+    );
+    await Deno.writeTextFile(
+      join(staging, CREATE_CORE_FILE_NAMES.environment),
+      generatedEnvironment,
+    );
+    await Deno.writeTextFile(
+      join(staging, CREATE_CORE_FILE_NAMES.readme),
+      generatedReadme(basename(destination)),
+    );
+    await Deno.writeTextFile(
+      join(staging, CREATE_CORE_FILE_NAMES.denoConfig),
       generatedDenoConfig(options.packagePrefix ?? LOFI_PACKAGE_PREFIX),
     );
 

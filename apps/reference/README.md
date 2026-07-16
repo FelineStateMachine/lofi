@@ -22,7 +22,9 @@ remains M4 work. The application is deliberately split into two ownership zones.
 
 Application work should not require edits in `src/_lofi/`. The M2 generator copies these validated
 runtime-owned files without turning them into public framework APIs. M4 may replace the local seam
-with proven `@nzip/lofi` subpath imports without changing product UI.
+with proven `@nzip/lofi` subpath imports without changing product UI. The
+[generated project map](../../docs/generated-project-map.md) records the ownership and graduation
+direction of every file created by `@nzip/lofi/create`.
 
 Browser journeys import readiness, offline, two-client, and sanitized failure-artifact helpers from
 `@nzip/lofi/testing`. The normal `deno task test` verifies that generated projects resolve this

@@ -34,7 +34,7 @@
     "jsxImportSource": "preact"
   },
   "tasks": {
-    "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package apps/reference/src/_lofi apps/reference/tests",
+    "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT,CI --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package apps/reference/src/_lofi apps/reference/tests",
     "test:update:create": "LOFI_UPDATE_SNAPSHOT=1 deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-read --allow-write=. --allow-run package/create_core_test.ts",
     "test": "deno task test:unit",
     "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium",

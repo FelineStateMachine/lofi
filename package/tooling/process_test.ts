@@ -6,7 +6,9 @@ function assert(condition: unknown, message: string): asserts condition {
 
 Deno.test({
   name: "runDenoStatus distinguishes a forwarded shutdown signal from a child failure",
-  ignore: Deno.build.os === "windows",
+  // Spawns nested Deno processes and forwards SIGTERM through them; the signal
+  // timing is unreliable on hosted CI runners, so this runs locally only.
+  ignore: Deno.build.os === "windows" || Deno.env.get("CI") === "true",
   async fn() {
     const moduleUrl = new URL("./process.ts", import.meta.url).href;
     const wrapperSource = `

@@ -79,8 +79,15 @@ test("credential origin trust is author configurable", () => {
 });
 
 test("author configuration cannot override local-origin safety", () => {
-  for (const origin of ["https://localhost/", "https://app.localhost/"]) {
-    const report = classifyCredentialOrigin(new URL(origin), ["localhost", "*.localhost"]);
+  for (
+    const [origin, trustedOrigins] of [
+      ["https://localhost/", ["localhost"]],
+      ["https://app.localhost/", ["*.localhost"]],
+      ["https://localhost./", ["localhost."]],
+      ["https://app.localhost./", ["*.localhost."]],
+    ] as const
+  ) {
+    const report = classifyCredentialOrigin(new URL(origin), trustedOrigins);
     assert(report.status === "local-only", `${origin} bypassed local-origin safety`);
   }
 });

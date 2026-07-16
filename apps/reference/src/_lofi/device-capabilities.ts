@@ -35,12 +35,16 @@ function isIpAddress(hostname: string): boolean {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 }
 
+function canonicalHostname(hostname: string): string {
+  return hostname.endsWith(".") ? hostname.slice(0, -1) : hostname;
+}
+
 function isLocalHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1";
 }
 
 function matchesCredentialOrigin(hostname: string, pattern: string): boolean {
-  const normalized = pattern.toLowerCase();
+  const normalized = canonicalHostname(pattern.toLowerCase());
   if (normalized.startsWith("*.")) {
     const suffix = normalized.slice(1);
     return hostname.length > suffix.length && hostname.endsWith(suffix);
@@ -53,14 +57,15 @@ export function classifyCredentialOrigin(
   trustedOrigins: readonly string[] = referenceApp.credentialOrigins,
 ): CredentialOriginReport {
   const rpId = url.hostname;
-  if (isLocalHostname(rpId)) {
+  const hostname = canonicalHostname(rpId);
+  if (isLocalHostname(hostname)) {
     return {
       status: "local-only",
       rpId,
       action: "use `deno task --tunnel dev` before enrolling a device credential",
     };
   }
-  if (url.protocol !== "https:" || !rpId || isIpAddress(rpId)) {
+  if (url.protocol !== "https:" || !hostname || isIpAddress(hostname)) {
     return {
       status: "blocked",
       rpId,
@@ -68,7 +73,7 @@ export function classifyCredentialOrigin(
         "use the stable HTTPS URL printed by `deno task --tunnel dev` before enrolling a device credential",
     };
   }
-  if (trustedOrigins.some((pattern) => matchesCredentialOrigin(rpId, pattern))) {
+  if (trustedOrigins.some((pattern) => matchesCredentialOrigin(hostname, pattern))) {
     return {
       status: "stable",
       rpId,

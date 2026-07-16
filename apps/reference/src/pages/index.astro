@@ -1,27 +1,24 @@
 ---
-import ChecklistIsland from "../islands/ChecklistIsland";
+import TaskList from "../islands/TaskList";
 import DeviceStatus from "../_lofi/DeviceStatus";
-import ReferenceShell from "../_lofi/ReferenceShell.astro";
+import Shell from "../_lofi/Shell.astro";
 import "../styles/global.css";
 ---
 
-<ReferenceShell title="lofi checklist">
+<Shell title="lofi starter">
   <header class="hero">
-    <p class="eyebrow">lofi reference application</p>
-    <h1>A checklist that starts local.</h1>
+    <p class="eyebrow">lofi</p>
+    <h1>Local-first, by default.</h1>
     <p>
-      Create, edit, complete, and delete work without waiting for the network. Both independent
-      islands render the same durable local data.
+      Add a task and it persists on this device immediately - the UI never waits on the network.
+      This starter is one island over one table; replace it with your own schema and components.
     </p>
   </header>
-  <div class="island-grid">
-    <ChecklistIsland label="North island" client:load />
-    <ChecklistIsland label="South island" client:load />
-  </div>
+  <TaskList client:load />
   <aside class="identity-note" aria-label="Identity and recovery">
     <strong>Identity stays on this device.</strong> Clearing site data removes access because
-    passkey backup and recovery are not enabled in this reference application.
+    passkey backup and recovery are not enabled in this starter.
   </aside>
   <DeviceStatus client:load />
   <footer>Thin Preact adapter · static Astro shell · Deno command surface</footer>
-</ReferenceShell>
+</Shell>

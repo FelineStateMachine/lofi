@@ -1,27 +1,23 @@
 import type { Db, MutationErrorEvent } from "jazz-tools";
-import { ChecklistStore, type RuntimeDiagnostics } from "./checklist-store.ts";
+import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
+import { createTableStore, type TableHandle } from "./table-store.ts";
 import { assert, assertCount } from "./test-assert.ts";
 
 const test = (globalThis as unknown as {
   Deno: { test(name: string, body: () => void | Promise<void>): void };
 }).Deno.test;
 
+type Row = { id: string; text: string; completed: boolean; createdAt: Date };
+type RowInit = Omit<Row, "id">;
+
+const table = {} as unknown as TableHandle<Row, RowInit>;
+
 function diagnostics(): RuntimeDiagnostics {
   return {
+    ...createDiagnostics(),
     storageState: "persistent-driver-open",
     clientsCreated: 1,
     activeClients: 1,
-    activeConsumers: 0,
-    activeVendorSubscriptions: 0,
-    totalVendorSubscriptions: 0,
-    activeMutationListeners: 1,
-    totalMutationListeners: 1,
-    unsubscribeCalls: 0,
-    localWaitCalls: 0,
-    pendingLocalWrites: 0,
-    pendingGlobalWrites: 0,
-    lastWriteDurability: "none",
-    mutationErrors: 0,
   };
 }
 
@@ -68,6 +64,9 @@ function fakeDb(options: { allowGlobal?: boolean } = {}) {
         subscriber = null;
       };
     },
+    onMutationError(_callback: (event: MutationErrorEvent) => void) {
+      return () => undefined;
+    },
     insert(_collection: unknown, next: unknown) {
       writes.push({ operation: "insert", value: next });
       return handle();
@@ -107,10 +106,10 @@ function fakeDb(options: { allowGlobal?: boolean } = {}) {
   };
 }
 
-test("two consumers share one task subscription and clean up idempotently", () => {
+test("two consumers share one table subscription and clean up idempotently", () => {
   const db = fakeDb();
   const counts = diagnostics();
-  const store = new ChecklistStore(db.value, counts);
+  const store = createTableStore<Row, RowInit>(db.value, table, counts);
   let firstUpdates = 0;
   let secondUpdates = 0;
 
@@ -121,13 +120,13 @@ test("two consumers share one task subscription and clean up idempotently", () =
   assertCount(counts.totalVendorSubscriptions, 1, "the underlying query should open once");
 
   db.publish([{
-    id: "task-1",
+    id: "row-1",
     text: "shared",
     completed: false,
     createdAt: new Date(0),
   }]);
   assert(store.getSnapshot().status === "ready", "the first query result must end loading");
-  assert(store.getSnapshot().tasks.length === 1, "the query result must be published");
+  assert(store.getSnapshot().rows.length === 1, "the query result must be published");
   assert(firstUpdates > 0 && secondUpdates > 0, "both roots must receive reactive updates");
 
   stopFirst();
@@ -142,27 +141,27 @@ test("two consumers share one task subscription and clean up idempotently", () =
   assertCount(counts.unsubscribeCalls, 1, "cleanup must remain externally diagnosable");
 });
 
-test("every checklist mutation exposes pending work and waits for local durability", async () => {
+test("every mutation exposes pending work and waits for local durability", async () => {
   const db = fakeDb();
   const counts = diagnostics();
-  const store = new ChecklistStore(db.value, counts);
+  const store = createTableStore<Row, RowInit>(db.value, table, counts);
 
   const deferred = db.deferNextWrite();
-  const first = store.create("first");
+  const first = store.insert({ text: "first", completed: false, createdAt: new Date(0) });
   await Promise.resolve();
   assertCount(counts.pendingLocalWrites, 1, "an unsettled local write must be observable");
   assert(String(counts.lastWriteDurability) === "none", "pending work must not claim durability");
   deferred.resolve();
   await first;
   assertCount(counts.pendingLocalWrites, 0, "a retained local write must leave no pending work");
-  await store.update("task-1", "edited");
-  await store.setCompleted("task-1", true);
-  await store.delete("task-1");
+  await store.update("row-1", { text: "edited" });
+  await store.update("row-1", { completed: true });
+  await store.delete("row-1");
 
   assertCount(counts.localWaitCalls, 4, "each accepted mutation must await local durability");
   assert(
     db.writes.map((write) => write.operation).join(",") === "insert,update,update,delete",
-    "create, edit, complete, and delete must reach the Jazz boundary",
+    "insert, edit, complete, and delete must reach the Jazz boundary",
   );
   assert(store.getSnapshot().durability === "local", "the UI may claim local after the wait");
   assert(
@@ -178,8 +177,10 @@ test("every checklist mutation exposes pending work and waits for local durabili
 
 test("configured sync advances the latest write from local to global durability", async () => {
   const db = fakeDb({ allowGlobal: true });
-  const store = new ChecklistStore(db.value, diagnostics(), true);
-  await store.create("sync after reconnect");
+  const store = createTableStore<Row, RowInit>(db.value, table, diagnostics(), {
+    syncConfigured: true,
+  });
+  await store.insert({ text: "sync after reconnect", completed: false, createdAt: new Date(0) });
   await Promise.resolve();
   assert(
     store.getSnapshot().durability === "global",
@@ -190,11 +191,11 @@ test("configured sync advances the latest write from local to global durability"
 
 test("local write failures remain visible and reject the mutation", async () => {
   const db = fakeDb();
-  const store = new ChecklistStore(db.value, diagnostics());
+  const store = createTableStore<Row, RowInit>(db.value, table, diagnostics());
   db.failNextWrite("disk full");
   let rejected = false;
   try {
-    await store.create("cannot persist");
+    await store.insert({ text: "cannot persist", completed: false, createdAt: new Date(0) });
   } catch {
     rejected = true;
   }
@@ -206,12 +207,12 @@ test("local write failures remain visible and reject the mutation", async () => 
 test("a superseded local-write failure remains visible", async () => {
   const db = fakeDb();
   const counts = diagnostics();
-  const store = new ChecklistStore(db.value, counts);
+  const store = createTableStore<Row, RowInit>(db.value, table, counts);
   const firstWrite = db.deferNextWrite();
 
-  const firstMutation = store.create("first");
+  const firstMutation = store.insert({ text: "first", completed: false, createdAt: new Date(0) });
   await Promise.resolve();
-  await store.create("newer");
+  await store.insert({ text: "newer", completed: false, createdAt: new Date(0) });
   firstWrite.reject(new Error("first write lost"));
 
   let rejected = false;
@@ -229,12 +230,14 @@ test("a superseded local-write failure remains visible", async () => {
 
 test("retrying after failure clears the error status immediately", async () => {
   const db = fakeDb();
-  const store = new ChecklistStore(db.value, diagnostics());
+  const store = createTableStore<Row, RowInit>(db.value, table, diagnostics());
   db.failNextWrite("disk full");
-  await store.create("fails").catch(() => undefined);
+  await store.insert({ text: "fails", completed: false, createdAt: new Date(0) }).catch(() =>
+    undefined
+  );
   const retryWrite = db.deferNextWrite();
 
-  const retry = store.create("retry");
+  const retry = store.insert({ text: "retry", completed: false, createdAt: new Date(0) });
   await Promise.resolve();
   assert(store.getSnapshot().status === "ready", "retry must leave the failed list status");
   assert(store.getSnapshot().error === null, "retry must not render a null error message");
@@ -245,7 +248,7 @@ test("retrying after failure clears the error status immediately", async () => {
 
 test("public mutation errors update observable diagnostics", () => {
   const counts = diagnostics();
-  const store = new ChecklistStore(fakeDb().value, counts);
+  const store = createTableStore<Row, RowInit>(fakeDb().value, table, counts);
   store.reportMutationError({
     code: "WriteRejected",
     reason: "permission denied",

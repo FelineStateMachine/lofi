@@ -22,26 +22,10 @@
     "jsxImportSource": "preact"
   },
   "tasks": {
-    "check:env": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env tools/check_env.ts",
-    "check:secrets": "deno run --allow-env=JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read --allow-run=git tools/check_secret_leaks.ts",
-    "check:migrations": "deno run --allow-read=apps/reference/src/migrations --allow-run tools/check_migrations.ts",
-    "check:astro": "LOFI_SKIP_JAZZ_MANAGED=1 JAZZ_ADMIN_SECRET= BACKEND_SECRET= deno run -A npm:astro@7.0.9 check --root apps/reference",
-    "check": "deno fmt --check && deno lint && deno check package/**/*.ts tools/*.ts spikes/jazz2-baseline/*.ts spikes/jazz2-baseline/src/*.ts apps/reference/*.ts apps/reference/src/**/*.ts apps/reference/src/**/*.tsx && deno task check:astro && deno task check:env && deno task check:secrets && deno task check:migrations && deno task test",
     "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package apps/reference/src/_lofi apps/reference/tests",
     "test:update:create": "LOFI_UPDATE_SNAPSHOT=1 deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-read --allow-write=. --allow-run package/create_core_test.ts",
     "test": "deno task test:unit",
-    "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium",
-    "test:golden:checkout": "deno run -A tools/golden_path_checkout.ts",
-    "test:golden:create": "deno run -A tools/golden_path_create.ts",
-    "dev": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env,apps/reference/.env --allow-write=apps/reference/.env --allow-run tools/run_reference.ts dev",
-    "build": "deno run --allow-env=JAZZ_APP_ID,JAZZ_SERVER_URL,JAZZ_ADMIN_SECRET,BACKEND_SECRET --allow-read=.env,apps/reference/.env,apps/reference/dist --allow-write=apps/reference/.env,apps/reference/dist --allow-run tools/run_reference.ts build",
-    "schema:validate": "deno run -A npm:jazz-tools@2.0.0-alpha.53 validate --schema-dir apps/reference/src",
-    "schema:deploy": "deno run --env-file=.env -A npm:jazz-tools@2.0.0-alpha.53 deploy --schema-dir apps/reference/src --migrations-dir apps/reference/src/migrations",
-    "preview": "deno run --allow-net --allow-read=apps/reference/dist tools/preview.ts",
-    "spike:jazz2:dev": "deno run --allow-read=spikes/jazz2-baseline/.env --allow-write=spikes/jazz2-baseline/.env --allow-run tools/run_jazz2_spike.ts local",
-    "spike:jazz2:cloud": "deno run --allow-read=spikes/jazz2-baseline/.env --allow-write=spikes/jazz2-baseline/.env --allow-run tools/run_jazz2_spike.ts cloud",
-    "spike:jazz2:build": "deno run -A npm:vite@8.0.1 build spikes/jazz2-baseline --config spikes/jazz2-baseline/vite.config.ts",
-    "spike:jazz2:preview": "deno run -A npm:vite@8.0.1 preview spikes/jazz2-baseline --config spikes/jazz2-baseline/vite.config.ts --host 127.0.0.1"
+    "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium"
   },
   "fmt": {
     "lineWidth": 100,

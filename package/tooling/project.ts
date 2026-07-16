@@ -19,6 +19,10 @@ export type ProjectCheck = {
 };
 
 export async function projectChecks(root = Deno.cwd()): Promise<ProjectCheck[]> {
+  // The generic local-first scaffold every lofi project carries, independent of
+  // the app's domain. Islands, schema tables, and stores are author content and
+  // are intentionally not required here — a project stays valid after the starter
+  // example is replaced.
   const required = [
     "deno.json",
     "astro.config.ts",
@@ -26,8 +30,8 @@ export async function projectChecks(root = Deno.cwd()): Promise<ProjectCheck[]> 
     "src/permissions.ts",
     "src/app.ts",
     "src/pages/index.astro",
-    "src/islands/ChecklistIsland.tsx",
     "src/_lofi/boot.ts",
+    "src/_lofi/runtime.ts",
     "public/manifest.webmanifest",
     "public/sw.js",
   ];

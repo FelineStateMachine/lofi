@@ -1,36 +1,21 @@
-import type { Db, MutationErrorEvent } from "jazz-tools";
-import { referenceApp } from "../app.ts";
-import { serverUrl } from "./config.ts";
+import type { Db, MutationErrorEvent, QueryBuilder, TableProxy } from "jazz-tools";
+import type { RuntimeDiagnostics } from "./diagnostics.ts";
 
-export type ChecklistTask = {
-  id: string;
-  text: string;
-  completed: boolean;
-  createdAt: Date;
-};
+/** The minimum shape every persisted row exposes to the framework. */
+export type TableRow = { id: string };
 
-export type ChecklistSnapshot = {
+/**
+ * A declared schema table (`schema.<name>`). It is both an insert/update/delete
+ * target and a query source, so the store accepts the intersection Jazz expects.
+ * `T` is the row type and `Init` the insert type (row minus server-owned fields).
+ */
+export type TableHandle<T extends TableRow, Init> = TableProxy<T, Init> & QueryBuilder<T>;
+
+export type TableSnapshot<T extends TableRow> = {
   status: "loading" | "ready" | "error";
-  tasks: ChecklistTask[];
+  rows: T[];
   durability: "none" | "local" | "global" | "failed";
   error: string | null;
-};
-
-export type RuntimeDiagnostics = {
-  storageState: "persistent-requested" | "persistent-driver-open" | "failed";
-  clientsCreated: number;
-  activeClients: number;
-  activeConsumers: number;
-  activeVendorSubscriptions: number;
-  totalVendorSubscriptions: number;
-  activeMutationListeners: number;
-  totalMutationListeners: number;
-  unsubscribeCalls: number;
-  localWaitCalls: number;
-  pendingLocalWrites: number;
-  pendingGlobalWrites: number;
-  lastWriteDurability: "none" | "local" | "global" | "failed";
-  mutationErrors: number;
 };
 
 type Listener = () => void;
@@ -38,34 +23,55 @@ type MutationHandle = {
   wait(options: { tier: "local" | "global" }): Promise<unknown>;
 };
 
-export class ChecklistStore {
+export type TableStoreOptions = {
+  /** Whether managed sync is configured; gates global-durability waits. */
+  syncConfigured?: boolean;
+  /** Called whenever a diagnostics counter changes. */
+  onDiagnosticsChange?: () => void;
+};
+
+/**
+ * A generic, reactive store over a single declared table. It has no knowledge of
+ * the application schema beyond {@link TableRow}: callers bind it to one of their
+ * own `schema.<name>` tables and read/write typed rows through it.
+ */
+export class TableStore<T extends TableRow, Init> {
   readonly #db: Db;
+  readonly #table: TableHandle<T, Init>;
   readonly #diagnostics: RuntimeDiagnostics;
   readonly #syncConfigured: boolean;
   readonly #diagnosticsChanged: () => void;
   readonly #listeners = new Set<Listener>();
+  readonly #stopMutationErrors: () => void;
   #vendorUnsubscribe: (() => void) | null = null;
   #writeGeneration = 0;
-  #snapshot: ChecklistSnapshot = {
+  #snapshot: TableSnapshot<T> = {
     status: "loading",
-    tasks: [],
+    rows: [],
     durability: "none",
     error: null,
   };
 
   constructor(
     db: Db,
+    table: TableHandle<T, Init>,
     diagnostics: RuntimeDiagnostics,
-    syncConfigured = Boolean(serverUrl),
-    diagnosticsChanged: () => void = () => undefined,
+    options: TableStoreOptions = {},
   ) {
     this.#db = db;
+    this.#table = table;
     this.#diagnostics = diagnostics;
-    this.#syncConfigured = syncConfigured;
-    this.#diagnosticsChanged = diagnosticsChanged;
+    this.#syncConfigured = options.syncConfigured ?? false;
+    this.#diagnosticsChanged = options.onDiagnosticsChange ?? (() => undefined);
+    // Asynchronous write rejections that are not tied to an awaited mutation
+    // still have to reach diagnostics and the UI, so the store owns this listener.
+    this.#stopMutationErrors = db.onMutationError((event) => this.reportMutationError(event));
+    this.#diagnostics.activeMutationListeners += 1;
+    this.#diagnostics.totalMutationListeners += 1;
+    this.#diagnosticsChanged();
   }
 
-  getSnapshot = (): ChecklistSnapshot => this.#snapshot;
+  getSnapshot = (): TableSnapshot<T> => this.#snapshot;
 
   subscribe = (listener: Listener): () => void => {
     this.#listeners.add(listener);
@@ -85,29 +91,16 @@ export class ChecklistStore {
     };
   };
 
-  async create(text: string): Promise<void> {
-    const now = new Date();
-    await this.#settle(this.#db.insert(referenceApp.schema.tasks, {
-      text,
-      completed: false,
-      createdAt: now,
-    }));
+  async insert(values: Init): Promise<void> {
+    await this.#settle(this.#db.insert(this.#table, values));
   }
 
-  async update(id: string, text: string): Promise<void> {
-    await this.#settle(
-      this.#db.update(referenceApp.schema.tasks, id, { text }),
-    );
-  }
-
-  async setCompleted(id: string, completed: boolean): Promise<void> {
-    await this.#settle(
-      this.#db.update(referenceApp.schema.tasks, id, { completed }),
-    );
+  async update(id: string, patch: Partial<Init>): Promise<void> {
+    await this.#settle(this.#db.update(this.#table, id, patch));
   }
 
   async delete(id: string): Promise<void> {
-    await this.#settle(this.#db.delete(referenceApp.schema.tasks, id));
+    await this.#settle(this.#db.delete(this.#table, id));
   }
 
   reportMutationError(event: MutationErrorEvent): void {
@@ -119,8 +112,10 @@ export class ChecklistStore {
   close(): void {
     this.#listeners.clear();
     this.#diagnostics.activeConsumers = 0;
-    this.#diagnosticsChanged();
     this.#closeVendorSubscription();
+    this.#stopMutationErrors();
+    this.#diagnostics.activeMutationListeners -= 1;
+    this.#diagnosticsChanged();
   }
 
   async #settle(mutation: MutationHandle): Promise<void> {
@@ -169,11 +164,11 @@ export class ChecklistStore {
   #openVendorSubscription(): void {
     if (this.#vendorUnsubscribe) return;
     try {
-      this.#vendorUnsubscribe = this.#db.subscribeAll(referenceApp.schema.tasks, (delta) => {
+      this.#vendorUnsubscribe = this.#db.subscribeAll(this.#table, (delta) => {
         this.#snapshot = {
           ...this.#snapshot,
           status: "ready",
-          tasks: delta.all as ChecklistTask[],
+          rows: delta.all,
           error: null,
         };
         this.#emit();
@@ -195,7 +190,7 @@ export class ChecklistStore {
     this.#diagnosticsChanged();
   }
 
-  #set(change: Partial<ChecklistSnapshot>): void {
+  #set(change: Partial<TableSnapshot<T>>): void {
     this.#snapshot = { ...this.#snapshot, ...change };
     if (change.durability) {
       this.#diagnostics.lastWriteDurability = change.durability;
@@ -219,4 +214,13 @@ export class ChecklistStore {
   #emit(): void {
     for (const listener of this.#listeners) listener();
   }
+}
+
+export function createTableStore<T extends TableRow, Init>(
+  db: Db,
+  table: TableHandle<T, Init>,
+  diagnostics: RuntimeDiagnostics,
+  options: TableStoreOptions = {},
+): TableStore<T, Init> {
+  return new TableStore<T, Init>(db, table, diagnostics, options);
 }

@@ -5,7 +5,6 @@
   "license": "MIT",
   "exports": {
     "./build": "./package/commands/build.ts",
-    "./check": "./package/commands/check.ts",
     "./create": "./package/create.ts",
     "./dev": "./package/commands/dev.ts",
     "./doctor": "./package/commands/doctor.ts",

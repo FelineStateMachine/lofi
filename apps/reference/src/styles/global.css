@@ -45,17 +45,11 @@ h1 {
   max-width: 48rem;
 }
 
-.island-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
-  margin-top: 3rem;
-}
-
 .island {
   background: #22332c;
   border: 1px solid #3b594c;
   border-radius: 0.7rem;
+  margin-top: 3rem;
   min-height: 24rem;
   padding: 1.4rem;
 }
@@ -105,9 +99,7 @@ label {
   margin-bottom: 0.5rem;
 }
 
-.composer,
-.edit-form,
-.task-actions {
+.composer {
   display: flex;
   gap: 0.5rem;
 }
@@ -141,11 +133,6 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-.button-danger {
-  background: transparent;
-  color: #ffd6d6;
-}
-
 .state {
   color: #bed0c6;
   min-height: 1.5rem;
@@ -162,9 +149,8 @@ ul {
   align-items: center;
   background: #18231f;
   border-left: 3px solid #99e5bd;
-  display: grid;
+  display: flex;
   gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr) auto;
   padding: 0.75rem 0.9rem;
 }
 
@@ -190,10 +176,6 @@ ul {
   text-decoration: line-through;
 }
 
-.edit-form {
-  grid-column: 1 / -1;
-}
-
 .identity-note {
   background: #1d2b25;
   border: 1px solid #3b594c;
@@ -208,16 +190,6 @@ ul {
   color: #eff8f2;
 }
 
-.visually-hidden {
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  height: 1px;
-  overflow: hidden;
-  position: absolute;
-  white-space: nowrap;
-  width: 1px;
-}
-
 footer {
   color: #9bc9b1;
   margin-top: 2rem;
@@ -228,14 +200,8 @@ footer {
     padding: 2.5rem 1rem;
   }
 
-  .composer,
-  .edit-form,
-  .task-actions {
+  .composer {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .task {
-    grid-template-columns: 1fr;
   }
 }

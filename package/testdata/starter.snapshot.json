@@ -12,7 +12,7 @@
   "public/icon-maskable.svg": "ee58ff41c509ad51794de67c34b1f7f46591e6b20cfef5c8def57ad09269f55f",
   "public/manifest.webmanifest": "f378c86d6bbcfb446d2d5b0cddf5e15e90fa33c33c9dd83096e7d8505c8c78b9",
   "public/sw.js": "6fa9f4c4b5ef7baabd48256a91520c766a4ffaf75c261686384d6d13e663d0c2",
-  "README.md": "51bc0ed2070dc3f9e9cd1a44e205355a4f99690013ca4a83e63f6cf89be5079f",
+  "README.md": "cbb95ff6e4f562a115454261a694d9f5d094abfb97391645591fc3e7dc19ce44",
   "src/_lofi/boot.ts": "dd66bd1e5ddb88599a0cbadb2c2cf932993734843c7e5cf41d28b389560a32c7",
   "src/_lofi/checklist-store_test.ts": "0c0ebc75afa8702ad13fec9eaace14763a6d3ef52c3afa283ebfae33f90929d9",
   "src/_lofi/checklist-store.ts": "3a221882b72be6652b3ccfd5d1b058703ad84ae955c12515a301cec0f8708cd7",

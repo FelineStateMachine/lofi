@@ -56,13 +56,19 @@ export function createForegroundRecovery(options: {
     recovery = tracked;
     return tracked;
   };
+  const requestFromEvent = (reason: ForegroundRecoveryReason) => {
+    void request(reason).catch(() => {
+      // The state already records the failed recovery. Browser event callbacks
+      // have no promise consumer, so the failure must not become unhandled.
+    });
+  };
   const onPageShow = (event: Event) => {
-    if ((event as PageTransitionEvent).persisted === true) void request("pageshow");
+    if ((event as PageTransitionEvent).persisted === true) requestFromEvent("pageshow");
   };
   const onVisibilityChange = () => {
-    if (options.isVisible()) void request("visibilitychange");
+    if (options.isVisible()) requestFromEvent("visibilitychange");
   };
-  const onOnline = () => void request("online");
+  const onOnline = () => requestFromEvent("online");
   if (options.enabled) {
     options.pageTarget.addEventListener("pageshow", onPageShow);
     options.pageTarget.addEventListener("online", onOnline);

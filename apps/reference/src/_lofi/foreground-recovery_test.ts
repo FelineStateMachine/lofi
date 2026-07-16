@@ -107,3 +107,44 @@ test("local-only lifecycle attaches no reconnect behavior", async () => {
   assert(manager.getState().mode === "local-only", "local-only lifecycle mode was hidden");
   manager.dispose();
 });
+
+test("event recovery records a reconnect rejection without leaving it unhandled", async () => {
+  const page = new EventTarget();
+  const document = new EventTarget();
+  const manager = createForegroundRecovery({
+    enabled: true,
+    pageTarget: page,
+    visibilityTarget: document,
+    isVisible: () => true,
+    isOnline: () => true,
+    reconnect: () => Promise.reject(new Error("sentinel reconnect failure")),
+  });
+  page.dispatchEvent(event("online"));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert(manager.getState().status === "failed", "reconnect failure was not observable");
+  manager.dispose();
+});
+
+test("disposed lifecycle removes every browser event listener", async () => {
+  const page = new EventTarget();
+  const document = new EventTarget();
+  let reconnects = 0;
+  const manager = createForegroundRecovery({
+    enabled: true,
+    pageTarget: page,
+    visibilityTarget: document,
+    isVisible: () => true,
+    isOnline: () => true,
+    reconnect: () => {
+      reconnects += 1;
+      return Promise.resolve();
+    },
+  });
+  manager.dispose();
+  page.dispatchEvent(event("online"));
+  page.dispatchEvent(event("pageshow", { persisted: true }));
+  document.dispatchEvent(event("visibilitychange"));
+  await Promise.resolve();
+  assertCount(reconnects, 0, "disposed lifecycle retained a browser listener");
+});

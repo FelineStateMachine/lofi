@@ -16,8 +16,10 @@ import "../styles/global.css";
   </header>
   <TaskList client:load />
   <aside class="identity-note" aria-label="Identity and recovery">
-    <strong>Identity stays on this device.</strong> Clearing site data removes access because
-    passkey backup and recovery are not enabled in this starter.
+    <strong>Your data is local-first.</strong> Writes persist on this device immediately and, when
+    managed sync is configured, replicate to your account. Set <code>identity: "device-passkey"</code>
+    in <code>src/app.ts</code> to make a portable passkey the account — the same key then syncs this
+    data to your other devices. lofi runs no recovery service: the account lives where the key lives.
   </aside>
   <DeviceStatus client:load />
   <footer>Thin Preact adapter · static Astro shell · Deno command surface</footer>

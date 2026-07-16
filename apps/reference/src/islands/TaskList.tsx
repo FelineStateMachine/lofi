@@ -40,7 +40,15 @@ export default function TaskList() {
       <p class="state" role="status">
         {status === "loading" && "Opening persistent storage…"}
         {status === "error" && `Write failed: ${error}`}
-        {status === "ready" && `${tasks.length} item(s) · last write ${durability}`}
+        {status === "ready" && `${tasks.length} item(s) · ${
+          durability === "global"
+            ? "synced to your account"
+            : durability === "local"
+            ? "saved on this device"
+            : durability === "failed"
+            ? "write failed"
+            : "ready"
+        }`}
       </p>
       <ul aria-label="Tasks">
         {tasks.map((task) => (

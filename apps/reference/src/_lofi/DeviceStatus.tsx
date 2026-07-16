@@ -1,9 +1,14 @@
+import { referenceApp } from "../app.ts";
+import { serverUrl } from "./config.ts";
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "./ui-mutation.ts";
 
 export default function DeviceStatus() {
   const { report, requestPersistence } = useDeviceCapabilities();
   if (!report) return <p class="device-status">Checking durable-storage capabilities…</p>;
+
+  const passkeyIdentity = referenceApp.identity === "device-passkey";
+  const synced = Boolean(serverUrl);
 
   return (
     <section class="device-status" aria-labelledby="device-status-title">
@@ -40,11 +45,15 @@ export default function DeviceStatus() {
         </div>
         <div>
           <dt>Identity</dt>
-          <dd>device-local key</dd>
+          <dd>{passkeyIdentity ? "passkey account" : "device-local key"}</dd>
         </div>
         <div>
-          <dt>Passkey backup</dt>
-          <dd>blocked by alpha security review</dd>
+          <dt>Sync</dt>
+          <dd>{synced ? "syncing to your account" : "local-only"}</dd>
+        </div>
+        <div>
+          <dt>Account portability</dt>
+          <dd>{passkeyIdentity ? "travels with your passkey" : "stays on this device"}</dd>
         </div>
       </dl>
       <button type="button" onClick={() => void settleUiMutation(requestPersistence())}>
@@ -55,8 +64,9 @@ export default function DeviceStatus() {
         not mean the Jazz driver is using memory.
       </p>
       <p>
-        Clearing site data destroys the device-local identity unless a separate recovery mechanism
-        has been verified. This reference does not claim passkey recovery.
+        {passkeyIdentity
+          ? "The passkey is the account: it lives wherever the key lives and reaches every device that key can. There is no recovery service — lose every copy of the key and the account is gone."
+          : 'Clearing site data destroys the device-local identity. This reference claims no recovery; set identity: "device-passkey" in src/app.ts for a portable, cross-device account.'}
       </p>
     </section>
   );

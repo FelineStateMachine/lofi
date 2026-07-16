@@ -53,7 +53,8 @@ M4 may replace selected generated `_lofi` files with imports from the single `@n
 
 ### Author-owned application
 
-- `src/app.ts` — **author-owned** — selects the schema and named sync/storage configuration.
+- `src/app.ts` — **author-owned** — selects the schema, sync/storage configuration, and trusted
+  credential-origin patterns.
 - `src/islands/ChecklistIsland.tsx` — **author-owned** — implements product interaction through
   sanctioned lofi hooks.
 - `src/pages/index.astro` — **author-owned** — composes the product page and generated device gate.
@@ -76,8 +77,9 @@ M4 may replace selected generated `_lofi` files with imports from the single `@n
   durability, pending work, and mutation failures; follows the store.
 - `src/_lofi/config.ts` — **generated `_lofi`** — projects the validated public Jazz pair into the
   runtime database configuration; M4 candidate for `@nzip/lofi/core` or `@nzip/lofi/sync`.
-- `src/_lofi/device-capabilities.ts` — **generated `_lofi`** — gates durable storage and classifies
-  secure credential origins and client capabilities; M4 candidate for `@nzip/lofi/core`.
+- `src/_lofi/device-capabilities.ts` — **generated `_lofi`** — gates durable storage and applies the
+  author's credential-origin policy to secure origins and client capabilities; M4 candidate for
+  `@nzip/lofi/core`.
 - `src/_lofi/device-capabilities_test.ts` — **generated `_lofi`** — verifies durability remediation
   and stable RP-ID classification; follows the capability module.
 - `src/_lofi/foreground-recovery.ts` — **generated `_lofi`** — single-flights managed reconnect

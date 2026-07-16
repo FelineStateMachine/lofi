@@ -16,7 +16,8 @@ authenticator.
 - Production PWA evidence: build with `deno task build`, then publish that exact output through nzip
   without changing its stable address.
 - Any future WebAuthn ceremony must use `location.hostname` as its RP ID. Do not enroll a credential
-  on localhost, an IP address, or a disposable tunnel hostname.
+  on localhost, an IP address, a disposable tunnel hostname, or a hostname absent from the
+  author-owned `referenceApp.credentialOrigins` exact/wildcard list.
 
 ## Device matrix
 

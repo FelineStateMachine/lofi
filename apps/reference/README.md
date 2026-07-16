@@ -36,8 +36,9 @@ developer-run gates.
 Passkey backup and recovery are intentionally absent. The pinned Jazz alpha exposes a rejected
 credential design, so this reference uses a device-local identity and does not imply recoverability.
 
-For live physical-device development, run `deno task --tunnel dev`. The stable `*.deno.net` hostname
-is the future credential RP ID via `location.hostname`; localhost, IP addresses, and disposable
-origins are rejected or left unverified. Use a built nzip artifact for production service-worker,
-install, and offline cold-start evidence. The manual gate is
-[the M3 device checklist](../../docs/m3-device-checklist.md).
+For live physical-device development, run `deno task --tunnel dev`. The author-owned
+`referenceApp.credentialOrigins` list decides which exact or wildcard HTTPS hostnames are stable
+credential origins; the reference seeds Deno Tunnel and nzip patterns. A future ceremony still uses
+`location.hostname` as its exact RP ID, while localhost, IP addresses, and unconfigured origins are
+rejected or left unverified. Use a built nzip artifact for production service-worker, install, and
+offline cold-start evidence. The manual gate is [the M3 device checklist](../../docs/m3-device-checklist.md).

@@ -121,17 +121,18 @@ export default function AccountGate() {
           <button
             type="button"
             disabled={disabled}
-            onClick={() =>
+            onClick={() => {
+              if (phrase) {
+                setPhrase(null);
+                return;
+              }
               run("reveal", async () => {
                 await confirmPhraseAccess();
                 setPhrase(await revealRecoveryPhrase());
-              })}
+              });
+            }}
           >
-            {busy === "reveal"
-              ? "Revealing…"
-              : phrase
-              ? "Show phrase again"
-              : "Show recovery phrase"}
+            {busy === "reveal" ? "Revealing…" : phrase ? "Hide phrase" : "Show recovery phrase"}
           </button>
           {!session.phraseGuarded && (
             <button

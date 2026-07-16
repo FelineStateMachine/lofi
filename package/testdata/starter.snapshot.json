@@ -38,7 +38,7 @@
   "src/_lofi/use-device-capabilities.ts": "f7c7b2321b400d8076a5347e0f1ff2924623535979d48a2d94a69f825b93841e",
   "src/app.ts": "7e65c5308f645164357b02944d1e265f2be942686a634c552add14cfb8fd384f",
   "src/env.d.ts": "b44daed05ec5cdfacfd8d8acf7866974b5f6b8db923ab53bd244419093c719da",
-  "src/islands/AccountGate.tsx": "11c7d59edc61400c0e15592112f74dd4d3b33ba3e67a1263d51b30389b5b0482",
+  "src/islands/AccountGate.tsx": "7355d496180ee45a6144f10b96d1ec39e2d4427ffeab6e574c9b78a601480138",
   "src/islands/TaskList.tsx": "a3d054078819ea8b5609a014e94878bf1b21b2908c340237ed029e80e58f2349",
   "src/islands/use-tasks.ts": "1df5748b14427755352b8438977ce8720abc42f1e2f69bf1e927ceaa52166246",
   "src/pages/index.astro": "6bcbcbd1c1aad8d55855e5f52473b7a7711c439d4877ef54fe7f6f5d4f88ec3c",

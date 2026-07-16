@@ -35,6 +35,17 @@ cd my-app
 deno task dev
 ```
 
+For the same live application on a stable HTTPS origin and physical phone:
+
+```sh
+deno task --tunnel dev
+```
+
+Deno Tunnel is the first-class device-development path. The Deno Deploy application needs only the
+public `JAZZ_APP_ID`/`JAZZ_SERVER_URL` pair in its Local environment for cloud sync; lofi strips
+Deploy tokens and server-only values before Astro starts. Production install and offline cold-start
+evidence uses the exact built output on a stable nzip address.
+
 From there a developer makes a retained local write, reloads it, works offline, runs checks, builds,
 previews, and opens the same stable secure origin on a physical phone — with Deno as the only
 required global runtime and a command surface of exactly seven verbs: `create`, `dev`, `doctor`,
@@ -61,13 +72,14 @@ deno task dev
 
 ### Command surface
 
-| Command             | What it does today                                                       |
-| ------------------- | ------------------------------------------------------------------------ |
-| `deno task dev`     | Serves the prototype; prints URL plus storage, identity, and sync state. |
-| `deno task check`   | Format, lint, type, Astro, env-contract, and secret-leak checks.         |
-| `deno task test`    | Deterministic local-first tests (no hand-timed sleeps).                  |
-| `deno task build`   | Production build through the supported Deno path.                        |
-| `deno task preview` | Serves the production build.                                             |
+| Command                  | What it does today                                                       |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `deno task dev`          | Serves the prototype; prints URL plus storage, identity, and sync state. |
+| `deno task --tunnel dev` | Serves the same app at its stable Deno Deploy HTTPS origin.              |
+| `deno task check`        | Format, lint, type, Astro, env-contract, and secret-leak checks.         |
+| `deno task test`         | Deterministic local-first tests (no hand-timed sleeps).                  |
+| `deno task build`        | Production build through the supported Deno path.                        |
+| `deno task preview`      | Serves the production build.                                             |
 
 `create` and `doctor` have graduated through the source-backed generated-project golden journey and
 clean-room review. The public JSR invocation remains unavailable until publication and its

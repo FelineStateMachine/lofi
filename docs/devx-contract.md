@@ -110,7 +110,7 @@ required global runtime for a generated application.
 | DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                                                                                | #3, #4, #6                       | yes     | validated |
 | DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI identifies the device-local key, blocks the rejected alpha passkey path, and defines any future phrase as an identity bearer secret rather than data backup. | #8                               | yes     | revised   |
 | DX-DEVICE-01    | Device/auth tests use a stable, appropriately isolated origin. | M1 proves a stable HTTPS PWA scope for OPFS; installed-app RP-ID preservation and identity isolation remain required before any replacement passkey ceremony.   | #4 and #8                        | yes     | revised   |
-| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                                                                             | M3                               | no      | proposed  |
+| DX-DEVICE-UX-01 | Device preview is one productized command.                     | `deno task --tunnel dev` prints the stable Deno Deploy URL; lofi reports capability and remediation. Physical evidence remains required.                        | M3 #19                           | no      | proposed  |
 | DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                                                                                    | feasibility #4; full M3          | no      | proposed  |
 | DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                                                                                  | #6                               | yes     | validated |
 | DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                                                                                  | #7 and M2 Layer 3                | no      | validated |
@@ -121,15 +121,16 @@ These outputs are implemented and verified from M2 source. The `create` registry
 conditional on an explicitly authorized publish and registry-backed smoke; the generated command
 surface itself is covered by the source-backed golden journey.
 
-| Command                                    | Success output must contain                                | Failure output must contain                                                |
-| ------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `deno run -A jsr:@nzip/lofi/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command. |
-| `deno task dev`                            | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                   |
-| `deno task doctor`                         | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.      |
-| `deno task check`                          | Checks run and concise pass summary.                       | First failing check and rerun command.                                     |
-| `deno task test`                           | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.         |
-| `deno task build`                          | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                |
-| `deno task preview`                        | Production URL and build identity.                         | Missing/stale build and exact build command.                               |
+| Command                                    | Success output must contain                                | Failure output must contain                                                  |
+| ------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `deno run -A jsr:@nzip/lofi/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command.   |
+| `deno task dev`                            | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                     |
+| `deno task --tunnel dev`                   | Stable Deno Deploy HTTPS URL; same lofi capability output. | Missing Deploy app/auth plus the one-time setup action; never secret values. |
+| `deno task doctor`                         | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.        |
+| `deno task check`                          | Checks run and concise pass summary.                       | First failing check and rerun command.                                       |
+| `deno task test`                           | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.           |
+| `deno task build`                          | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                  |
+| `deno task preview`                        | Production URL and build identity.                         | Missing/stale build and exact build command.                                 |
 
 Example successful development output:
 
@@ -140,7 +141,15 @@ Storage:     OPFS durable
 Identity:    local-first; passkey backup not configured
 Sync:        configured; last write confirmed global; live connection detail unavailable
 PWA:         development service worker disabled
+HTTPS dev:   deno task --tunnel dev (stable Deno Deploy project origin)
+PWA device:  build and publish with nzip for production service-worker evidence
 ```
+
+The tunnel is the first-class live-device path because lofi is a Deno framework. It may import the
+Deno Deploy application's Local environment into the task process, but lofi projects only
+`JAZZ_APP_ID` and `JAZZ_SERVER_URL` into Astro and clears Deploy tokens plus server-only values.
+Production installation and offline cold-start use the built output on a stable nzip address. See
+the [M3 physical-device checklist](m3-device-checklist.md).
 
 Example configuration failure:
 

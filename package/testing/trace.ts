@@ -121,7 +121,11 @@ export function writeTraceArchive(entries: Readonly<Record<string, Uint8Array>>)
   return concatenate([...localParts, central, end.bytes]);
 }
 
-/** Sanitize every text entry in the intentionally snapshot-free trace archive. */
+/**
+ * Sanitize an intentionally snapshot-free trace archive. Response/source
+ * resources are omitted because they can contain arbitrary private bytes; the
+ * action and network metadata remain useful for failure diagnosis.
+ */
 export async function sanitizeTraceArchive(
   path: string,
   redact: (value: string) => string,
@@ -129,6 +133,7 @@ export async function sanitizeTraceArchive(
   const entries = await readTraceArchive(path);
   const sanitized: Record<string, Uint8Array> = {};
   for (const [name, bytes] of Object.entries(entries)) {
+    if (name.startsWith("resources/")) continue;
     sanitized[name] = UTF8.encode(redact(TEXT.decode(bytes)));
   }
   await Deno.writeFile(path, writeTraceArchive(sanitized));

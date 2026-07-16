@@ -5,7 +5,12 @@ import {
   runConcurrentOfflineConvergence,
 } from "@nzip/lofi/testing";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
-import { environmentNames, validateEnvironment } from "./env_contract.ts";
+import {
+  clientEnvironmentNames,
+  environmentNames,
+  serverEnvironmentNames,
+  validateEnvironment,
+} from "./env_contract.ts";
 import {
   artifactPaths,
   type CapturedProcess,
@@ -26,6 +31,8 @@ import {
 } from "./golden_path_core.ts";
 import { loadEnvironment } from "./load_env.ts";
 import { checklistUi } from "../apps/reference/src/ui-contract.ts";
+import { redactDiagnosticText } from "../package/testing/safety.ts";
+import { readTraceArchive, sanitizeTraceArchive } from "../package/testing/trace.ts";
 import { assert } from "./assert.ts";
 
 export type GoldenPathCommands = {
@@ -193,12 +200,10 @@ async function restartClientThroughInspector(
   retainedItem: string,
   timeoutMs: number,
 ): Promise<void> {
+  const identity = await armIdentityComparison(page);
   const before = await page.evaluate(() => ({
     timeOrigin: performance.timeOrigin,
     url: location.href,
-    identity: JSON.stringify(
-      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
-    ),
   }));
   const navigated = page.waitForEvent("domcontentloaded", { timeout: timeoutMs });
   await page.getByRole("button", { name: "Restart client" }).click();
@@ -206,13 +211,13 @@ async function restartClientThroughInspector(
   const after = await page.evaluate(() => ({
     timeOrigin: performance.timeOrigin,
     url: location.href,
-    identity: JSON.stringify(
-      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
-    ),
   }));
   assert(after.timeOrigin !== before.timeOrigin, "inspector restart did not replace the document");
   assert(after.url === before.url, "inspector restart changed the application URL");
-  assert(after.identity === before.identity, "inspector restart changed the device identity");
+  assert(
+    await identityComparisonMatches(page, identity.token),
+    "inspector restart changed the device identity",
+  );
   await waitForItem(page, islandLabels, retainedItem);
   for (const label of islandLabels) {
     const island = page.locator("[data-island]").filter({ hasText: label });
@@ -222,6 +227,39 @@ async function restartClientThroughInspector(
     });
   }
   await assertRuntimeCardinality(page, islandLabels);
+}
+
+async function armIdentityComparison(page: Page): Promise<{ token: string; present: boolean }> {
+  const token = crypto.randomUUID();
+  const present = await page.evaluate(async (comparisonToken) => {
+    const identity = JSON.stringify(
+      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)),
+    );
+    const hex = Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    (globalThis as typeof globalThis & { name: string }).name =
+      `lofi-golden:${comparisonToken}:${hex}`;
+    return identity !== "[]";
+  }, token);
+  return { token, present };
+}
+
+async function identityComparisonMatches(page: Page, token: string): Promise<boolean> {
+  return await page.evaluate(async (comparisonToken) => {
+    const browserGlobal = globalThis as typeof globalThis & { name: string };
+    const expected = browserGlobal.name;
+    browserGlobal.name = "";
+    const identity = JSON.stringify(
+      Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)),
+    );
+    const hex = Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    return expected === `lofi-golden:${comparisonToken}:${hex}`;
+  }, token);
 }
 
 async function exerciseHmr(
@@ -285,27 +323,17 @@ async function exerciseReplicaClear(
     await addItem(page, islandLabels[0], replicaClearBody);
     await waitForItem(page, islandLabels, replicaClearBody);
     await waitForLocalDurability(page);
-    const identityBefore = await page.evaluate(() =>
-      JSON.stringify(
-        Object.entries(globalThis.localStorage).sort(([left], [right]) =>
-          left.localeCompare(right)
-        ),
-      )
-    );
-    assert(identityBefore !== "[]", "replica-clear fixture did not create an identity state");
+    const identity = await armIdentityComparison(page);
+    assert(identity.present, "replica-clear fixture did not create an identity state");
     const navigated = page.waitForEvent("domcontentloaded", { timeout: timeoutMs });
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Clear local replica" }).click();
     await navigated;
     await waitForItemAbsent(page, islandLabels, replicaClearBody);
-    const identityAfter = await page.evaluate(() =>
-      JSON.stringify(
-        Object.entries(globalThis.localStorage).sort(([left], [right]) =>
-          left.localeCompare(right)
-        ),
-      )
+    assert(
+      await identityComparisonMatches(page, identity.token),
+      "replica clear changed the device-local identity",
     );
-    assert(identityBefore === identityAfter, "replica clear changed the device-local identity");
   } finally {
     await context.close();
   }
@@ -347,7 +375,7 @@ async function observeReconnectSettlement(
     const failure = page.getByRole("status").filter({ hasText: checklistUi.writeFailed }).first();
     await global.or(failure).waitFor({
       state: "visible",
-      timeout: Math.min(timeoutMs, 10_000),
+      timeout: timeoutMs,
     });
     if (await failure.isVisible()) {
       throw new Error((await failure.textContent()) ?? "Write failed");
@@ -355,7 +383,7 @@ async function observeReconnectSettlement(
     return {
       name: "development reconnect settlement",
       status: "passed",
-      detail: "The configured development server exposed global settlement after network return.",
+      detail: "The configured server exposed global settlement after reconnection.",
     };
   } catch {
     throw new Error(
@@ -381,7 +409,10 @@ async function journeyEnvironment(
     );
   }
   const allowlisted = { ...isolated };
-  for (const name of environmentNames) allowlisted[name] = configured[name]?.trim() ?? "";
+  for (const name of clientEnvironmentNames) {
+    allowlisted[name] = configured[name]?.trim() ?? "";
+  }
+  for (const name of serverEnvironmentNames) allowlisted[name] = "";
   return await installNodeSentinel(allowlisted, artifactRoot);
 }
 
@@ -595,6 +626,49 @@ async function screenshotFailure(page: Page | null, path: string): Promise<void>
   }
 }
 
+function byteSequencePresent(haystack: Uint8Array, needle: Uint8Array): boolean {
+  if (needle.length === 0 || haystack.length < needle.length) return false;
+  outer:
+  for (let offset = 0; offset <= haystack.length - needle.length; offset++) {
+    for (let index = 0; index < needle.length; index++) {
+      if (haystack[offset + index] !== needle[index]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
+
+async function sanitizeRetainedTrace(
+  path: string,
+  configuredValues: readonly string[],
+): Promise<void> {
+  await sanitizeTraceArchive(
+    path,
+    (value) => redactDiagnosticText(value, configuredValues),
+  );
+  const entries = await readTraceArchive(path);
+  assert(
+    Object.keys(entries).every((name) => !name.startsWith("resources/")),
+    "sanitized trace retained a response/source resource",
+  );
+  const encoder = new TextEncoder();
+  for (const configured of configuredValues.filter(Boolean)) {
+    const needle = encoder.encode(configured);
+    assert(
+      Object.values(entries).every((bytes) => !byteSequencePresent(bytes, needle)),
+      "sanitized trace retained a configured environment value",
+    );
+  }
+  const traceText = Object.entries(entries)
+    .filter(([name]) => name.endsWith(".trace"))
+    .map(([, bytes]) => new TextDecoder().decode(bytes))
+    .join("\n");
+  assert(
+    !/"identity"\s*:\s*"[^"\n]+"/.test(traceText),
+    "sanitized trace retained an identity-valued Playwright result",
+  );
+}
+
 function commandFailure(record: CommandRecord): Error {
   return new Error(
     `${record.name} failed with exit ${record.exitCode}; rerun ${Deno.execPath()} ${
@@ -645,7 +719,14 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   const commands = { ...defaultCommands, ...options.commands };
   const islandLabels = options.islandLabels ?? ["North island", "South island"];
   const environment = await journeyEnvironment(sourceRoot, environmentMode, artifacts.root);
-  const redactValues = environmentNames.map((name) => environment[name]).filter(Boolean);
+  const configuredEnvironment = await loadEnvironment(join(sourceRoot, ".env"));
+  const redactValues = [
+    ...new Set(
+      environmentNames.flatMap((name) => [configuredEnvironment[name], environment[name]]).filter(
+        Boolean,
+      ),
+    ),
+  ];
   const commit = await sourceRevision(revisionRoot, environment);
   const commandRecords: CommandRecord[] = [...options.initialCommands ?? []];
   const assertions: JourneyAssertion[] = [];
@@ -716,6 +797,19 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
       status: "passed",
       detail: "No forbidden runtime, worker, transport, Workbox, or capability plumbing found.",
     });
+    if (environmentMode === "cloud-from-root") {
+      assert(
+        clientEnvironmentNames.every((name) => Boolean(environment[name])) &&
+          serverEnvironmentNames.every((name) => environment[name] === ""),
+        "cloud child environment did not isolate server credentials",
+      );
+      assertions.push({
+        name: "cloud credential isolation",
+        status: "passed",
+        detail:
+          "The application child received only the public Jazz pair; server credentials were explicitly blank.",
+      });
+    }
 
     if (commands.doctor) {
       const doctor = await runCapturedCommand({
@@ -746,7 +840,7 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     browserVersion = browser.version();
     report.runtime.browser = browserVersion;
     context = await browser.newContext();
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+    await context.tracing.start({ screenshots: false, snapshots: false, sources: false });
     page = await context.newPage();
 
     const port = reserveLocalPort();
@@ -868,21 +962,36 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
 
     await addItem(page, islandLabels[0], disposableBody);
     await waitForItem(page, islandLabels, disposableBody);
+    if (environmentMode === "cloud-from-root") {
+      await observeReconnectSettlement(page, timeoutMs, true);
+    }
     await deleteItem(page, disposableBody);
     await waitForItemAbsent(page, islandLabels, disposableBody);
+    if (environmentMode === "cloud-from-root") {
+      const online = await observeReconnectSettlement(page, timeoutMs, true);
+      assertions.push({
+        ...online,
+        name: "development online settlement",
+        detail:
+          "The online insert and delete reached global durability before the inspector paused transport.",
+      });
+    }
     assertions.push({
       name: "accessible CRUD",
       status: "passed",
       detail: "Create, update, complete, and delete worked through named author-facing controls.",
     });
 
-    if (environmentMode === "cloud-from-root") await setReferenceConnection(page, false);
-    await context.setOffline(true);
+    if (environmentMode === "cloud-from-root") {
+      await setReferenceConnection(page, false);
+    } else {
+      await context.setOffline(true);
+    }
     await addItem(page, islandLabels[1], offlineDevelopmentBody);
     await waitForItem(page, islandLabels, offlineDevelopmentBody);
     await waitForLocalDurability(page);
-    await context.setOffline(false);
     if (environmentMode === "cloud-from-root") await setReferenceConnection(page, true);
+    else await context.setOffline(false);
     assertions.push(
       await observeReconnectSettlement(page, timeoutMs, environmentMode === "cloud-from-root"),
     );
@@ -891,7 +1000,9 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
     assertions.push({
       name: "development offline write",
       status: "passed",
-      detail: "A loaded page accepted a local write offline and retained it after network return.",
+      detail: environmentMode === "cloud-from-root"
+        ? "A loaded page accepted a local write while Jazz transport was paused and retained it after transport resumed."
+        : "A loaded page accepted a local write offline and retained it after network return.",
     });
 
     if (environmentMode === "isolated-local") {
@@ -1050,7 +1161,31 @@ export async function runJourney(options: GoldenPathOptions): Promise<JourneyRep
   } finally {
     if (context) {
       await context.setOffline(false).catch(() => undefined);
-      await context.tracing.stop({ path: artifacts.trace }).catch(() => undefined);
+      try {
+        await context.tracing.stop({ path: artifacts.trace });
+        await sanitizeRetainedTrace(artifacts.trace, redactValues);
+        assertions.push({
+          name: "trace artifact safety",
+          status: "passed",
+          detail:
+            "The snapshot-free retained trace omitted response/source resources, identity-valued results, and configured environment values.",
+        });
+      } catch (error) {
+        await Deno.remove(artifacts.trace).catch(() => undefined);
+        const traceFailure = new Error(
+          `retained trace could not be made value-free: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          { cause: error },
+        );
+        if (!failure) failure = traceFailure;
+        report.status = "failed";
+        assertions.push({
+          name: "trace artifact safety",
+          status: "failed",
+          detail: traceFailure.message,
+        });
+      }
     }
     await preview?.stop().catch(() => undefined);
     await dev?.stop().catch(() => undefined);

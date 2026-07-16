@@ -62,7 +62,10 @@ Deno.test("trace archives are sanitized without losing their structure", async (
       '{"type":"console","text":"token=trace-secret","authorization":"Bearer auth-secret"}\n';
     await Deno.writeFile(
       path,
-      writeTraceArchive({ "trace.trace": new TextEncoder().encode(trace) }),
+      writeTraceArchive({
+        "trace.trace": new TextEncoder().encode(trace),
+        "resources/private.dat": new TextEncoder().encode("literal-private-resource"),
+      }),
     );
     await sanitizeTraceArchive(path, (value) => redactDiagnosticText(value, ["trace-secret"]));
     const entries = await readTraceArchive(path);
@@ -71,6 +74,7 @@ Deno.test("trace archives are sanitized without losing their structure", async (
     assert(!result.includes("auth-secret"), result);
     assert(result.includes("[redacted]"), result);
     JSON.parse(result);
+    assert(!("resources/private.dat" in entries), "private trace resource was retained");
   } finally {
     await Deno.remove(directory, { recursive: true });
   }

@@ -1,11 +1,12 @@
 # The key is the account
 
-lofi's optional identity model: **a passkey _is_ the account.** The Jazz account secret is derived
+lofi's default identity model: **a passkey _is_ the account.** The Jazz account secret is derived
 from the credential, so the account lives wherever the key lives — and moves between devices exactly
 as far as the key does.
 
-This is opt-in. The default identity is `device-local` (each device gets its own random account).
-Set `identity: "device-passkey"` in `src/app.ts` to switch.
+This is the default (`identity: "device-passkey"` in `src/app.ts`). Set `identity: "device-local"`
+for a random, device-bound account with no sign-in (each device gets its own account, and it never
+leaves that device).
 
 ## How it works
 
@@ -19,15 +20,23 @@ account secret = base64url( HKDF-SHA-256( PRF(passkey, fixed-salt) ) )
 The same credential always derives the same account. No account material is stored on any server; it
 is a pure function of the key.
 
-### Boot flow (`device-passkey`)
+### Boot flow (`device-passkey`, the default)
 
-- **First boot on a device** → passkey ceremony → derive the secret → hand it to Jazz → cache it
-  locally (`BrowserAuthSecretStore.saveSecret`).
-- **Return boots** → the cached secret is used; no ceremony. "Identity never waits" still holds for
-  the common path.
-- **A new device** → the same portable key → the same PRF → the same secret → the same Jazz account
-  → your data syncs down and decrypts. Jazz already E2E-encrypts synced data keyed on the account,
-  so nothing extra is needed for confidentiality.
+- **First boot on a device** → the runtime finds no cached secret and stays signed-out; the
+  **AccountGate** island (`src/islands/AccountGate.tsx`) shows a sign-in card. A WebAuthn ceremony
+  needs a user gesture, so this is a button, not an automatic prompt.
+- **Sign in / create account** (a click) → derive the secret from the passkey → hand it to Jazz →
+  cache it locally (`BrowserAuthSecretStore.saveSecret`) → recreate the runtime so data opens.
+- **Return boots** → the cached secret is used; no ceremony. "Identity never waits" holds once you
+  are signed in on a device.
+- **A new device** → sign in with the same portable key → the same PRF → the same secret → the same
+  Jazz account → your data syncs down and decrypts. Jazz already E2E-encrypts synced data keyed on
+  the account, so nothing extra is needed for confidentiality.
+- **Sign out** → forgets the cached secret on this device only (`clearSecret`); the passkey is
+  untouched and signs back into the same account.
+
+The framework side of this lives in `src/_lofi/session.ts` (`readSession`, `createPasskeyAccount`,
+`signInWithPasskey`, `signOut`); the gate is the author-owned example you can restyle or replace.
 
 ## Portable vs device-bound — and telling the user which they chose
 
@@ -57,27 +66,40 @@ can see which account a key unlocks.
 
 - **Feature-detected.** `getAuthCapability()` reports `webAuthn` + `prf`; if PRF is unavailable,
   derivation throws `prf-unavailable` rather than fabricating a secret.
-- **Origin-gated.** Enrollment and derivation refuse unless the origin is `stable` (an
-  author-committed hostname in `credentialOrigins`), because a passkey silently breaks if its origin
-  changes.
+- **Origin-gated.** Enrollment and derivation refuse insecure origins (non-HTTPS, bare IPs) and any
+  host an explicit `credentialOrigins` allowlist excludes — a passkey silently breaks if its origin
+  changes. With no allowlist, the served origin is trusted so the app works wherever you deploy it
+  (see [Origin trust](#origin-trust)).
 
-## Enabling it
+## Origin trust
+
+A passkey binds to its origin hostname (its RP ID) and silently breaks if that host changes. lofi
+reads the current origin automatically; `credentialOrigins` is a separate promise that a host is
+**permanent**:
 
 ```ts
 // src/app.ts
-identity: "device-passkey",
-credentialOrigins: ["app.example.com"], // your committed-stable hostname(s)
+credentialOrigins: [], // empty → trust the origin you are served from (works anywhere you deploy)
+credentialOrigins: ["app.example.com", "*.example.com"], // pin permanent host(s) before shipping
 ```
+
+Left empty, the served origin is trusted so the app works on any deployment, but a passkey enrolled
+there dies if the host later changes (e.g. an ephemeral preview URL). Pin your permanent hostname(s)
+once you have committed to them. Loopback (`localhost`) is trusted for local development but
+reported as `local-only` because such credentials do not transfer between machines.
+
+## Using the primitives directly
+
+The default `device-passkey` wiring is done for you by `src/_lofi/session.ts` and the AccountGate
+island. To drive it yourself:
 
 ```ts
-import { deriveAuthSecret, enrollDeviceCredential, getAuthCapability } from "./_lofi/auth.ts";
+import { deriveAccount, getAuthCapability } from "./_lofi/auth.ts";
 
 const { prf, origin } = await getAuthCapability();
-if (prf === "available" && origin.status === "stable") {
-  const cred = await enrollDeviceCredential({ label: "work account" });
-  // cred.portable === true  → the account will travel with this key
-  const secret = await deriveAuthSecret(); // the Jazz account secret
+if (prf !== "unavailable" && origin.status !== "blocked") {
+  // One user-gesture ceremony: derive the Jazz account secret and learn which key unlocked it.
+  const { secret, credential } = await deriveAccount();
+  // credential.portable === true → the account travels with this key
 }
 ```
-
-The runtime does this wiring for you when `identity: "device-passkey"`.

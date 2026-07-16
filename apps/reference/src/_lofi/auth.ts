@@ -218,13 +218,26 @@ function currentOrigin(trustedOrigins?: readonly string[]): CredentialOriginRepo
   if (typeof location === "undefined") {
     return { status: "blocked", rpId: "", action: "open the application in a browser" };
   }
-  return classifyCredentialOrigin(new URL(location.href), trustedOrigins);
+  const url = new URL(location.href);
+  const declared = trustedOrigins ?? referenceApp.credentialOrigins ?? [];
+  // Default trust is the origin you are actually served from: the passkey binds
+  // to this hostname (its RP ID) regardless, so trusting it lets the app work
+  // wherever it is deployed. Pin explicit hosts in `app.ts` `credentialOrigins`
+  // to keep enrollment working across a host change — a passkey silently breaks
+  // if its origin moves.
+  const trusted = declared.length > 0 ? declared : [url.hostname];
+  return classifyCredentialOrigin(url, trusted);
 }
 
 function requireStableRpId(dependencies: AuthDependencies): string {
   if (dependencies.rpId) return dependencies.rpId;
   const origin = currentOrigin(dependencies.trustedOrigins);
-  if (origin.status !== "stable") throw new AuthError("origin-rejected", origin.action);
+  // Enroll where you are actually served: a committed HTTPS host (`stable`) or
+  // loopback during local development (`local-only`). Refuse insecure origins
+  // and hosts that an explicit `credentialOrigins` allowlist excludes.
+  if (origin.status !== "stable" && origin.status !== "local-only") {
+    throw new AuthError("origin-rejected", origin.action);
+  }
   return origin.rpId;
 }
 
@@ -312,16 +325,13 @@ export async function authenticateDeviceCredential(
 
 // --- PRF-derived at-rest key --------------------------------------------------
 
-/**
- * Derives a credential-bound secret from the passkey via the WebAuthn PRF
- * extension. The same `salt` on the same authenticator yields the same 32-byte
- * secret; it never leaves the device. Throws `prf-unavailable` if the client or
- * authenticator does not return a PRF result — the secret is never faked.
- */
-export async function derivePrfSecret(
+// Runs a single user-verifying `get()` with the PRF extension and returns both
+// the PRF secret and the asserting credential's identity, so a caller can derive
+// the account and report which key unlocked it from one ceremony (one prompt).
+async function prfAssertion(
   salt: BufferSource,
-  dependencies: AuthDependencies = {},
-): Promise<Uint8Array> {
+  dependencies: AuthDependencies,
+): Promise<{ prfSecret: Uint8Array; credential: DeviceCredential }> {
   const rpId = requireStableRpId(dependencies);
   const credentials = dependencies.credentials ?? browserCredentials();
   try {
@@ -338,10 +348,26 @@ export async function derivePrfSecret(
       (credential as (Credential & { getClientExtensionResults?: () => { prf?: PrfResults } }))
         .getClientExtensionResults?.().prf?.results;
     if (!results?.first) throw new AuthError("prf-unavailable");
-    return new Uint8Array(results.first);
+    return {
+      prfSecret: new Uint8Array(results.first),
+      credential: { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) },
+    };
   } catch (error) {
     throw mapError(error);
   }
+}
+
+/**
+ * Derives a credential-bound secret from the passkey via the WebAuthn PRF
+ * extension. The same `salt` on the same authenticator yields the same 32-byte
+ * secret; it never leaves the device. Throws `prf-unavailable` if the client or
+ * authenticator does not return a PRF result — the secret is never faked.
+ */
+export async function derivePrfSecret(
+  salt: BufferSource,
+  dependencies: AuthDependencies = {},
+): Promise<Uint8Array> {
+  return (await prfAssertion(salt, dependencies)).prfSecret;
 }
 
 /**
@@ -420,6 +446,13 @@ const ACCOUNT_SECRET_SALT = new TextEncoder().encode("lofi:account-secret:v1");
  */
 export async function deriveAuthSecret(dependencies: AuthDependencies = {}): Promise<string> {
   const prfSecret = await derivePrfSecret(ACCOUNT_SECRET_SALT, dependencies);
+  return await hkdfAccountSecret(prfSecret);
+}
+
+// HKDF-SHA-256 expands the raw PRF secret into Jazz's 32-byte base64url
+// auth-secret format. Kept separate so both `deriveAuthSecret` and
+// `deriveAccount` produce byte-identical secrets from the same PRF result.
+async function hkdfAccountSecret(prfSecret: Uint8Array): Promise<string> {
   const material = await crypto.subtle.importKey(
     "raw",
     prfSecret as BufferSource,
@@ -438,4 +471,20 @@ export async function deriveAuthSecret(dependencies: AuthDependencies = {}): Pro
     256,
   );
   return toBase64Url(new Uint8Array(bits));
+}
+
+/** An account secret paired with the credential that unlocked it. */
+export type PasskeyAccount = { secret: string; credential: DeviceCredential };
+
+/**
+ * Signs in with a passkey in **one** ceremony: derives the deterministic Jazz
+ * account secret (as {@link deriveAuthSecret}) and reports the asserting
+ * credential (its `rpId` and whether it is `portable`), so the UI can show which
+ * key unlocked the account and whether it roams. Same guarantees and failures as
+ * {@link deriveAuthSecret}: a `stable`/`local-only` origin and a PRF result, or a
+ * thrown `origin-rejected` / `prf-unavailable` — never a fabricated secret.
+ */
+export async function deriveAccount(dependencies: AuthDependencies = {}): Promise<PasskeyAccount> {
+  const { prfSecret, credential } = await prfAssertion(ACCOUNT_SECRET_SALT, dependencies);
+  return { secret: await hkdfAccountSecret(prfSecret), credential };
 }

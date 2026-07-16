@@ -1,7 +1,9 @@
 ---
+import AccountGate from "../islands/AccountGate";
 import TaskList from "../islands/TaskList";
 import DeviceStatus from "../_lofi/DeviceStatus";
 import Shell from "../_lofi/Shell.astro";
+import { referenceApp } from "../app.ts";
 import "../styles/global.css";
 ---
 
@@ -14,13 +16,10 @@ import "../styles/global.css";
       This starter is one island over one table; replace it with your own schema and components.
     </p>
   </header>
+  <AccountGate client:load />
   <TaskList client:load />
-  <aside class="identity-note" aria-label="Identity and recovery">
-    <strong>Your data is local-first.</strong> Writes persist on this device immediately and, when
-    managed sync is configured, replicate to your account. Set <code>identity: "device-passkey"</code>
-    in <code>src/app.ts</code> to make a portable passkey the account — the same key then syncs this
-    data to your other devices. lofi runs no recovery service: the account lives where the key lives.
-  </aside>
   <DeviceStatus client:load />
-  <footer>Thin Preact adapter · static Astro shell · Deno command surface</footer>
+  <footer>
+    <a href={referenceApp.repositoryUrl} rel="noreferrer">lofi on GitHub →</a>
+  </footer>
 </Shell>

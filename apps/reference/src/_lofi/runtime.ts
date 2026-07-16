@@ -1,6 +1,6 @@
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
 import { referenceApp } from "../app.ts";
-import { deriveAuthSecret } from "./auth.ts";
+import { AuthError } from "./auth.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { appId, databaseConfig, serverUrl } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
@@ -54,19 +54,19 @@ function notifyDiagnostics(state = slot()): void {
   for (const listener of state.diagnosticListeners) listener();
 }
 
-// Device-local (default): a random per-device secret. "device-passkey" makes
-// the passkey the account — the secret is derived from the credential's PRF, so
-// a portable key reconstructs the same account on every device. The derived
-// secret is cached, so only the first boot on a device runs a passkey ceremony.
+// "device-local": a random per-device secret, created on demand — identity
+// never waits. "device-passkey" (default): the passkey is the account, so the
+// secret is derived from the credential's PRF and cached. Booting the database
+// waits for that cached secret; the auth gate (see `session.ts`) runs the
+// passkey ceremony on a user gesture, saves the secret, and recreates the
+// runtime. Return boots find the cached secret and open without a ceremony.
 async function resolveAccountSecret(): Promise<string> {
   if (referenceApp.identity !== "device-passkey") {
     return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
   }
   const cached = await BrowserAuthSecretStore.loadSecret({ appId });
   if (cached) return cached;
-  const secret = await deriveAuthSecret();
-  await BrowserAuthSecretStore.saveSecret(secret, { appId });
-  return secret;
+  throw new AuthError("credential-missing", "Sign in with your passkey to open your account.");
 }
 
 async function createClient(state: RuntimeSlot): Promise<Db> {

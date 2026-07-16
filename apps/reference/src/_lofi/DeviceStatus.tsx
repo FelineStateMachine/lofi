@@ -1,73 +1,148 @@
+import { useEffect, useState } from "preact/hooks";
 import { referenceApp } from "../app.ts";
 import { serverUrl } from "./config.ts";
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "./ui-mutation.ts";
+import { getPwaState, type PwaState, subscribePwaState } from "./pwa.ts";
+import { runtimeRecreatedEvent } from "./runtime.ts";
+import { readSession, type Session } from "./session.ts";
+
+/**
+ * The Device gate: every subsystem's live status, grouped by the system it
+ * belongs to. It doubles as a map of where to hook in — each category names the
+ * module that owns it, so a reading of the deployment is also a reading of the
+ * framework's seams.
+ */
+
+// One label/value row inside a category's definition list.
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+const available = (present: boolean) => (present ? "available" : "missing");
 
 export default function DeviceStatus() {
   const { report, requestPersistence } = useDeviceCapabilities();
-  if (!report) return <p class="device-status">Checking durable-storage capabilities…</p>;
+  const [pwa, setPwa] = useState<PwaState>(getPwaState());
+  const [session, setSession] = useState<Session | null>(null);
 
-  const passkeyIdentity = referenceApp.identity === "device-passkey";
+  useEffect(() => subscribePwaState(setPwa), []);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      void readSession().then((next) => {
+        if (active) setSession(next);
+      });
+    };
+    refresh();
+    // Re-read after a sign-in / sign-out recreates the runtime.
+    globalThis.addEventListener(runtimeRecreatedEvent, refresh);
+    return () => {
+      active = false;
+      globalThis.removeEventListener(runtimeRecreatedEvent, refresh);
+    };
+  }, []);
+
+  if (!report) return <p class="device-status">Checking device capabilities…</p>;
+
+  const passkey = referenceApp.identity === "device-passkey";
   const synced = Boolean(serverUrl);
+  const origin = session?.capability?.origin;
+  const portability = !passkey
+    ? "stays on this device"
+    : session?.profile
+    ? (session.profile.portable ? "roams across your devices" : "this device only")
+    : "known once you sign in";
 
   return (
     <section class="device-status" aria-labelledby="device-status-title">
       <header>
         <p class="eyebrow">Device gate</p>
-        <h2 id="device-status-title">
-          {report.durableDriverSupported ? "Durable driver supported" : "Durable driver blocked"}
-        </h2>
+        <h2 id="device-status-title">Deployment status &amp; integration points</h2>
       </header>
-      <dl>
-        <div>
-          <dt>Context</dt>
-          <dd>{report.secureContext ? "secure" : "not secure"}</dd>
-        </div>
-        <div>
-          <dt>OPFS</dt>
-          <dd>{report.opfs ? "available" : "missing"}</dd>
-        </div>
-        <div>
-          <dt>SharedWorker</dt>
-          <dd>{report.sharedWorker ? "available" : "missing"}</dd>
-        </div>
-        <div>
-          <dt>Web Locks</dt>
-          <dd>{report.webLocks ? "available" : "missing"}</dd>
-        </div>
-        <div>
-          <dt>Storage persistence</dt>
-          <dd>{report.persistentPermission}</dd>
-        </div>
-        <div>
-          <dt>Display mode</dt>
-          <dd>{report.displayMode}</dd>
-        </div>
-        <div>
-          <dt>Identity</dt>
-          <dd>{passkeyIdentity ? "passkey account" : "device-local key"}</dd>
-        </div>
-        <div>
-          <dt>Sync</dt>
-          <dd>{synced ? "syncing to your account" : "local-only"}</dd>
-        </div>
-        <div>
-          <dt>Account portability</dt>
-          <dd>{passkeyIdentity ? "travels with your passkey" : "stays on this device"}</dd>
-        </div>
-      </dl>
-      <button type="button" onClick={() => void settleUiMutation(requestPersistence())}>
-        Request storage persistence
-      </button>
-      <p>
-        OPFS capability and eviction protection are separate. A declined persistence request does
-        not mean the Jazz driver is using memory.
-      </p>
-      <p>
-        {passkeyIdentity
-          ? "The passkey is the account: it lives wherever the key lives and reaches every device that key can. There is no recovery service — lose every copy of the key and the account is gone."
-          : 'Clearing site data destroys the device-local identity. This reference claims no recovery; set identity: "device-passkey" in src/app.ts for a portable, cross-device account.'}
-      </p>
+
+      <div class="device-category">
+        <h3>Shared worker &amp; durable storage</h3>
+        <p class="device-hook">
+          Hook in: <code>src/_lofi/device-capabilities.ts</code>, <code>runtime.ts</code>
+        </p>
+        <dl>
+          <Row
+            label="Durable driver"
+            value={report.durableDriverSupported ? "supported" : "blocked"}
+          />
+          <Row label="Secure context" value={report.secureContext ? "secure" : "not secure"} />
+          <Row label="OPFS" value={available(report.opfs)} />
+          <Row label="SharedWorker" value={available(report.sharedWorker)} />
+          <Row label="Web Locks" value={available(report.webLocks)} />
+          <Row label="MessageChannel" value={available(report.messageChannel)} />
+          <Row label="Storage persistence" value={report.persistentPermission} />
+        </dl>
+        <button type="button" onClick={() => void settleUiMutation(requestPersistence())}>
+          Request storage persistence
+        </button>
+        <p>
+          OPFS capability and eviction protection are separate. A declined persistence request does
+          not mean the Jazz driver is using memory.
+        </p>
+      </div>
+
+      <div class="device-category">
+        <h3>Data sync</h3>
+        <p class="device-hook">
+          Hook in: <code>src/_lofi/config.ts</code>, <code>runtime.ts</code>
+        </p>
+        <dl>
+          <Row label="Sync" value={synced ? "syncing to your account" : "local-only"} />
+          <Row label="Managed server" value={synced ? "configured" : "not configured"} />
+        </dl>
+        {!synced && (
+          <p>
+            Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in{" "}
+            <code>.env</code>, then rebuild, to replicate writes to your account.
+          </p>
+        )}
+      </div>
+
+      <div class="device-category">
+        <h3>Auth</h3>
+        <p class="device-hook">
+          Hook in: <code>src/_lofi/auth.ts</code>, <code>session.ts</code>
+        </p>
+        <dl>
+          <Row label="Identity" value={passkey ? "passkey account" : "device-local key"} />
+          {passkey && (
+            <Row
+              label="Status"
+              value={session ? (session.signedIn ? "signed in" : "signed out") : "…"}
+            />
+          )}
+          <Row label="WebAuthn" value={available(report.webAuthn)} />
+          <Row label="PRF (account derivation)" value={report.prf} />
+          {passkey && origin && (
+            <Row label={`Origin (${origin.rpId || "unknown"})`} value={origin.status} />
+          )}
+          {passkey && <Row label="Account portability" value={portability} />}
+        </dl>
+      </div>
+
+      <div class="device-category">
+        <h3>PWA</h3>
+        <p class="device-hook">
+          Hook in: <code>src/_lofi/pwa.ts</code>
+        </p>
+        <dl>
+          <Row label="Display mode" value={report.displayMode} />
+          <Row label="Install" value={pwa.install} />
+          <Row label="Service worker" value={pwa.worker} />
+        </dl>
+        {pwa.failure && <p class="account-error">{pwa.failure.code}: {pwa.failure.message}</p>}
+      </div>
     </section>
   );
 }

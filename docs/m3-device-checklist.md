@@ -1,6 +1,6 @@
 # M3 physical-device checklist
 
-Status: **implementation ready; physical rows pending**\
+Status: **M3 accepted on representative Android evidence**\
 Evidence owner: **issues #16, #18, and #19**
 
 This checklist is the manual evidence gate for `DX-DEVICE-01`, `DX-DEVICE-UX-01`, and
@@ -24,15 +24,15 @@ authenticator.
 Do not replace pending cells with family names such as “recent iPhone.” Record the exact values
 shown by the device and browser.
 
-| Device class | Exact hardware | OS version/build | Browser version | Tab     | Installed | Evidence |
-| ------------ | -------------- | ---------------- | --------------- | ------- | --------- | -------- |
-| iPhone       | pending        | pending          | Safari pending  | pending | pending   | pending  |
-| Android      | pending        | pending          | Chrome pending  | pass    | pass      | partial  |
+| Device class | Exact hardware | OS version/build | Browser version      | Tab       | Installed | Evidence |
+| ------------ | -------------- | ---------------- | -------------------- | --------- | --------- | -------- |
+| iPhone       | not run        | not run          | Safari not run       | waived M3 | waived M3 | waived   |
+| Android      | not recorded   | not recorded     | Chrome, not recorded | pass      | pass      | accepted |
 
 For each row also record the commit SHA, Deno version, package version, stable origin, whether Jazz
 cloud mode was configured, and whether caches were cold or warm.
 
-### Android partial evidence — Deno branch preview
+### Android accepted evidence — Deno branch preview
 
 An Android screenshot supplied for commit `7e78bb9` at
 `https://lofi-dev--agentm3-mobile-pwa.felinestatemachine.deno.net/` records a normal browser tab
@@ -70,9 +70,11 @@ The ceremony used the deployed application's exact `location.hostname` as its RP
 the origin-only probe on a real Android authenticator; it does not graduate passkeys into
 application identity, backup, or recovery.
 
-The Android row remains partial. The evidence does not yet identify exact hardware, Android or
-Chrome versions, cache temperature, or Jazz mode. Short and five-minute background recovery, process
-termination, device restart, and console/network results remain open.
+The owner accepted this representative Android install, reload, offline cold-start, persistence, and
+real-authenticator evidence as sufficient to complete the M3 PWA validation. Exact hardware and
+software metadata, additional timed lifecycle variants, process termination, device restart,
+console/network capture, and the iPhone row were not individually recorded; they are waived as M3
+merge gates rather than represented as passed.
 
 ## Per-variant procedure
 
@@ -121,8 +123,9 @@ evidence must contain no Jazz values, identity material, tokens, response bodies
 
 ## Acceptance boundary
 
-M3 can merge implementation with the matrix visibly pending, but these contracts remain proposed
-until the relevant rows pass on physical hardware:
+M3 is accepted for merge on the representative Android evidence above. The broader cross-device and
+exhaustive lifecycle contracts remain proposed until a future need justifies running the unrecorded
+variants:
 
 - `DX-DEVICE-UX-01`: Deno Tunnel URL and remediation work on both device classes.
 - `DX-OFFLINE-01`: installed production cold-start renders shell and retained data in airplane mode.

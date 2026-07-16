@@ -1,5 +1,5 @@
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { STARTER_TEMPLATE } from "./starter_template.ts";
+import { readStarterFile, STARTER_FILES } from "./starter_template.ts";
 import { LOFI_PACKAGE_PREFIX } from "./version.ts";
 
 export type CreateProjectOptions = {
@@ -153,7 +153,8 @@ async function assertNoSymlinkPath(cwd: string, segments: readonly string[]): Pr
 }
 
 async function writeTemplate(destination: string): Promise<void> {
-  for (const [relativePath, content] of Object.entries(STARTER_TEMPLATE)) {
+  for (const relativePath of STARTER_FILES) {
+    const content = await readStarterFile(relativePath);
     const path = join(destination, relativePath);
     await Deno.mkdir(dirname(path), { recursive: true });
     await Deno.writeTextFile(path, content);

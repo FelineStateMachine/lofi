@@ -1,3 +1,5 @@
+/// <reference path="../env.d.ts" />
+
 export type PwaRegistrationState =
   | "development-disabled"
   | "unsupported"

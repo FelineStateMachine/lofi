@@ -32,6 +32,28 @@ shown by the device and browser.
 For each row also record the commit SHA, Deno version, package version, stable origin, whether Jazz
 cloud mode was configured, and whether caches were cold or warm.
 
+### Android partial evidence — Deno branch preview
+
+An Android screenshot supplied for commit `7e78bb9` at
+`https://lofi-dev--agentm3-mobile-pwa.felinestatemachine.deno.net/` records a normal browser tab
+with these device-gate results:
+
+- storage persistence: `not-granted`;
+- display mode: `browser`;
+- PWA worker: `ready`;
+- install: `available`;
+- identity: `device-local key`;
+- credential origin: `stable`;
+- future RP ID: `lofi-dev--agentm3-mobile-pwa.felinestatemachine.deno.net`;
+- WebAuthn: `available`;
+- PRF client extension: `available`;
+- passkey backup: `blocked by alpha security review`.
+
+This is capability evidence, not a completed Android row. The screenshot does not identify exact
+hardware, Android or Chrome versions, cache temperature, or Jazz mode. It also does not prove an
+installed launch, a granted persistence request, retained writes, lifecycle recovery, offline cold
+start, or passkey creation/retrieval.
+
 ## Per-variant procedure
 
 Run every applicable step once in a normal browser tab and once in the installed app:

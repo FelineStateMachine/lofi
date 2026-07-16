@@ -87,9 +87,6 @@ async function rewritePortableDenoConfig(root: string, packagePrefix: string): P
     }
     imports[key] = isFileOverride ? `${packagePrefix}${localPath}` : `${packagePrefix}${subpath}`;
   }
-  // The `deploy` field pins the reference app's own Deno Deploy org/app; a
-  // generated project records its own association on first `deno task deploy`.
-  delete config.deploy;
   await Deno.writeTextFile(path, `${JSON.stringify(config, null, 2)}\n`);
 }
 

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import packageManifest from "../jsr.json" with { type: "json" };
+import packageManifest from "../deno.json" with { type: "json" };
 import { createProject } from "./create_core.ts";
 import { LOFI_VERSION } from "./version.ts";
 

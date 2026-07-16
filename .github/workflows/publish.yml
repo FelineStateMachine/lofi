@@ -1,0 +1,36 @@
+name: Publish to JSR
+
+# Tag a release (e.g. `git tag v0.1.0 && git push origin v0.1.0`) to publish
+# @nzip/lofi to JSR. The tag version must match the "version" in deno.json.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for JSR OIDC authentication
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify tag matches deno.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest="$(deno eval 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag v$tag does not match deno.json version $manifest"
+            exit 1
+          fi
+
+      - name: Test
+        run: deno task test:unit
+
+      - name: Publish to JSR
+        run: deno publish

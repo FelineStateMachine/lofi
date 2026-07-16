@@ -41,4 +41,5 @@ For live physical-device development, run `deno task --tunnel dev`. The author-o
 credential origins; the reference seeds Deno Tunnel and nzip patterns. A future ceremony still uses
 `location.hostname` as its exact RP ID, while localhost, IP addresses, and unconfigured origins are
 rejected or left unverified. Use a built nzip artifact for production service-worker, install, and
-offline cold-start evidence. The manual gate is [the M3 device checklist](../../docs/m3-device-checklist.md).
+offline cold-start evidence. The manual gate is
+[the M3 device checklist](../../docs/m3-device-checklist.md).

@@ -35,6 +35,10 @@ function isIpAddress(hostname: string): boolean {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
 }
 
+function isLocalHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1";
+}
+
 function matchesCredentialOrigin(hostname: string, pattern: string): boolean {
   const normalized = pattern.toLowerCase();
   if (normalized.startsWith("*.")) {
@@ -49,7 +53,7 @@ export function classifyCredentialOrigin(
   trustedOrigins: readonly string[] = referenceApp.credentialOrigins,
 ): CredentialOriginReport {
   const rpId = url.hostname;
-  if (url.protocol === "http:" && (rpId === "localhost" || rpId === "127.0.0.1")) {
+  if (isLocalHostname(rpId)) {
     return {
       status: "local-only",
       rpId,

@@ -78,6 +78,13 @@ test("credential origin trust is author configurable", () => {
   assert(wildcardApex.status === "unverified", "wildcard unexpectedly trusted its apex");
 });
 
+test("author configuration cannot override local-origin safety", () => {
+  for (const origin of ["https://localhost/", "https://app.localhost/"]) {
+    const report = classifyCredentialOrigin(new URL(origin), ["localhost", "*.localhost"]);
+    assert(report.status === "local-only", `${origin} bypassed local-origin safety`);
+  }
+});
+
 test("local, insecure, and custom origins cannot silently enroll credentials", () => {
   const local = classifyCredentialOrigin(new URL("http://localhost:4321/"));
   const insecure = classifyCredentialOrigin(new URL("http://phone.lan:4321/"));

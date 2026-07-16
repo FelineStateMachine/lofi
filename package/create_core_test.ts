@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import packageManifest from "../jsr.json" with { type: "json" };
+import packageManifest from "../deno.json" with { type: "json" };
 import { createProject } from "./create_core.ts";
 import { LOFI_VERSION } from "./version.ts";
 
@@ -105,8 +105,8 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
     assert(
-      lofiSpecifiers.length === 8,
-      `expected one package prefix, six commands, and testing, received ${lofiSpecifiers.length}`,
+      lofiSpecifiers.length === 7,
+      `expected one package prefix, five commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.1.0/")),

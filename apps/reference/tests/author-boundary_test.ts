@@ -4,7 +4,7 @@ const test = (globalThis as unknown as {
 
 const authorUiFiles = [
   new URL("../src/pages/index.astro", import.meta.url),
-  new URL("../src/islands/ChecklistIsland.tsx", import.meta.url),
+  new URL("../src/islands/TaskList.tsx", import.meta.url),
 ];
 
 const forbidden = [

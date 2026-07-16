@@ -25,9 +25,18 @@ runtime-owned files without turning them into public framework APIs. M4 may repl
 with proven `@nzip/lofi` subpath imports without changing product UI.
 
 Browser journeys import readiness, offline, two-client, and sanitized failure-artifact helpers from
-`@nzip/lofi/testing`. The normal `deno task test` verifies that generated projects resolve this
-surface without launching Chromium; real browser and cloud-convergence journeys remain explicit
-developer-run gates.
+`@nzip/lofi/testing`. `tests/convergence_e2e_test.ts` is a worked example: two clients add a task
+offline and converge after reconnecting. The normal `deno task test` skips it (and never launches
+Chromium); run it against a synced deployment with
+`LOFI_E2E_BASE_URL=http://127.0.0.1:4321/ deno test -A tests/convergence_e2e_test.ts`.
+
+`deno task build` produces a self-contained static PWA in `dist/` (the Preact islands compile to
+`dist/_astro/*.js`); `deno task preview` serves it locally.
+`deno task deploy:create --org <org>
+--app <app>` hosts it on Deno Deploy as a static site and
+`deno task deploy` pushes updates — both push the built `dist/` as the deploy root (nothing to build
+remotely, and no `src/app.ts` misdetection). These are generic, org/app-free scaffolding; releasing
+the `@nzip/lofi` package itself is a separate JSR publish (repo root), not a site deploy.
 
 Passkey backup and recovery are intentionally absent. The pinned Jazz alpha exposes a rejected
 credential design, so this reference uses a device-local identity and does not imply recoverability.

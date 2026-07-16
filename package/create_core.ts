@@ -53,62 +53,51 @@ The default project runs local-only with durable browser storage. To enable mana
 \`.env.example\` to \`.env\` and set both public Jazz values. Run \`deno task doctor\` before boot when
 you want configuration diagnostics without starting the application.
 
-Public tasks: \`dev\`, \`doctor\`, \`check\`, \`test\`, \`build\`, and \`preview\`.
+Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Schema and sync tasks:
+\`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
+
+## Hosting
+
+\`deno task build\` emits a static PWA in \`dist/\`. The deploy tasks host it on Deno Deploy as a
+static site — they push the built \`dist/\` as the deploy root, which serves it as plain assets:
+
+- \`deno task deploy:create --org <org> --app <app>\` — one-time: create the app from \`dist/\`.
+- \`deno task deploy\` — thereafter: build and push \`dist/\`.
+
+Point them at any other static host by editing those two tasks.
 `;
 }
 
-function generatedDenoConfig(packagePrefix: string): string {
-  const packageCommand = (subpath: string, localPath: string) =>
-    packagePrefix.startsWith("file:")
-      ? `${packagePrefix}${localPath}`
-      : `${packagePrefix}${subpath}`;
-  const config = {
-    imports: {
-      "@astrojs/check": "npm:@astrojs/check@0.9.9",
-      "@astrojs/preact": "npm:@astrojs/preact@6.0.1",
-      "@nzip/lofi/": packagePrefix,
-      "@nzip/lofi/build": packageCommand("build", "commands/build.ts"),
-      "@nzip/lofi/check": packageCommand("check", "commands/check.ts"),
-      "@nzip/lofi/dev": packageCommand("dev", "commands/dev.ts"),
-      "@nzip/lofi/doctor": packageCommand("doctor", "commands/doctor.ts"),
-      "@nzip/lofi/preview": packageCommand("preview", "commands/preview.ts"),
-      "@nzip/lofi/testing": packageCommand("testing", "testing/mod.ts"),
-      "@nzip/lofi/test": packageCommand("test", "commands/run_tests.ts"),
-      "astro": "npm:astro@7.0.9",
-      "astro/config": "npm:astro@7.0.9/config",
-      "jazz-tools": "npm:jazz-tools@2.0.0-alpha.53",
-      "jazz-tools/dev/vite": "npm:jazz-tools@2.0.0-alpha.53/dev/vite",
-      "preact": "npm:preact@10.29.7",
-      "preact/hooks": "npm:preact@10.29.7/hooks",
-      "preact/jsx-dev-runtime": "npm:preact@10.29.7/jsx-dev-runtime",
-      "preact/jsx-runtime": "npm:preact@10.29.7/jsx-runtime",
-      "typescript": "npm:typescript@6.0.3",
-      "vite": "npm:vite@8.0.1",
-    },
-    nodeModulesDir: "auto",
-    compilerOptions: {
-      lib: ["deno.ns", "dom", "dom.iterable", "esnext"],
-      jsx: "react-jsx",
-      jsxImportSource: "preact",
-    },
-    tasks: {
-      dev: "deno run -A @nzip/lofi/dev",
-      doctor: "deno run -A @nzip/lofi/doctor",
-      check: "deno run -A @nzip/lofi/check",
-      test: "deno run -A @nzip/lofi/test",
-      build: "deno run -A @nzip/lofi/build",
-      preview: "deno run -A @nzip/lofi/preview",
-    },
-    fmt: {
-      lineWidth: 100,
-      semiColons: true,
-      singleQuote: false,
-    },
-    lint: {
-      rules: { tags: ["recommended"] },
-    },
-  };
-  return `${JSON.stringify(config, null, 2)}\n`;
+// The `@nzip/lofi/*` import keys the template carries as local repo paths; a
+// generated project resolves the same keys through the published package (or a
+// file: override in clean-room tests). Everything else in the template deno.json
+// — npm imports, tasks (including schema/migration/deploy), fmt, lint — is copied
+// verbatim, so the template is the single source of truth for project config.
+const lofiImportTargets: Record<string, { subpath: string; localPath: string }> = {
+  "@nzip/lofi/build": { subpath: "build", localPath: "commands/build.ts" },
+  "@nzip/lofi/dev": { subpath: "dev", localPath: "commands/dev.ts" },
+  "@nzip/lofi/doctor": { subpath: "doctor", localPath: "commands/doctor.ts" },
+  "@nzip/lofi/preview": { subpath: "preview", localPath: "commands/preview.ts" },
+  "@nzip/lofi/test": { subpath: "test", localPath: "commands/run_tests.ts" },
+  "@nzip/lofi/testing": { subpath: "testing", localPath: "testing/mod.ts" },
+};
+
+async function rewritePortableDenoConfig(root: string, packagePrefix: string): Promise<void> {
+  const path = join(root, "deno.json");
+  const config = JSON.parse(await Deno.readTextFile(path));
+  const imports = config.imports as Record<string, string> | undefined;
+  if (!imports || typeof imports["@nzip/lofi/"] !== "string") {
+    throw new Error("starter deno.json is missing the @nzip/lofi/ import marker");
+  }
+  const isFileOverride = packagePrefix.startsWith("file:");
+  imports["@nzip/lofi/"] = packagePrefix;
+  for (const [key, { subpath, localPath }] of Object.entries(lofiImportTargets)) {
+    if (typeof imports[key] !== "string") {
+      throw new Error(`starter deno.json is missing the ${key} import`);
+    }
+    imports[key] = isFileOverride ? `${packagePrefix}${localPath}` : `${packagePrefix}${subpath}`;
+  }
+  await Deno.writeTextFile(path, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 function validateName(name: string): string[] {
@@ -210,13 +199,10 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   try {
     await writeTemplate(staging);
     await rewritePortableAstroConfig(staging);
+    await rewritePortableDenoConfig(staging, options.packagePrefix ?? LOFI_PACKAGE_PREFIX);
     await Deno.writeTextFile(join(staging, ".gitignore"), generatedGitignore);
     await Deno.writeTextFile(join(staging, ".env.example"), generatedEnvironment);
     await Deno.writeTextFile(join(staging, "README.md"), generatedReadme(basename(destination)));
-    await Deno.writeTextFile(
-      join(staging, "deno.json"),
-      generatedDenoConfig(options.packagePrefix ?? LOFI_PACKAGE_PREFIX),
-    );
 
     await Deno.remove(destination).catch((error) => {
       if (!(error instanceof Deno.errors.NotFound)) throw error;

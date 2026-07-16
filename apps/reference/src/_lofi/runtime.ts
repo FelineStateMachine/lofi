@@ -1,7 +1,13 @@
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
-import { ChecklistStore, type RuntimeDiagnostics } from "./checklist-store.ts";
-import { appId, databaseConfig } from "./config.ts";
+import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
+import { appId, databaseConfig, serverUrl } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
+import {
+  createTableStore,
+  type TableHandle,
+  type TableRow,
+  type TableStore,
+} from "./table-store.ts";
 import {
   AdapterLifecycle,
   createSerializedResourceState,
@@ -13,8 +19,12 @@ import {
 
 export type LofiRuntime = {
   db: Db;
-  checklist: ChecklistStore;
   diagnostics: RuntimeDiagnostics;
+  /**
+   * A reactive store bound to one declared table. Repeated calls with the same
+   * table return the same store, so every consumer shares one subscription.
+   */
+  store<T extends TableRow, Init>(table: TableHandle<T, Init>): TableStore<T, Init>;
   shutdown(): Promise<void>;
 };
 
@@ -32,22 +42,7 @@ const browserGlobal = globalThis as typeof globalThis & { [slotName]?: RuntimeSl
 function slot(): RuntimeSlot {
   browserGlobal[slotName] ??= {
     client: createSerializedResourceState<Db>(),
-    diagnostics: {
-      storageState: "persistent-requested",
-      clientsCreated: 0,
-      activeClients: 0,
-      activeConsumers: 0,
-      activeVendorSubscriptions: 0,
-      totalVendorSubscriptions: 0,
-      activeMutationListeners: 0,
-      totalMutationListeners: 0,
-      unsubscribeCalls: 0,
-      localWaitCalls: 0,
-      pendingLocalWrites: 0,
-      pendingGlobalWrites: 0,
-      lastWriteDurability: "none",
-      mutationErrors: 0,
-    },
+    diagnostics: createDiagnostics(),
     diagnosticListeners: new Set(),
   };
   return browserGlobal[slotName];
@@ -84,27 +79,27 @@ let recreationPromise: Promise<LofiRuntime> | null = null;
 let shutdownPromise: Promise<void> | null = null;
 
 function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
-  const checklist = new ChecklistStore(
-    db,
-    state.diagnostics,
-    undefined,
-    () => notifyDiagnostics(state),
-  );
-  const stopMutationErrors = db.onMutationError((event) => checklist.reportMutationError(event));
-  state.diagnostics.activeMutationListeners += 1;
-  state.diagnostics.totalMutationListeners += 1;
-  notifyDiagnostics(state);
+  const stores = new Map<object, TableStore<TableRow, unknown>>();
   let active = true;
   const runtime: LofiRuntime = {
     db,
-    checklist,
     diagnostics: state.diagnostics,
+    store<T extends TableRow, Init>(table: TableHandle<T, Init>): TableStore<T, Init> {
+      let store = stores.get(table);
+      if (!store) {
+        store = createTableStore(db, table, state.diagnostics, {
+          syncConfigured: Boolean(serverUrl),
+          onDiagnosticsChange: () => notifyDiagnostics(state),
+        }) as TableStore<TableRow, unknown>;
+        stores.set(table, store);
+      }
+      return store as unknown as TableStore<T, Init>;
+    },
     shutdown() {
       if (!active) return Promise.resolve();
       active = false;
-      checklist.close();
-      stopMutationErrors();
-      state.diagnostics.activeMutationListeners -= 1;
+      for (const store of stores.values()) store.close();
+      stores.clear();
       notifyDiagnostics(state);
       return Promise.resolve();
     },

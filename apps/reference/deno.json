@@ -1,0 +1,52 @@
+{
+  "imports": {
+    "@astrojs/check": "npm:@astrojs/check@0.9.9",
+    "@astrojs/preact": "npm:@astrojs/preact@6.0.1",
+    "@nzip/lofi/": "../../package/",
+    "@nzip/lofi/build": "../../package/commands/build.ts",
+    "@nzip/lofi/dev": "../../package/commands/dev.ts",
+    "@nzip/lofi/doctor": "../../package/commands/doctor.ts",
+    "@nzip/lofi/preview": "../../package/commands/preview.ts",
+    "@nzip/lofi/test": "../../package/commands/run_tests.ts",
+    "@nzip/lofi/testing": "../../package/testing/mod.ts",
+    "astro": "npm:astro@7.0.9",
+    "astro/config": "npm:astro@7.0.9/config",
+    "jazz-tools": "npm:jazz-tools@2.0.0-alpha.53",
+    "jazz-tools/dev/vite": "npm:jazz-tools@2.0.0-alpha.53/dev/vite",
+    "preact": "npm:preact@10.29.7",
+    "preact/hooks": "npm:preact@10.29.7/hooks",
+    "preact/jsx-dev-runtime": "npm:preact@10.29.7/jsx-dev-runtime",
+    "preact/jsx-runtime": "npm:preact@10.29.7/jsx-runtime",
+    "typescript": "npm:typescript@6.0.3",
+    "vite": "npm:vite@8.0.1"
+  },
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
+  },
+  "tasks": {
+    "dev": "deno run -A @nzip/lofi/dev",
+    "doctor": "deno run -A @nzip/lofi/doctor",
+    "test": "deno run -A @nzip/lofi/test",
+    "build": "deno run -A @nzip/lofi/build",
+    "preview": "deno run -A @nzip/lofi/preview",
+    "deploy": "deno task build && deno deploy --prod dist",
+    "deploy:create": "deno task build && deno deploy create dist --source local --do-not-use-detected-build-config --runtime-mode static --static-dir . --region us",
+    "schema:validate": "deno run -A npm:jazz-tools@2.0.0-alpha.53 validate",
+    "schema:deploy": "deno run --env-file=.env -A npm:jazz-tools@2.0.0-alpha.53 deploy --migrations-dir src/migrations",
+    "migrations:create": "deno run -A npm:jazz-tools@2.0.0-alpha.53 migrations create --migrations-dir src/migrations",
+    "migrations:push": "deno run --env-file=.env -A npm:jazz-tools@2.0.0-alpha.53 migrations push --migrations-dir src/migrations"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}

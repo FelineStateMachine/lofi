@@ -32,6 +32,8 @@
     "test": "deno run -A @nzip/lofi/test",
     "build": "deno run -A @nzip/lofi/build",
     "preview": "deno run -A @nzip/lofi/preview",
+    "deploy": "deno task build && deno deploy --prod dist",
+    "deploy:create": "deno task build && deno deploy create dist --source local --do-not-use-detected-build-config --runtime-mode static --static-dir . --region us",
     "schema:validate": "deno run -A npm:jazz-tools@2.0.0-alpha.53 validate",
     "schema:deploy": "deno run --env-file=.env -A npm:jazz-tools@2.0.0-alpha.53 deploy --migrations-dir src/migrations",
     "migrations:create": "deno run -A npm:jazz-tools@2.0.0-alpha.53 migrations create --migrations-dir src/migrations",

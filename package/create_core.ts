@@ -55,6 +55,16 @@ you want configuration diagnostics without starting the application.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Schema and sync tasks:
 \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
+
+## Hosting
+
+\`deno task build\` emits a static PWA in \`dist/\`. The deploy tasks host it on Deno Deploy as a
+static site — they push the built \`dist/\` as the deploy root, which serves it as plain assets:
+
+- \`deno task deploy:create --org <org> --app <app>\` — one-time: create the app from \`dist/\`.
+- \`deno task deploy\` — thereafter: build and push \`dist/\`.
+
+Point them at any other static host by editing those two tasks.
 `;
 }
 

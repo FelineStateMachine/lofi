@@ -2,11 +2,12 @@ import { appId } from "../runtime/config.ts";
 import { getRuntime } from "../runtime/runtime.ts";
 import { AccessError } from "./errors.ts";
 
-declare const sharingIdentityBrand: unique symbol;
-export type SharingIdentity = string & { readonly [sharingIdentityBrand]: true };
+/** App-scoped, non-secret Jazz principal identifier safe to copy between users. */
+export type SharingIdentity = string & { readonly __lofiSharingIdentity: true };
 
 const prefix = "lofi1";
 
+/** Encodes a raw Jazz principal as a versioned identity scoped to the current app. */
 export function encodeSharingIdentity(userId: string): SharingIdentity {
   if (!userId.trim() || userId.includes(":")) {
     throw new AccessError("invalid-identity", "Jazz returned an invalid sharing identity.");
@@ -14,6 +15,7 @@ export function encodeSharingIdentity(userId: string): SharingIdentity {
   return `${prefix}:${appId}:${userId}` as SharingIdentity;
 }
 
+/** Validates an app-scoped sharing identity and returns its raw Jazz principal. */
 export function decodeSharingIdentity(identity: string): string {
   const [version, identityAppId, userId, extra] = identity.split(":");
   if (version !== prefix || identityAppId !== appId || !userId || extra !== undefined) {

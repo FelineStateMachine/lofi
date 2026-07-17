@@ -27,8 +27,10 @@ export function sharedGrantTable<const Resource extends string>(
 
 /** Fixed Wave 2 group roles. Custom role systems remain a raw Jazz escape hatch. */
 export const groupRoles = ["reader", "contributor", "writer", "admin"] as const;
+/** Fixed group roles supported by the built-in group policy template. */
 export type GroupRole = (typeof groupRoles)[number];
 
+/** Returns the persisted capability flags for a fixed group role. */
 export function groupRoleCapabilities(role: GroupRole): {
   readonly role: GroupRole;
   readonly can_create: boolean;

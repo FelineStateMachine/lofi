@@ -12,6 +12,7 @@ export type TableRow = { id: string };
  */
 export type TableHandle<T extends TableRow, Init> = TableProxy<T, Init> & QueryBuilder<T>;
 
+/** Reactive table state including rows and the last observed durability tier. */
 export type TableSnapshot<T extends TableRow> = {
   status: "loading" | "ready" | "error";
   rows: T[];
@@ -24,6 +25,7 @@ type MutationHandle = {
   wait(options: { tier: "local" | "global" }): Promise<unknown>;
 };
 
+/** Runtime options controlling durability waits and diagnostics notifications. */
 export type TableStoreOptions = {
   /** Whether managed sync is configured; gates global-durability waits. */
   syncConfigured?: boolean;
@@ -53,6 +55,7 @@ export class TableStore<T extends TableRow, Init> {
     error: null,
   };
 
+  /** Creates a store over one declared Jazz table and shared runtime diagnostics. */
   constructor(
     db: Db,
     table: TableHandle<T, Init>,
@@ -72,8 +75,10 @@ export class TableStore<T extends TableRow, Init> {
     this.#diagnosticsChanged();
   }
 
+  /** Returns the current immutable snapshot. */
   getSnapshot = (): TableSnapshot<T> => this.#snapshot;
 
+  /** Subscribes to snapshot changes and opens the vendor subscription on first use. */
   subscribe = (listener: Listener): () => void => {
     this.#listeners.add(listener);
     this.#diagnostics.activeConsumers = this.#listeners.size;
@@ -92,24 +97,29 @@ export class TableStore<T extends TableRow, Init> {
     };
   };
 
+  /** Inserts a row and waits for local durability before resolving. */
   async insert(values: Init): Promise<void> {
     await this.#settle(this.#db.insert(this.#table, values));
   }
 
+  /** Updates a row and waits for local durability before resolving. */
   async update(id: string, patch: Partial<Init>): Promise<void> {
     await this.#settle(this.#db.update(this.#table, id, patch));
   }
 
+  /** Deletes a row and waits for local durability before resolving. */
   async delete(id: string): Promise<void> {
     await this.#settle(this.#db.delete(this.#table, id));
   }
 
+  /** Projects an asynchronous Jazz mutation rejection into diagnostics and store state. */
   reportMutationError(event: MutationErrorEvent): void {
     this.#diagnostics.mutationErrors += 1;
     this.#diagnosticsChanged();
     this.#fail(new Error(`${event.code}: ${event.reason}`));
   }
 
+  /** Releases vendor subscriptions and mutation listeners owned by this store. */
   close(): void {
     this.#listeners.clear();
     this.#diagnostics.activeConsumers = 0;

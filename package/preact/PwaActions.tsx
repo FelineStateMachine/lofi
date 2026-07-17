@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { VNode } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import {
   type PwaController,
@@ -8,15 +8,20 @@ import {
 } from "../runtime/pwa.ts";
 
 export { pwaFailureMessage } from "../runtime/pwa.ts";
+export type { PwaController, PwaFailureCode, PwaState } from "../runtime/pwa.ts";
 
+/** Subscribes a Preact component to an isolated or shared PWA controller. */
 export function usePwaState(controller: PwaController = pwaController): PwaState {
   const [state, setState] = useState<PwaState>(controller.getState());
   useEffect(() => controller.subscribe(setState), [controller]);
   return state;
 }
 
+/** Optional controller and heading text for {@link PwaActions}. */
 export interface PwaActionsProps {
+  /** Controller to observe; defaults to the package-wide PWA controller. */
   readonly controller?: PwaController;
+  /** Heading rendered above install or update actions. */
   readonly title?: string;
 }
 
@@ -24,7 +29,7 @@ export interface PwaActionsProps {
 export function PwaActions({
   controller = pwaController,
   title = "Install & updates",
-}: PwaActionsProps): JSX.Element | null {
+}: PwaActionsProps): VNode | null {
   const state = usePwaState(controller);
   const visible = state.install === "available" || state.install === "manual-ios" ||
     state.install === "accepted" || state.install === "dismissed" ||

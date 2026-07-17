@@ -1,8 +1,8 @@
 {
   "name": "@nzip/lofi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
-  "description": "A local-first mobile PWA meta-framework for Deno: declare a schema, build Preact islands, and ship an installable offline-capable app whose UI always hydrates from local data.",
+  "description": "A local-first Deno PWA framework with durable local data, recoverable accounts, optional Jazz sync, and private, direct-share, or group access templates.",
   "exports": {
     ".": "./package/runtime/mod.ts",
     "./astro": "./package/astro/mod.ts",
@@ -44,7 +44,9 @@
   },
   "tasks": {
     "build": "deno task --cwd apps/reference build",
-    "check": "deno fmt --check . && deno lint && deno task test:unit && deno task test:access",
+    "check": "deno fmt --check . && deno lint && deno task doc && deno task docs:links && deno task test:unit && deno task test:access",
+    "doc": "deno run --allow-run tools/doc_lint.ts",
+    "docs:links": "deno run --allow-read tools/docs_links.ts",
     "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT,CI --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package/astro package/create_core_test.ts package/preact package/project_layout_doc_test.ts package/pwa_assets_test.ts package/runtime package/testing package/tooling apps/reference/tests",
     "test:access": "deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/access/*_test.ts",
     "test:update:create": "LOFI_UPDATE_SNAPSHOT=1 deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-read --allow-write=. --allow-run package/create_core_test.ts",
@@ -69,6 +71,7 @@
       "LICENSE",
       "README.md",
       "docs/README.md",
+      "docs/assets/brand/lofi-github-banner.png",
       "docs/auth-identity.md",
       "docs/auth.md",
       "docs/decisions/passkey-backup-alpha53.md",

@@ -1,5 +1,15 @@
+/**
+ * Astro and Vite integration used by generated lofi applications.
+ *
+ * {@link prepareLofiAstroConfig} materializes version-matched runtime aliases
+ * and Jazz configuration into the ignored `.lofi/` directory.
+ *
+ * @module
+ */
+
 import { join, resolve } from "node:path";
 
+/** Options for materializing the package-owned Astro configuration. */
 export type LofiAstroOptions = {
   /** Project root. Defaults to the directory from which Astro was invoked. */
   root?: string;

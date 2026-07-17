@@ -74,7 +74,9 @@ export type EnrollOptions = AuthDependencies & {
 
 /** A precise, non-leaking failure reason for a credential operation. */
 export class AuthError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "AuthError";
+  /** Actionable category that callers can map to user-facing guidance. */
   readonly code:
     | "cancelled"
     | "origin-rejected"
@@ -83,6 +85,7 @@ export class AuthError extends Error {
     | "credential-missing"
     | "unknown";
 
+  /** Creates a device-credential error without including credential material. */
   constructor(code: AuthError["code"], message?: string) {
     super(message ?? `Device credential operation failed: ${code}.`);
     this.code = code;

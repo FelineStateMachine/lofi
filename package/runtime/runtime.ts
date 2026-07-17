@@ -21,6 +21,7 @@ import {
   shutdownResource,
 } from "./resource-lifecycle.ts";
 
+/** The shared, lazily opened Jazz client and its application-facing adapters. */
 export type LofiRuntime = {
   db: Db;
   diagnostics: RuntimeDiagnostics;
@@ -32,6 +33,7 @@ export type LofiRuntime = {
   shutdown(): Promise<void>;
 };
 
+/** Event dispatched after account, sync, or runtime replacement changes active state. */
 export const runtimeRecreatedEvent = "lofi:runtime-recreated";
 
 type RuntimeSlot = {
@@ -199,6 +201,7 @@ function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
   return runtime;
 }
 
+/** Opens or reuses the one package runtime for the current browser document. */
 export function getRuntime(): Promise<LofiRuntime> {
   if (recreationPromise) return recreationPromise;
   const state = slot();
@@ -208,6 +211,7 @@ export function getRuntime(): Promise<LofiRuntime> {
   );
 }
 
+/** Returns a value-only snapshot of runtime resource and durability counters. */
 export function getRuntimeDiagnostics(): RuntimeDiagnostics {
   return { ...slot().diagnostics };
 }
@@ -222,6 +226,7 @@ export function runtimeCanReconnect(): boolean {
   return slot().serverConfigured;
 }
 
+/** Subscribes to diagnostics changes and returns an idempotent unsubscribe function. */
 export function subscribeRuntimeDiagnostics(listener: () => void): () => void {
   const listeners = slot().diagnosticListeners;
   listeners.add(listener);
@@ -233,6 +238,7 @@ export function subscribeRuntimeDiagnostics(listener: () => void): () => void {
   };
 }
 
+/** Replaces the active Jazz client while preserving the configured account secret. */
 export function recreateRuntime(): Promise<LofiRuntime> {
   if (recreationPromise) return recreationPromise;
   const state = slot();
@@ -294,6 +300,7 @@ export function replaceRuntimePrincipal(secret: string): Promise<LofiRuntime> {
   return tracked;
 }
 
+/** Releases stores, subscriptions, the Jazz client, and persistent worker resources. */
 export function shutdownRuntime(): Promise<void> {
   if (shutdownPromise) return shutdownPromise;
   const state = slot();

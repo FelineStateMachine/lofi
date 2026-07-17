@@ -2,17 +2,21 @@ import { schema as s } from "jazz-tools";
 import type { CompiledPermissions } from "jazz-tools";
 import { AccessError } from "./errors.ts";
 
-type AccessTable = {
+/** Minimum declared Jazz table metadata consumed by access templates. */
+export type AccessTable = {
   readonly _table: string;
   readonly _schema: Record<string, { columns?: unknown[] }>;
 };
 
+/** Owner-only resource policy template. */
 export type PrivateAccessTemplate = { readonly kind: "private"; readonly resource: AccessTable };
+/** Direct-share resource and grant-table policy template. */
 export type SharedAccessTemplate = {
   readonly kind: "shared";
   readonly resource: AccessTable;
   readonly grants: AccessTable;
 };
+/** Fixed-role group, membership, and resource policy template. */
 export type GroupAccessTemplate = {
   readonly kind: "group";
   readonly groups: AccessTable;
@@ -20,12 +24,15 @@ export type GroupAccessTemplate = {
   readonly resources: readonly AccessTable[];
   readonly groupId: string;
 };
+/** Any built-in access policy template accepted by {@link defineAccessPolicies}. */
 export type AccessTemplate = PrivateAccessTemplate | SharedAccessTemplate | GroupAccessTemplate;
 
+/** Declares owner-only read and mutation policy for one resource table. */
 export function privateAccess(config: { resource: AccessTable }): PrivateAccessTemplate {
   return { kind: "private", ...config };
 }
 
+/** Declares owner plus explicit read/edit grants for one resource table. */
 export function sharedAccess(config: {
   resource: AccessTable;
   grants: AccessTable;
@@ -33,6 +40,7 @@ export function sharedAccess(config: {
   return { kind: "shared", ...config };
 }
 
+/** Declares fixed-role membership policy for one or more group-owned resources. */
 export function groupAccess(config: {
   groups: AccessTable;
   members: AccessTable;
@@ -95,18 +103,21 @@ function validateTemplate(template: AccessTemplate): void {
   }
 }
 
-type RuleBuilder = {
+/** Minimal Jazz rule builder exposed to raw access-policy extensions. */
+export type RuleBuilder = {
   where(input: unknown): unknown;
   always(): unknown;
 };
-type TablePolicy = {
+/** Read and mutation policy builders for one declared table. */
+export type TablePolicy = {
   allowRead: RuleBuilder;
   allowInsert: RuleBuilder;
   allowUpdate: RuleBuilder;
   allowDelete: RuleBuilder;
   exists: { where(input: unknown): unknown };
 };
-type RawAccessPolicyContext = {
+/** Raw Jazz policy-builder context exposed to advanced policy extensions. */
+export type RawAccessPolicyContext = {
   policy: Record<string, TablePolicy>;
   session: { user_id: unknown };
   anyOf(conditions: readonly unknown[]): unknown;
@@ -116,6 +127,7 @@ type RawAccessPolicyContext = {
   };
 };
 
+/** Callback for app-specific rules that do not fit the built-in templates. */
 export type RawAccessPolicyExtension = (context: RawAccessPolicyContext) => void;
 
 /**

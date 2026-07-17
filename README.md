@@ -40,7 +40,11 @@ task example with your own schema, permissions, hook, and UI.
 - **Identity from the first launch.** Each user begins with a private on-device account, even when
   the app has no sync service configured.
 - **Optional sync and recovery.** Users can make that same account portable when you connect the app
-  to managed Jazz sync.
+  to managed Jazz sync, using a recoverable passkey when available and a recovery phrase as the
+  portable fallback.
+- **Narrow collaboration templates.** Private resources, direct sharing, and fixed-role groups sit
+  behind a small `@nzip/lofi/access` API while raw Jazz permissions remain available as an escape
+  hatch.
 - **A narrow authoring surface.** Product code owns the schema, permissions, configuration, Preact
   islands, styles, and tests. lofi owns storage, identity, sync, lifecycle, and PWA plumbing.
 - **Local-first test helpers.** Playwright-backed fixtures cover offline writes, multiple clients,
@@ -66,8 +70,10 @@ Provisioning creates a managed Jazz app and writes the public `JAZZ_APP_ID` and 
 configuration to the project's `.env`. Server-only credentials remain outside client output.
 
 Once sync is configured, a user can choose to back up and sync their existing account, then recover
-it on another device with a 24-word recovery phrase. Enabling sync preserves data created while the
-app was local-only because the account identity does not change.
+it with a recoverable passkey or a 24-word recovery phrase. Passkey portability depends on the
+browser, provider, and configured RP-ID; the phrase remains the provider-independent fallback.
+Enabling sync preserves data created while the app was local-only because the account identity does
+not change.
 
 ## Where lofi fits
 
@@ -87,19 +93,23 @@ Keep these current constraints in mind:
 
 A generated project keeps application source separate from the versioned framework package:
 
-```mermaid
-flowchart TB
-    Root["my-app/"] --> Config["deno.json"]
-    Root --> Public["public/<br/>manifest · icons"]
-    Root --> Src["src/"]
-    Root --> Tests["tests/<br/>your tests + lofi testing contract"]
-    Root --> Framework["@nzip/lofi<br/>versioned framework package"]
+```text
+my-app/
+├── deno.json                    # tasks and one pinned @nzip/lofi version
+├── public/                      # manifest and replaceable product icons
+├── src/
+│   ├── app.ts                   # app, storage, sync, and passkey configuration
+│   ├── schema.ts                # persisted data model
+│   ├── permissions.ts           # private, shared, or group access policy
+│   ├── islands/                 # interactive Preact product UI
+│   ├── layouts/                 # document shell
+│   ├── pages/                   # Astro routes
+│   └── styles/                  # product styling
+├── tests/                       # app tests and local-first browser journeys
+├── .lofi/                       # generated package tooling (ignored)
+└── dist/                        # generated production PWA (ignored)
 
-    Src --> Model["schema.ts + permissions.ts<br/>your model and access policy"]
-    Src --> App["app.ts<br/>your application config"]
-    Src --> UI["pages + islands + styles<br/>your product experience"]
-    Src --> Layout["layouts/<br/>your document shell"]
-    Framework --> Runtime["storage · identity · sync<br/>PWA · lifecycle · diagnostics"]
+@nzip/lofi                       # versioned storage, identity, sync, PWA, and tooling
 ```
 
 Product work stays in `schema.ts`, `permissions.ts`, `app.ts`, `pages/`, `layouts/`, `islands/`, and
@@ -108,6 +118,18 @@ code without copying it into your source tree.
 
 See the [exact generated-project map](docs/reference/project-layout.md) for every source-controlled
 path, its ownership category, and the separately regenerated `.lofi/` and `dist/` trees.
+
+## Sharing and groups
+
+`@nzip/lofi/access` provides schema helpers, policy templates, app-scoped sharing identities, and
+operations for direct shares and fixed-role groups. Collaboration requires configured sync; the
+helpers fail explicitly in local-only mode rather than implying that another device can see local
+data.
+
+Start with the [account and access API](docs/reference/access.md), then copy the
+[direct-share](docs/examples/shared.md) or [group](docs/examples/group.md) example. The templates
+compile ordinary Jazz policies, so unusual authorization models can still use raw Jazz schema and
+permission APIs.
 
 ## Testing local-first behavior
 
@@ -155,8 +177,9 @@ validated before it becomes part of the generated project.
 ## Identity and recovery model
 
 A new app opens immediately on a private, on-device account. When managed sync is configured, the
-user can back up and sync that same account and recover it elsewhere with the recovery phrase. The
-phrase is the portable backup; keeping it safe is the user's responsibility.
+user can back up and sync that same account and recover it with a recoverable passkey or the
+recovery phrase. The phrase remains the portable bearer-secret fallback; keeping it safe is the
+user's responsibility.
 
 See [Sync and recovery](docs/sync-and-recovery.md) for setup and shipping guidance, and
 [Local-first accounts: open now, back up later](docs/auth-identity.md) for the detailed account

@@ -5,15 +5,19 @@ import { AccessError } from "./errors.ts";
 import { decodeSharingIdentity, type SharingIdentity } from "./identity.ts";
 import { type GroupRole, groupRoleCapabilities, groupRoles } from "./schema.ts";
 
-type Identified = { id: string };
-type AccessRuntimeTable<Row, Init> = TableProxy<Row, Init> & {
+/** Minimum row shape accepted by collaboration operations. */
+export type Identified = { id: string };
+/** Jazz table shape required by the access operation helpers. */
+export type AccessRuntimeTable<Row, Init> = TableProxy<Row, Init> & {
   where(input: unknown): QueryBuilder<Row>;
 };
+/** Conventional direct-share grant row. */
 export type SharedGrantRow = Identified & {
   resourceId: string;
   user_id: string;
   can_edit: boolean;
 };
+/** Conventional fixed-role group membership row. */
 export type GroupMembershipRow = Identified & {
   groupId: string;
   user_id: string;
@@ -56,8 +60,10 @@ function assertRole(role: string): asserts role is GroupRole {
   }
 }
 
+/** Access level assigned by a direct share. */
 export type ShareLevel = "read" | "edit";
 
+/** Direct-share operations bound to one resource and grant table pair. */
 export type SharingOperations<Resource, Grant> = {
   share(resourceId: string, recipient: SharingIdentity | string, level: ShareLevel): Promise<Grant>;
   revoke(resourceId: string, recipient: SharingIdentity | string): Promise<void>;
@@ -65,6 +71,7 @@ export type SharingOperations<Resource, Grant> = {
   sharedWithMe(): Promise<Resource[]>;
 };
 
+/** Creates direct-share operations that wait for local and global durability. */
 export function createSharingOperations<
   Resource extends Identified,
   ResourceInit,
@@ -135,6 +142,7 @@ export function createSharingOperations<
   };
 }
 
+/** Creates fixed-role group membership operations for a declared table pair. */
 export function createGroupOperations<
   Group extends Identified,
   GroupInit,
@@ -242,6 +250,7 @@ export function createGroupOperations<
   };
 }
 
+/** Fixed-role group creation and membership operations. */
 export type GroupOperations<Group, GroupInit, Member> = {
   createGroup(values: GroupInit): Promise<{ group: Group; membership: Member }>;
   addMember(

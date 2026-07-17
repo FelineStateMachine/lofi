@@ -1,5 +1,6 @@
 /// <reference path="./env.d.ts" />
 // Package-owned PWA lifecycle.
+/** Service-worker lifecycle states exposed to application UI. */
 export type PwaWorkerState =
   | "development-disabled"
   | "unsupported"
@@ -8,6 +9,7 @@ export type PwaWorkerState =
   | "update-available"
   | "failed";
 
+/** Browser installation states exposed to application UI. */
 export type PwaInstallState =
   | "installed"
   | "available"
@@ -17,8 +19,10 @@ export type PwaInstallState =
   | "manual-ios"
   | "unavailable";
 
+/** Stable categories for recoverable offline/PWA failures. */
 export type PwaFailureCode = "registration" | "installation" | "precache" | "runtime-cache";
 
+/** Current install, service-worker, and offline-cache state. */
 export type PwaState = {
   worker: PwaWorkerState;
   install: PwaInstallState;
@@ -28,11 +32,13 @@ export type PwaState = {
   };
 };
 
+/** Chromium install event retained until application UI requests the prompt. */
 export type InstallPromptEvent = Event & {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
+/** Browser signals used to classify installed and manual-install experiences. */
 export type InstallEnvironment = {
   displayModeStandalone: boolean;
   navigatorStandalone: boolean;
@@ -53,11 +59,13 @@ const actionableFailureMessages: Record<PwaFailureCode, string> = {
     "A recently opened file was not saved for offline use. Reconnect and open it again before going offline.",
 };
 
+/** Returns actionable, non-technical recovery guidance for a PWA failure. */
 export function pwaFailureMessage(code: PwaFailureCode): string {
   return actionableFailureMessages[code];
 }
 
-export interface PwaControllerDependencies {
+/** Injectable browser surfaces used to test the PWA lifecycle deterministically. */
+export type PwaControllerDependencies = {
   readonly eventTarget?: () => EventTarget;
   readonly serviceWorker?: () => ServiceWorkerContainer | undefined;
   readonly installEnvironment?: () => InstallEnvironment;
@@ -65,15 +73,16 @@ export interface PwaControllerDependencies {
   readonly documentBaseURI?: () => string;
   readonly reload?: () => void;
   readonly exposeState?: (state: PwaState) => void;
-}
+};
 
-export interface PwaController {
+/** Stateful controller for browser installation and service-worker updates. */
+export type PwaController = {
   getState(): PwaState;
   subscribe(subscriber: (state: PwaState) => void): () => void;
   requestInstall(): Promise<PwaInstallState>;
   applyUpdate(): boolean;
   initialize(): void;
-}
+};
 
 export function classifyInstallExperience(environment: InstallEnvironment): PwaInstallState {
   if (environment.displayModeStandalone || environment.navigatorStandalone) return "installed";
@@ -101,6 +110,7 @@ export function waitForActivation(worker: ServiceWorker): Promise<void> {
   });
 }
 
+/** Creates an isolated PWA controller, primarily for custom integration and tests. */
 export function createPwaController(dependencies: PwaControllerDependencies = {}): PwaController {
   const subscribers = new Set<(state: PwaState) => void>();
   let deferredInstallPrompt: InstallPromptEvent | undefined;
@@ -247,24 +257,29 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
   };
 }
 
+/** Shared controller used by the root runtime and optional Preact bindings. */
 export const pwaController: PwaController = createPwaController({
   exposeState(next) {
     if (typeof document !== "undefined") (globalThis as LofiPwaGlobal).__LOFI_PWA_STATE__ = next;
   },
 });
 
+/** Returns the shared controller's current state snapshot. */
 export function getPwaState(): PwaState {
   return pwaController.getState();
 }
 
+/** Subscribes to shared PWA state and returns an idempotent unsubscribe function. */
 export function subscribePwaState(subscriber: (state: PwaState) => void): () => void {
   return pwaController.subscribe(subscriber);
 }
 
+/** Requests the deferred browser installation prompt when one is available. */
 export function requestPwaInstall(): Promise<PwaInstallState> {
   return pwaController.requestInstall();
 }
 
+/** Activates a waiting service worker; returns false when no update is ready. */
 export function applyPwaUpdate(): boolean {
   return pwaController.applyUpdate();
 }

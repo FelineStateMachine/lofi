@@ -35,8 +35,8 @@ export const STARTER_FILES: readonly string[] = [
  * published package (an `https:` JSR URL fetched over the network).
  */
 export async function readStarterFile(relativePath: string): Promise<Uint8Array> {
-  const url = import.meta.resolve(`../apps/reference/${relativePath}`);
-  if (url.startsWith("file:")) return await Deno.readFile(new URL(url));
+  const url = new URL(`../apps/reference/${relativePath}`, import.meta.url);
+  if (url.protocol === "file:") return await Deno.readFile(url);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to read starter file ${relativePath}: HTTP ${response.status}`);

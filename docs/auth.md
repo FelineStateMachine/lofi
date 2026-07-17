@@ -12,7 +12,7 @@ lofi device auth is a small, honest **primitive**, not a mandated identity or re
 Local-first identity is device-local and cryptographic — there is no central store to authenticate
 against — so this module does exactly three things: enroll a device passkey, authenticate with it,
 and derive a credential-bound key to encrypt data **at rest**. The generated session runtime handles
-accounts, recovery phrases, and optional multi-device sync separately.
+accounts, recoverable-passkey backup, recovery phrases, and optional multi-device sync separately.
 
 The runtime lives at `package/runtime/auth.ts` and is exposed through `@nzip/lofi`.
 
@@ -29,10 +29,11 @@ The runtime lives at `package/runtime/auth.ts` and is exposed through `@nzip/lof
   HKDF-SHA-256. PRF support is feature-detected (`getAuthCapability`); if the client or
   authenticator does not return a PRF result, the derive path throws `prf-unavailable` rather than
   inventing a key.
-- **No cross-device recovery claim.** A lost device is lost access — the same custody the
-  device-local identity already has. This is intentional and consistent with the earlier rejection
-  of the Jazz alpha's passkey-backup ceremony: lofi does not smuggle a recovery/escrow model in
-  through the auth primitive.
+- **No recovery claim for this primitive.** `enrollDeviceCredential` and the PRF-derived key do not
+  contain the Jazz account secret, so they cannot restore an account. Account recovery uses the
+  separate `createRecoverablePasskeyBackup` / `restoreFromPasskey` flow documented in
+  [Sync and recovery](sync-and-recovery.md), with an RP-ID- and provider-independent phrase
+  fallback.
 
 ## Usage
 

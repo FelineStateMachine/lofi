@@ -9,6 +9,7 @@ type PasskeyBackupErrorCode =
   | "invalid-credential"
   | "verification-failed";
 
+/** Stable categories for recoverable passkey backup and restore failures. */
 export type RecoverablePasskeyErrorCode =
   | "cancelled"
   | "unsupported"
@@ -37,8 +38,11 @@ const messages: Record<RecoverablePasskeyErrorCode, string> = {
     "The passkey could not restore this account. The current account is unchanged; use the recovery phrase or try again.",
 };
 
+/** A non-secret, actionable recoverable-passkey failure. */
 export class RecoverablePasskeyError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "RecoverablePasskeyError";
+  /** Creates a mapped passkey error with safe user-facing guidance. */
   constructor(readonly code: RecoverablePasskeyErrorCode, options?: ErrorOptions) {
     super(messages[code], options);
   }

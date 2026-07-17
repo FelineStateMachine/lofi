@@ -1,3 +1,4 @@
+/** Browser capabilities that determine whether lofi can provide its runtime guarantees. */
 export type DeviceCapabilityReport = {
   // Package-owned device capability checks.
   secureContext: boolean;
@@ -11,6 +12,9 @@ export type DeviceCapabilityReport = {
   persistentPermission: "granted" | "not-granted" | "unavailable" | "error";
   displayMode: "standalone" | "browser";
 };
+
+/** Capability report that excludes the separately requested persistence permission. */
+export type DurableCapabilityReport = Omit<DeviceCapabilityReport, "persistentPermission">;
 
 type StorageManagerWithOpfs = StorageManager & {
   getDirectory?: () => Promise<FileSystemDirectoryHandle>;
@@ -40,10 +44,8 @@ async function readPrfCapability(
   }
 }
 
-export function durableCapabilityReport(): Omit<
-  DeviceCapabilityReport,
-  "persistentPermission"
-> {
+/** Reads synchronous browser capabilities needed by the durable Jazz driver. */
+export function durableCapabilityReport(): DurableCapabilityReport {
   const storage = browserStorage();
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   const secureContext = globalThis.isSecureContext === true;
@@ -67,6 +69,7 @@ export function durableCapabilityReport(): Omit<
   };
 }
 
+/** Reads the complete capability report without requesting new browser permission. */
 export async function readDeviceCapabilityReport(): Promise<DeviceCapabilityReport> {
   const base = durableCapabilityReport();
   const storage = browserStorage();
@@ -85,6 +88,7 @@ export async function readDeviceCapabilityReport(): Promise<DeviceCapabilityRepo
   }
 }
 
+/** Requests eviction protection, then returns the browser's authoritative capability report. */
 export async function requestPersistentStorage(): Promise<DeviceCapabilityReport> {
   const storage = browserStorage();
   if (typeof storage?.persist !== "function") return await readDeviceCapabilityReport();
@@ -96,11 +100,15 @@ export async function requestPersistentStorage(): Promise<DeviceCapabilityReport
   return await readDeviceCapabilityReport();
 }
 
+/** Raised when the browser cannot provide the durable local-storage contract. */
 export class DurableStorageUnsupportedError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
   override name = "DurableStorageUnsupportedError";
-  readonly report: ReturnType<typeof durableCapabilityReport>;
+  /** Capabilities observed when the runtime rejected startup. */
+  readonly report: DurableCapabilityReport;
 
-  constructor(report: ReturnType<typeof durableCapabilityReport> = durableCapabilityReport()) {
+  /** Creates an error that identifies every missing durable-driver capability. */
+  constructor(report: DurableCapabilityReport = durableCapabilityReport()) {
     const missing = Object.entries({
       secureContext: report.secureContext,
       opfs: report.opfs,
@@ -117,6 +125,7 @@ export class DurableStorageUnsupportedError extends Error {
   }
 }
 
+/** Throws unless the current browser can open lofi's persistent local driver. */
 export function assertDurableBrowser(): void {
   const report = durableCapabilityReport();
   if (!report.durableDriverSupported) throw new DurableStorageUnsupportedError(report);

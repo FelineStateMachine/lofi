@@ -154,6 +154,7 @@ export async function createBackupPasskey(label?: string): Promise<boolean> {
   }
 }
 
+/** Non-secret confirmation that a recoverable passkey was created for an account and RP-ID. */
 export type PasskeyBackupReceipt = { user_id: string; rpId: string };
 
 /**
@@ -240,24 +241,19 @@ export async function stopSyncBackup(): Promise<Session> {
   return readSession();
 }
 
-/**
- * Recovers an account from its recovery phrase: the phrase reconstructs the
- * exact account secret, which replaces the one on this device. Sync is elected
- * so the recovered account's data syncs back down, and the runtime is recreated
- * to open it. Throws {@link RecoveryError} on a malformed phrase — the account is
- * never replaced with a fabricated secret.
- *
- * This overwrites whatever account this device currently holds, so a caller
- * should confirm the intent before discarding a local-only account's data.
- */
+/** Confirmation required before recovery may replace a different local-only account. */
 export type AccountReplacementOptions = {
   /** Explicit acknowledgement that a different local-only account may be discarded. */
   confirmLocalReplacement?: boolean;
 };
 
+/** Raised when account recovery needs explicit acknowledgement of local replacement. */
 export class AccountReplacementError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "AccountReplacementError";
+  /** Stable category for user-facing confirmation flows. */
   readonly code = "confirmation-required";
+  /** Creates the non-secret replacement warning. */
   constructor() {
     super(
       "Restoring would replace this device's local-only account. Confirm replacement only after saving any data that has not synced.",
@@ -284,6 +280,11 @@ async function replaceAccountSecret(
   return readSession();
 }
 
+/**
+ * Reconstructs an account from its recovery phrase, elects sync, and replaces
+ * the active runtime. Throws {@link RecoveryError} for malformed phrases and
+ * {@link AccountReplacementError} when confirmation is required.
+ */
 export async function restoreFromRecoveryPhrase(
   phrase: string,
   options: AccountReplacementOptions = {},
@@ -310,10 +311,12 @@ export function isAuthError(error: unknown): error is AuthError {
   return error instanceof AuthError;
 }
 
+/** True when an error came from a recoverable passkey backup or restore ceremony. */
 export function isRecoverablePasskeyError(error: unknown): error is RecoverablePasskeyError {
   return error instanceof RecoverablePasskeyError;
 }
 
+/** True when recovery requires explicit confirmation before replacing a local account. */
 export function isAccountReplacementError(error: unknown): error is AccountReplacementError {
   return error instanceof AccountReplacementError;
 }

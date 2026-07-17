@@ -66,6 +66,14 @@ account they already have carries over — electing to sync never changes its id
 is scoped to the app's stable relying-party ID; provider syncing is not universally portable. The
 framework implementation is provided by \`@nzip/lofi\`.
 
+## Sharing and groups
+
+The optional \`@nzip/lofi/access\` entrypoint provides private, direct-share, and fixed-role group
+templates over ordinary Jazz schemas. Collaboration requires configured sync and fails explicitly in
+local-only mode. Start with the
+[permissions guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/permissions.md) and the
+[access API reference](https://github.com/FelineStateMachine/lofi/blob/main/docs/reference/access.md).
+
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
 

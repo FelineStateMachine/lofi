@@ -31,12 +31,19 @@ export interface VirtualAuthenticatorOptions {
 
 /** Serializable CDP credential used to copy one virtual passkey between browser profiles. */
 export interface VirtualAuthenticatorCredential {
+  /** Base64url credential identifier assigned by the virtual authenticator. */
   readonly credentialId: string;
+  /** Whether the credential is discoverable without an allow-list. */
   readonly isResidentCredential: boolean;
+  /** Relying-party ID that may request this credential. */
   readonly rpId?: string;
+  /** PKCS#8 private key used only inside the virtual test authenticator. */
   readonly privateKey: string;
+  /** Optional base64url user handle associated with the credential. */
   readonly userHandle?: string;
+  /** Signature counter maintained by the virtual authenticator. */
   readonly signCount: number;
+  /** Optional base64url large-blob payload stored by the virtual authenticator. */
   readonly largeBlob?: string;
 }
 

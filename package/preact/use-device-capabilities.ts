@@ -5,12 +5,15 @@ import {
   readDeviceCapabilityReport,
   requestPersistentStorage,
 } from "../runtime/device-capabilities.ts";
+export type { DeviceCapabilityReport } from "../runtime/device-capabilities.ts";
 
+/** State returned by {@link useDeviceCapabilities}. */
 export type DeviceCapabilitiesHook = {
   report: DeviceCapabilityReport | null;
   requestPersistence(): Promise<void>;
 };
 
+/** Reads browser capabilities and exposes an explicit persistence request. */
 export function useDeviceCapabilities(): DeviceCapabilitiesHook {
   const [report, setReport] = useState<DeviceCapabilityReport | null>(null);
   useEffect(() => {

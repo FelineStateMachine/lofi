@@ -53,7 +53,7 @@ flowchart TB
         Schema["schema.ts"]
         Permissions["permissions.ts"]
         App["app.ts"]
-        UI["pages, islands, styles"]
+        UI["pages, layouts, islands, styles"]
         Public["public assets"]
         Tests["tests"]
     end
@@ -71,8 +71,8 @@ flowchart TB
     Runtime --> Lifecycle
 ```
 
-- Change `src/schema.ts`, `src/permissions.ts`, `src/app.ts`, `src/pages/`, `src/islands/`, and
-  `src/styles/`.
+- Change `src/schema.ts`, `src/permissions.ts`, `src/app.ts`, `src/pages/`, `src/layouts/`,
+  `src/islands/`, and `src/styles/`.
 - Import documented runtime seams from `@nzip/lofi`; no framework implementation is copied into
   `src/`.
 - Change files under `public/` when customizing the icon or manifest. The package build generates

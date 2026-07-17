@@ -24,8 +24,11 @@ export const RECOVERY_PHRASE_WORDS = 24;
 
 /** A precise, non-leaking failure reason for a recovery-phrase operation. */
 export class RecoveryError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "RecoveryError";
+  /** Actionable category that callers can map to recovery guidance. */
   readonly code: "invalid-length" | "invalid-word" | "invalid-checksum" | "invalid-secret";
+  /** Creates a phrase error without retaining the submitted phrase. */
   constructor(code: RecoveryError["code"], message?: string) {
     super(message ?? `Recovery phrase operation failed: ${code}.`);
     this.code = code;

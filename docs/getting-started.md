@@ -64,6 +64,7 @@ The final package map is intentionally small:
 | Import                        | Supported use                                       |
 | ----------------------------- | --------------------------------------------------- |
 | `@nzip/lofi`                  | App configuration, runtime, session, stores, PWA    |
+| `@nzip/lofi/access`           | Private, direct-share, and fixed-role group helpers |
 | `@nzip/lofi/preact`           | Package-owned Preact hooks and diagnostic UI        |
 | `@nzip/lofi/astro`            | Package-owned Astro/Vite integration                |
 | `@nzip/lofi/testing`          | Local-first Playwright helpers                      |

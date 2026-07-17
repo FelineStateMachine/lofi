@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { JSX, VNode } from "preact";
 import { useEffect, useState } from "preact/hooks";
 // Package-owned optional diagnostics UI.
 import { serverUrl } from "../runtime/config.ts";
@@ -28,7 +28,8 @@ function Row({ label, value }: { label: string; value: string }): JSX.Element {
 
 const available = (present: boolean) => (present ? "available" : "missing");
 
-export default function DeviceStatus(): JSX.Element {
+/** Renders live storage, sync, auth, and PWA capability diagnostics. */
+export default function DeviceStatus(): VNode {
   const { report, requestPersistence } = useDeviceCapabilities();
   const [pwa, setPwa] = useState<PwaState>(getPwaState());
   const [session, setSession] = useState<Session | null>(null);

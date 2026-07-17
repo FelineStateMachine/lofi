@@ -14,6 +14,7 @@
     "./preview": "./package/commands/preview.ts",
     "./preact": "./package/preact/mod.ts",
     "./provision": "./package/commands/provision.ts",
+    "./recipes/file-handler": "./package/recipes/file-handler.ts",
     "./recipes/launch-handler": "./package/recipes/launch-handler.ts",
     "./recipes/web-share": "./package/recipes/web-share.ts",
     "./testing": "./package/testing/mod.ts",

@@ -134,9 +134,9 @@ permission APIs.
 ## Optional installed-app recipes
 
 OS-facing capabilities stay out of the starter until the product opts in. The
-[installed-app recipe catalog](docs/recipes/README.md) begins with a tested inbound/outbound Web
-Share flow, including an isolated `@nzip/lofi/recipes/web-share` entrypoint, manifest validation,
-untrusted-input parsing, and ordinary-web fallbacks.
+[installed-app recipe catalog](docs/recipes/README.md) contains tested, isolated entrypoints for Web
+Share, installed-window launch handling, and validated file-import previews. Each keeps manifest
+changes opt-in and documents input validation, offline behavior, and ordinary-web fallbacks.
 
 ## Testing local-first behavior
 

@@ -106,8 +106,8 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
     assert(
-      lofiSpecifiers.length === 13,
-      `expected one package prefix, access, two integrations, six commands, two recipes, and testing, received ${lofiSpecifiers.length}`,
+      lofiSpecifiers.length === 14,
+      `expected one package prefix, access, two integrations, six commands, three recipes, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.3.3/")),
@@ -151,6 +151,7 @@ Deno.test("package manifest and generated version stay coupled", () => {
     "./preact",
     "./preview",
     "./provision",
+    "./recipes/file-handler",
     "./recipes/launch-handler",
     "./recipes/web-share",
     "./test",
@@ -160,6 +161,10 @@ Deno.test("package manifest and generated version stay coupled", () => {
   assertEquals(packageManifest.exports["./access"], "./package/access/mod.ts");
   assertEquals(packageManifest.exports["./astro"], "./package/astro/mod.ts");
   assertEquals(packageManifest.exports["./preact"], "./package/preact/mod.ts");
+  assertEquals(
+    packageManifest.exports["./recipes/file-handler"],
+    "./package/recipes/file-handler.ts",
+  );
   assertEquals(
     packageManifest.exports["./recipes/launch-handler"],
     "./package/recipes/launch-handler.ts",

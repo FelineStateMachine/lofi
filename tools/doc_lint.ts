@@ -9,6 +9,7 @@ const entrypoints = [
   "package/commands/preview.ts",
   "package/preact/mod.ts",
   "package/commands/provision.ts",
+  "package/recipes/file-handler.ts",
   "package/recipes/launch-handler.ts",
   "package/recipes/web-share.ts",
   "package/testing/mod.ts",

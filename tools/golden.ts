@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 14, `expected 14 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 15, `expected 15 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -759,6 +759,100 @@ export default function LaunchReceiver() {
   );
 }
 
+async function installFileHandlerRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.file_handlers = [{
+    action: "./import/",
+    accept: { "application/json": [".json"] },
+  }];
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "import.astro"),
+    `---
+import FileImport from "../islands/FileImport.tsx";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+---
+
+<Shell title="Import field notes">
+  <FileImport client:load />
+</Shell>
+`,
+  );
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "islands", "FileImport.tsx"),
+    `import { useEffect, useState } from "preact/hooks";
+import {
+  installFileLaunchConsumer,
+  prepareFileImportDrafts,
+  type FileImportDraft,
+  type FileImportIssue,
+} from "@nzip/lofi/recipes/file-handler";
+
+type Preview = { title: string };
+const options = {
+  accept: { "application/json": [".json"] },
+  maxFiles: 1,
+  maxFileBytes: 128,
+  async parse(file: File): Promise<Preview> {
+    const value: unknown = JSON.parse(await file.text());
+    if (!value || typeof value !== "object" || typeof (value as { title?: unknown }).title !== "string") {
+      throw new Error("invalid field notes export");
+    }
+    return { title: (value as { title: string }).title };
+  },
+} as const;
+
+export default function FileImport() {
+  const [supported, setSupported] = useState<boolean>();
+  const [drafts, setDrafts] = useState<readonly FileImportDraft<Preview>[]>([]);
+  const [issue, setIssue] = useState<FileImportIssue>();
+  const [confirmed, setConfirmed] = useState(false);
+
+  const receive = (next: readonly FileImportDraft<Preview>[]) => {
+    setConfirmed(false);
+    setIssue(undefined);
+    setDrafts(next);
+  };
+  useEffect(() => {
+    const consumer = installFileLaunchConsumer({
+      ...options,
+      onDrafts: receive,
+      onRejected: (next) => {
+        setDrafts([]);
+        setIssue(next);
+      },
+    });
+    setSupported(consumer.supported);
+    return consumer.dispose;
+  }, []);
+
+  async function pick(files: FileList | null) {
+    const result = await prepareFileImportDrafts(files ? [...files] : [], options);
+    if (result.ok) receive(result.drafts);
+    else {
+      setDrafts([]);
+      setIssue(result.issue);
+    }
+  }
+
+  return (
+    <section class="island">
+      <h1>Import field notes</h1>
+      <output data-file-support>{supported === undefined ? "checking" : supported ? "supported" : "unsupported"}</output>
+      <label>Choose an export <input type="file" accept="application/json,.json" onChange={(event) => void pick(event.currentTarget.files)} /></label>
+      {drafts.map((draft) => <p data-file-title>{draft.parsed.title}</p>)}
+      {drafts.length > 0 && <button type="button" onClick={() => setConfirmed(true)}>Import these notes</button>}
+      {confirmed && <p role="status">Import confirmed.</p>}
+      {issue && <p role="alert">This file cannot be imported.</p>}
+    </section>
+  );
+}
+`,
+  );
+}
+
 async function main() {
   const { source, version } = parseArgs(Deno.args);
   await Deno.remove(artifactsRoot, { recursive: true }).catch((error) => {
@@ -1004,6 +1098,7 @@ async function main() {
 
     await stage("install web-share recipe", () => installWebShareRecipe(projectRoot!));
     await stage("install launch-handler recipe", () => installLaunchHandlerRecipe(projectRoot!));
+    await stage("install file-handler recipe", () => installFileHandlerRecipe(projectRoot!));
 
     await stage(
       "build",
@@ -1223,10 +1318,11 @@ async function main() {
       await context!.setOffline(true);
       try {
         await page!.goto(`${origin}launch/`, { waitUntil: "domcontentloaded" });
-        await page!.locator("[data-launch-support]").waitFor({ state: "visible" });
-        assert(
-          await page!.locator("[data-launch-support]").textContent() === "supported",
-          "mock launchQueue was not consumed",
+        await waitForReady(
+          page!,
+          () => document.querySelector("[data-launch-support]")?.textContent === "supported",
+          undefined,
+          { description: "mock launchQueue consumed" },
         );
         await page!.evaluate((targetURL) => {
           const deliver = (globalThis as typeof globalThis & {
@@ -1255,6 +1351,93 @@ async function main() {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(page!, taskAppReady, undefined, {
         description: "task app after launch-handler exercise",
+      });
+    });
+    await stage("file-handler recipe browser", async () => {
+      const unsupportedPage = await context!.newPage();
+      try {
+        await unsupportedPage.addInitScript(() => {
+          Object.defineProperty(globalThis, "launchQueue", {
+            configurable: true,
+            value: undefined,
+          });
+        });
+        await unsupportedPage.goto(`${origin}import/`, { waitUntil: "domcontentloaded" });
+        await unsupportedPage.locator("[data-file-support]").waitFor({ state: "visible" });
+        assert(
+          await unsupportedPage.locator("[data-file-support]").textContent() === "unsupported",
+          "missing launchQueue was not reported as unsupported for file import",
+        );
+        await unsupportedPage.locator('input[type="file"]').setInputFiles({
+          name: "picker.json",
+          mimeType: "application/json",
+          buffer: Buffer.from('{"title":"Picker import"}'),
+        });
+        await unsupportedPage.getByText("Picker import").waitFor({ state: "visible" });
+      } finally {
+        await unsupportedPage.close();
+      }
+
+      await page!.addInitScript(() => {
+        let consumer: (parameters: { files?: unknown[] }) => void = () => {};
+        Object.defineProperty(globalThis, "launchQueue", {
+          configurable: true,
+          value: {
+            setConsumer(next: typeof consumer) {
+              consumer = next;
+            },
+          },
+        });
+        Object.defineProperty(globalThis, "__LOFI_DELIVER_FILE__", {
+          configurable: true,
+          value: (name: string, type: string, content: string) =>
+            consumer({
+              files: [{
+                kind: "file",
+                name,
+                getFile: () => Promise.resolve(new File([content], name, { type })),
+              }],
+            }),
+        });
+      });
+      await context!.setOffline(true);
+      try {
+        await page!.goto(`${origin}import/`, { waitUntil: "domcontentloaded" });
+        await waitForReady(
+          page!,
+          () => document.querySelector("[data-file-support]")?.textContent === "supported",
+          undefined,
+          { description: "mock launchQueue consumed by file import" },
+        );
+        await page!.evaluate(() => {
+          const deliver = (globalThis as typeof globalThis & {
+            __LOFI_DELIVER_FILE__?: (name: string, type: string, content: string) => void;
+          }).__LOFI_DELIVER_FILE__;
+          deliver?.("opened.json", "application/json", '{"title":"Opened import"}');
+        });
+        await page!.getByText("Opened import").waitFor({ state: "visible" });
+        assert(
+          await page!.getByText("Import confirmed.").count() === 0,
+          "received file was persisted before explicit confirmation",
+        );
+        await page!.getByRole("button", { name: "Import these notes" }).click();
+        await page!.getByText("Import confirmed.").waitFor({ state: "visible" });
+        await page!.evaluate(() => {
+          const deliver = (globalThis as typeof globalThis & {
+            __LOFI_DELIVER_FILE__?: (name: string, type: string, content: string) => void;
+          }).__LOFI_DELIVER_FILE__;
+          deliver?.("private.txt", "text/plain", "private-value");
+        });
+        await page!.getByRole("alert").waitFor({ state: "visible" });
+        const rejected = await page!.locator("body").innerText();
+        assert(!rejected.includes("private-value"), "rejected file content leaked into the UI");
+        assert(!rejected.includes("private.txt"), "rejected file name leaked into the UI");
+      } finally {
+        await context!.setOffline(false);
+      }
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after file-handler exercise",
       });
     });
     await stage("waiting worker update browser", async () => {

@@ -472,6 +472,88 @@ async function parseAndValidateManifest(
       }
     }
 
+    if (manifest.file_handlers !== undefined) {
+      if (!Array.isArray(manifest.file_handlers) || manifest.file_handlers.length === 0) {
+        issues.push(issue(`${manifestFile}: file_handlers must be a non-empty array`, remediation));
+      } else {
+        for (const [index, raw] of manifest.file_handlers.entries()) {
+          const label = `${manifestFile}: file_handlers[${index}]`;
+          if (!isObject(raw)) {
+            issues.push(issue(`${label} must be an object`, remediation));
+            continue;
+          }
+          const unknown = Object.keys(raw).filter((member) =>
+            !["action", "accept", "icons"].includes(member)
+          );
+          if (unknown.length > 0) {
+            issues.push(issue(`${label} contains unsupported members`, remediation));
+          }
+          if (!nonEmptyString(raw.action)) {
+            issues.push(issue(`${label}.action must be a non-empty URL`, remediation));
+          } else {
+            try {
+              const action = new URL(raw.action, manifestUrl);
+              if (!withinScope(action, scope)) {
+                issues.push(issue(`${label}.action must stay inside manifest scope`, remediation));
+              }
+              if (action.search || action.hash) {
+                issues.push(
+                  issue(`${label}.action must not contain a query or fragment`, remediation),
+                );
+              }
+            } catch {
+              issues.push(issue(`${label}.action is not a valid URL`, remediation));
+            }
+          }
+          if (!isObject(raw.accept) || Object.keys(raw.accept).length === 0) {
+            issues.push(issue(`${label}.accept must be a non-empty object`, remediation));
+          } else {
+            for (const [type, extensions] of Object.entries(raw.accept)) {
+              if (!/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(type)) {
+                issues.push(
+                  issue(`${label}.accept keys must be explicit lowercase MIME types`, remediation),
+                );
+              }
+              if (
+                !Array.isArray(extensions) || extensions.length === 0 ||
+                !extensions.every((extension) =>
+                  typeof extension === "string" && /^\.[a-z0-9][a-z0-9.+_-]*$/.test(extension)
+                )
+              ) {
+                issues.push(
+                  issue(
+                    `${label}.accept values must be non-empty lowercase dot-extension arrays`,
+                    remediation,
+                  ),
+                );
+                continue;
+              }
+              if (new Set(extensions).size !== extensions.length) {
+                issues.push(
+                  issue(
+                    `${label}.accept extensions must not repeat within a MIME type`,
+                    remediation,
+                  ),
+                );
+              }
+            }
+          }
+          if (raw.icons !== undefined) {
+            const handlerIcons = await validateImages(
+              raw.icons,
+              `file_handlers[${index}].icons`,
+              join(root, location),
+              manifestUrl,
+              scope,
+              basePath,
+              remediation,
+            );
+            issues.push(...handlerIcons.issues);
+          }
+        }
+      }
+    }
+
     if (manifest.share_target !== undefined) {
       const label = `${manifestFile}: share_target`;
       const target = manifest.share_target;
@@ -710,6 +792,25 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
           issues.push(
             issue(
               `dist/${manifestFile}: share_target.action has no emitted offline route`,
+              remediation,
+            ),
+          );
+        }
+      } catch {
+        // Source validation already reports malformed action URLs.
+      }
+    }
+  }
+  if (Array.isArray(result.manifest?.file_handlers)) {
+    const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
+    for (const [index, raw] of result.manifest.file_handlers.entries()) {
+      if (!isObject(raw) || !nonEmptyString(raw.action)) continue;
+      try {
+        const route = emittedRoutePath(new URL(raw.action, manifestUrl), basePath);
+        if (!route || !htmlFiles.includes(route)) {
+          issues.push(
+            issue(
+              `dist/${manifestFile}: file_handlers[${index}].action has no emitted offline route`,
               remediation,
             ),
           );

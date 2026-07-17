@@ -18,6 +18,8 @@ flowchart LR
   receive an untrusted draft through an optional installed-app share target.
 - [Launch handling and client reuse](launch-handler.md) — safely focus or navigate an existing
   installed window while preserving ordinary launch behavior elsewhere.
+- [File handling and import previews](file-handler.md) — validate explicitly associated files into
+  transient drafts before the user confirms persistence.
 
 ## Contract for every recipe
 

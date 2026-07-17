@@ -83,8 +83,8 @@ local-only mode. Start with the
 OS-facing capabilities remain absent until the product opts in. Start with the
 [installed-app recipe catalog](https://github.com/FelineStateMachine/lofi/blob/main/docs/recipes/README.md)
 for tested manifest patches, feature detection, input validation, offline behavior, and normal-web
-fallbacks. The first recipe covers inbound and outbound text/link sharing through the isolated
-\`@nzip/lofi/recipes/web-share\` entrypoint.
+fallbacks. Isolated entrypoints cover Web Share, installed-window launch handling, and validated
+file-import previews without adding any of them to the starter manifest.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
@@ -129,6 +129,10 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
   "@nzip/lofi/preview": { subpath: "preview", localPath: "commands/preview.ts" },
   "@nzip/lofi/preact": { subpath: "preact", localPath: "preact/mod.ts" },
   "@nzip/lofi/provision": { subpath: "provision", localPath: "commands/provision.ts" },
+  "@nzip/lofi/recipes/file-handler": {
+    subpath: "recipes/file-handler",
+    localPath: "recipes/file-handler.ts",
+  },
   "@nzip/lofi/recipes/launch-handler": {
     subpath: "recipes/launch-handler",
     localPath: "recipes/launch-handler.ts",

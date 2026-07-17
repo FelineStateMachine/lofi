@@ -197,6 +197,45 @@ Deno.test("source PWA validation checks an opt-in launch handler", async () => {
   }
 });
 
+Deno.test("source PWA validation checks opt-in file handlers", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.file_handlers = [{
+      action: "../outside?unsafe=1",
+      accept: {
+        "application/*": ["json"],
+        "application/json": [".json", ".json"],
+      },
+      icons: [{
+        src: "./missing-file-icon.png",
+        sizes: "64x64",
+        type: "image/png",
+      }],
+      extra: true,
+    }];
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project, "/field-notes/");
+    assert(hasIssue(issues, "action must stay inside"), "escaped file action was accepted");
+    assert(hasIssue(issues, "must not contain a query"), "file action query was accepted");
+    assert(hasIssue(issues, "explicit lowercase MIME"), "wildcard MIME type was accepted");
+    assert(hasIssue(issues, "lowercase dot-extension"), "bare extension was accepted");
+    assert(hasIssue(issues, "must not repeat"), "duplicate extension was accepted");
+    assert(hasIssue(issues, "missing asset missing-file-icon.png"), "missing file icon passed");
+    assert(hasIssue(issues, "contains unsupported members"), "unknown file member was accepted");
+
+    manifest.file_handlers = [{
+      action: "./import/",
+      accept: { "application/json": [".json"] },
+    }];
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project, "/field-notes/");
+    assert(valid.length === 0, `valid file handler was rejected: ${JSON.stringify(valid)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation permits replacement branding and optional members", async () => {
   const { root, project } = await makeProject();
   try {
@@ -299,6 +338,10 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
       enctype: "application/x-www-form-urlencoded",
       params: { title: "title", text: "text", url: "url" },
     };
+    manifest.file_handlers = [{
+      action: "./import/",
+      accept: { "application/json": [".json"] },
+    }];
     await Deno.writeTextFile(
       join(dist, "manifest.webmanifest"),
       `${JSON.stringify(manifest, null, 2)}\n`,
@@ -311,6 +354,10 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
     assert(
       hasIssue(issues, "share_target.action has no emitted offline route"),
       "missing share-target route passed",
+    );
+    assert(
+      hasIssue(issues, "file_handlers[0].action has no emitted offline route"),
+      "missing file-handler route passed",
     );
   } finally {
     await Deno.remove(root, { recursive: true });

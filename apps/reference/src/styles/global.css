@@ -118,6 +118,33 @@ h1 {
   color: #d9efe2;
 }
 
+.pwa-actions {
+  background: #18231f;
+  border: 1px solid #3b594c;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.pwa-actions h3 {
+  margin: 0 0 0.75rem;
+}
+
+.pwa-actions p,
+.pwa-actions ol {
+  color: #bed0c6;
+  line-height: 1.55;
+}
+
+.pwa-actions ol {
+  margin-bottom: 0;
+  padding-left: 1.4rem;
+}
+
+.pwa-actions .pwa-error {
+  color: #f6b8b0;
+}
+
 label {
   display: block;
   font-weight: 750;

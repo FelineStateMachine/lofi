@@ -70,6 +70,11 @@ Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/ba
 Start with the framework's
 [generated-app guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/getting-started.md)
 when replacing the task example with your own schema, permissions, hook, and UI.
+The [exact generated-project map](https://github.com/FelineStateMachine/lofi/blob/main/docs/reference/project-layout.md)
+lists every source-controlled path and its ownership.
+
+Runtime, PWA, identity, sync, diagnostics, and Astro/Vite integration come from the one pinned
+\`@nzip/lofi\` package version. They are not copied into this project's source.
 
 ## Hosting
 
@@ -183,7 +188,7 @@ async function writeTemplate(destination: string): Promise<void> {
     const content = await readStarterFile(relativePath);
     const path = join(destination, relativePath);
     await Deno.mkdir(dirname(path), { recursive: true });
-    await Deno.writeTextFile(path, content);
+    await Deno.writeFile(path, content);
   }
 }
 

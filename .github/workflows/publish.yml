@@ -29,8 +29,31 @@ jobs:
             exit 1
           fi
 
-      - name: Test
-        run: deno task test:unit
+      - name: Formatting, lint, and unit/integration tests
+        run: deno task check
+
+      - name: Reference production build
+        run: deno task build --cwd apps/reference
+
+      - name: Publish dry run
+        run: deno task publish:dry --allow-dirty
+
+      - name: Install Chromium
+        run: deno task test:browser:install
 
       - name: Publish to JSR
         run: deno publish
+
+      - name: Generated-app golden journey (exact published version)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          deno run -A tools/golden.ts --source registry --version "$version"
+
+      - name: Retain sanitized golden failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-app-registry-golden-failure
+          path: test-results/golden/
+          if-no-files-found: ignore
+          retention-days: 7

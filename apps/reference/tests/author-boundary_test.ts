@@ -25,11 +25,19 @@ const forbidden = [
 ];
 
 test("author source consumes public lofi package seams and hides plumbing from product UI", async () => {
-  try {
-    await Deno.stat(new URL("../src/_lofi", import.meta.url));
-    throw new Error("generated project still contains a vendored src/_lofi runtime");
-  } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  for (
+    const [path, name] of [
+      ["../src/_lofi", "vendored src/_lofi runtime"],
+      ["../public/sw.js", "source service worker"],
+      ["../astro.config.ts", "checked-in Astro configuration"],
+    ] as const
+  ) {
+    try {
+      await Deno.stat(new URL(path, import.meta.url));
+      throw new Error(`generated project still contains ${name}`);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
   }
   for (const file of packageConsumers) {
     const source = await Deno.readTextFile(file);

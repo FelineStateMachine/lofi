@@ -7,6 +7,7 @@
     "npm:jazz-tools@2.0.0-alpha.53": "2.0.0-alpha.53",
     "npm:playwright@*": "1.61.1",
     "npm:playwright@1.61.1": "1.61.1",
+    "npm:preact-render-to-string@6.7.0": "6.7.0_preact@10.29.7",
     "npm:preact@10.29.7": "10.29.7_preact-render-to-string@6.7.0",
     "npm:typescript@6.0.3": "6.0.3",
     "npm:vite@8.0.1": "8.0.1_@emnapi+core@1.11.1_@emnapi+runtime@1.11.1"

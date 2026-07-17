@@ -29,7 +29,12 @@ const runtimeFiles = [
   "ui-mutation.ts",
 ] as const;
 
-const preactFiles = ["DeviceStatus.tsx", "mod.ts", "use-device-capabilities.ts"] as const;
+const preactFiles = [
+  "DeviceStatus.tsx",
+  "mod.ts",
+  "PwaActions.tsx",
+  "use-device-capabilities.ts",
+] as const;
 
 async function readPackageFile(path: string): Promise<string> {
   const url = new URL(path, import.meta.url);

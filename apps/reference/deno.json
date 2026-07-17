@@ -22,6 +22,7 @@
     "preact/hooks": "npm:preact@10.29.7/hooks",
     "preact/jsx-dev-runtime": "npm:preact@10.29.7/jsx-dev-runtime",
     "preact/jsx-runtime": "npm:preact@10.29.7/jsx-runtime",
+    "preact-render-to-string": "npm:preact-render-to-string@6.7.0",
     "typescript": "npm:typescript@6.0.3",
     "vite": "npm:vite@8.0.1"
   },

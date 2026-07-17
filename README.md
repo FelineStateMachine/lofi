@@ -104,6 +104,9 @@ Product work stays in `schema.ts`, `permissions.ts`, `app.ts`, `pages/`, `layout
 `styles/`. Framework behavior is imported from `@nzip/lofi`; upgrading the package updates runtime
 code without copying it into your source tree.
 
+See the [exact generated-project map](docs/reference/project-layout.md) for every source-controlled
+path, its ownership category, and the separately regenerated `.lofi/` and `dist/` trees.
+
 ## Testing local-first behavior
 
 `@nzip/lofi/testing` provides Playwright-backed helpers for behavior that is difficult to test with

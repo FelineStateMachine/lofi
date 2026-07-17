@@ -97,6 +97,7 @@ export async function sourceFingerprint(root = Deno.cwd()): Promise<string> {
       ".css",
       ".js",
       ".json",
+      ".png",
       ".svg",
       ".ts",
       ".tsx",

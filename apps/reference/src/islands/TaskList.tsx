@@ -12,7 +12,7 @@ export default function TaskList() {
   const [text, setText] = useState("");
 
   return (
-    <section class="island" data-island="tasks">
+    <section id="tasks" class="island" data-island="tasks">
       <header>
         <p class="eyebrow">Local-first</p>
         <h2>Example Island: Tasks</h2>

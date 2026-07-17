@@ -861,6 +861,31 @@ async function main() {
         await waitForListening(preview!, port);
       },
     );
+    await stage("manual install fallback browser", async () => {
+      const fallbackPage = await context!.newPage();
+      try {
+        await fallbackPage.addInitScript(() => {
+          const addEventListener = globalThis.addEventListener.bind(globalThis);
+          globalThis.addEventListener = ((
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | AddEventListenerOptions,
+          ) => {
+            if (type !== "beforeinstallprompt") addEventListener(type, listener, options);
+          }) as typeof globalThis.addEventListener;
+        });
+        await fallbackPage.goto(origin, { waitUntil: "domcontentloaded" });
+        await fallbackPage.getByText("No in-page install button is available right now.")
+          .waitFor({ state: "visible", timeout: 30_000 });
+        const guidance = await fallbackPage.locator(".pwa-browser-guidance").textContent() ?? "";
+        assert(
+          guidance.includes("if offered"),
+          "manual browser guidance claimed an unavailable install capability",
+        );
+      } finally {
+        await fallbackPage.close();
+      }
+    });
     await stage("production offline browser", async () => {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(
@@ -923,6 +948,39 @@ async function main() {
       assert(
         state.sync === "available — not yet backed up",
         `unexpected public sync state ${state.sync}`,
+      );
+    });
+    await stage("waiting worker update browser", async () => {
+      const workerPath = join(projectRoot!, "dist", "sw.js");
+      const worker = await Deno.readTextFile(workerPath);
+      await Deno.writeTextFile(workerPath, `${worker}\n// golden update ${Date.now()}\n`);
+      await page!.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      await waitForReady(
+        page!,
+        () => {
+          const global = globalThis as typeof globalThis & {
+            __LOFI_PWA_STATE__?: { update?: string };
+          };
+          return global.__LOFI_PWA_STATE__?.update === "ready";
+        },
+        undefined,
+        { description: "waiting service-worker update", timeoutMs: 30_000 },
+      );
+      await Promise.all([
+        page!.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30_000 }),
+        page!.getByRole("button", { name: "Update app" }).click(),
+      ]);
+      await waitForReady(
+        page!,
+        () => {
+          const global = globalThis as typeof globalThis & {
+            __LOFI_PWA_STATE__?: { worker?: string; update?: string };
+          };
+          return global.__LOFI_PWA_STATE__?.worker === "ready" &&
+            global.__LOFI_PWA_STATE__?.update === "idle";
+        },
+        undefined,
+        { description: "applied service-worker update", timeoutMs: 30_000 },
       );
     });
     await context.tracing.stop();

@@ -42,6 +42,7 @@ export {
 } from "./device-capabilities.ts";
 export {
   applyPwaUpdate,
+  checkPwaUpdate,
   createPwaController,
   getPwaState,
   type InstallEnvironment,
@@ -53,6 +54,7 @@ export {
   pwaFailureMessage,
   type PwaInstallState,
   type PwaState,
+  type PwaUpdateState,
   type PwaWorkerState,
   requestPwaInstall,
   subscribePwaState,

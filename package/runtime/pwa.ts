@@ -6,7 +6,6 @@ export type PwaWorkerState =
   | "unsupported"
   | "registering"
   | "ready"
-  | "update-available"
   | "failed";
 
 /** Browser installation states exposed to application UI. */
@@ -17,15 +16,32 @@ export type PwaInstallState =
   | "accepted"
   | "dismissed"
   | "manual-ios"
-  | "unavailable";
+  | "manual-browser"
+  | "unsupported";
+
+/** Foreground update-check and waiting-worker states exposed to application UI. */
+export type PwaUpdateState =
+  | "idle"
+  | "checking"
+  | "installing"
+  | "ready"
+  | "applying"
+  | "failed";
 
 /** Stable categories for recoverable offline/PWA failures. */
-export type PwaFailureCode = "registration" | "installation" | "precache" | "runtime-cache";
+export type PwaFailureCode =
+  | "registration"
+  | "installation"
+  | "install-prompt"
+  | "update-check"
+  | "precache"
+  | "runtime-cache";
 
 /** Current install, service-worker, and offline-cache state. */
 export type PwaState = {
   worker: PwaWorkerState;
   install: PwaInstallState;
+  update: PwaUpdateState;
   failure?: {
     code: PwaFailureCode;
     message: string;
@@ -44,6 +60,8 @@ export type InstallEnvironment = {
   navigatorStandalone: boolean;
   platform: string;
   maxTouchPoints: number;
+  secureContext: boolean;
+  serviceWorkerSupported: boolean;
 };
 
 type LofiPwaGlobal = typeof globalThis & { __LOFI_PWA_STATE__?: PwaState };
@@ -53,6 +71,10 @@ const actionableFailureMessages: Record<PwaFailureCode, string> = {
     "Offline support could not start. Reload on a stable connection; if it continues, clear this site's storage and retry.",
   installation:
     "The offline update could not install. Reconnect, keep this tab open, and reload to try again.",
+  "install-prompt":
+    "The browser install prompt could not open. Use the browser menu if it offers Install app or Add to Home Screen.",
+  "update-check":
+    "The app could not check for an update. Reconnect and bring it to the foreground to try again.",
   precache:
     "Required offline files were not saved. Reconnect, reload, and wait for offline support before disconnecting.",
   "runtime-cache":
@@ -67,8 +89,17 @@ export function pwaFailureMessage(code: PwaFailureCode): string {
 /** Injectable browser surfaces used to test the PWA lifecycle deterministically. */
 export type PwaControllerDependencies = {
   readonly eventTarget?: () => EventTarget;
+  readonly visibilityTarget?: () => EventTarget;
   readonly serviceWorker?: () => ServiceWorkerContainer | undefined;
   readonly installEnvironment?: () => InstallEnvironment;
+  readonly isVisible?: () => boolean;
+  readonly now?: () => number;
+  readonly setTimeout?: (callback: () => void, milliseconds: number) => unknown;
+  readonly clearTimeout?: (handle: unknown) => void;
+  /** Minimum time between foreground update checks; defaults to one minute. */
+  readonly updateCheckIntervalMs?: number;
+  /** Maximum time exposed as an active update check; defaults to ten seconds. */
+  readonly updateCheckTimeoutMs?: number;
   readonly production?: () => boolean;
   /** Absolute URL of the configured deployment base, independent of the current route. */
   readonly deploymentBaseUrl?: () => string;
@@ -83,6 +114,7 @@ export type PwaController = {
   getState(): PwaState;
   subscribe(subscriber: (state: PwaState) => void): () => void;
   requestInstall(): Promise<PwaInstallState>;
+  checkForUpdate(): Promise<boolean>;
   applyUpdate(): boolean;
   initialize(): void;
 };
@@ -103,7 +135,10 @@ export function classifyInstallExperience(environment: InstallEnvironment): PwaI
   if (environment.displayModeStandalone || environment.navigatorStandalone) return "installed";
   const iosLike = /^(iPhone|iPad|iPod)$/.test(environment.platform) ||
     (environment.platform === "MacIntel" && environment.maxTouchPoints > 1);
-  return iosLike ? "manual-ios" : "unavailable";
+  if (iosLike && environment.secureContext) return "manual-ios";
+  return environment.secureContext && environment.serviceWorkerSupported
+    ? "manual-browser"
+    : "unsupported";
 }
 
 export function waitForActivation(worker: ServiceWorker): Promise<void> {
@@ -128,11 +163,17 @@ export function waitForActivation(worker: ServiceWorker): Promise<void> {
 /** Creates an isolated PWA controller, primarily for custom integration and tests. */
 export function createPwaController(dependencies: PwaControllerDependencies = {}): PwaController {
   const subscribers = new Set<(state: PwaState) => void>();
+  const observedUpdateWorkers = new WeakSet<ServiceWorker>();
   let deferredInstallPrompt: InstallPromptEvent | undefined;
   let waitingWorker: ServiceWorker | undefined;
+  let activeRegistration: ServiceWorkerRegistration | undefined;
+  let activeContainer: ServiceWorkerContainer | undefined;
+  let updateCheck: Promise<boolean> | null = null;
+  let lastUpdateCheckAt = Number.NEGATIVE_INFINITY;
   let reloadForUpdate = false;
+  let foregroundChecksAttached = false;
   let initialized = false;
-  let state: PwaState = { worker: "registering", install: "unavailable" };
+  let state: PwaState = { worker: "registering", install: "unsupported", update: "idle" };
 
   const publish = (next: PwaState) => {
     state = next;
@@ -140,10 +181,19 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
     for (const subscriber of subscribers) subscriber(state);
   };
   const update = (patch: Partial<PwaState>) => publish({ ...state, ...patch });
-  const fail = (code: PwaFailureCode) => {
+  const failure = (code: PwaFailureCode) => ({ code, message: pwaFailureMessage(code) });
+  const clearFailure = (...codes: PwaFailureCode[]) =>
+    state.failure && codes.includes(state.failure.code) ? undefined : state.failure;
+  const failWorker = (code: "registration" | "installation" | "precache") => {
     update({ worker: "failed", failure: { code, message: pwaFailureMessage(code) } });
   };
+  const failUpdate = (code: "installation" | "update-check") => {
+    update({ update: "failed", failure: failure(code) });
+  };
   const target = () => dependencies.eventTarget?.() ?? globalThis;
+  const visibilityTarget = () =>
+    dependencies.visibilityTarget?.() ??
+      (typeof document !== "undefined" ? document : target());
   const serviceWorker = () =>
     dependencies.serviceWorker?.() ??
       (typeof navigator !== "undefined" && "serviceWorker" in navigator
@@ -155,7 +205,106 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
       navigatorStandalone: (navigator as Navigator & { standalone?: boolean }).standalone === true,
       platform: navigator.platform,
       maxTouchPoints: navigator.maxTouchPoints,
+      secureContext: globalThis.isSecureContext,
+      serviceWorkerSupported: "serviceWorker" in navigator,
     };
+  const isVisible = () =>
+    dependencies.isVisible?.() ??
+      (typeof document === "undefined" || document.visibilityState === "visible");
+  const now = () => dependencies.now?.() ?? Date.now();
+  const scheduleTimeout = (callback: () => void, milliseconds: number) =>
+    dependencies.setTimeout
+      ? dependencies.setTimeout(callback, milliseconds)
+      : globalThis.setTimeout(callback, milliseconds);
+  const cancelTimeout = (handle: unknown) => {
+    if (dependencies.clearTimeout) dependencies.clearTimeout(handle);
+    else globalThis.clearTimeout(handle as number);
+  };
+  const updateCheckIntervalMs = dependencies.updateCheckIntervalMs ?? 60_000;
+  const updateCheckTimeoutMs = dependencies.updateCheckTimeoutMs ?? 10_000;
+
+  const boundedRegistrationUpdate = (
+    registration: ServiceWorkerRegistration,
+  ): Promise<ServiceWorkerRegistration> =>
+    new Promise((resolve, reject) => {
+      let settled = false;
+      let timeoutHandle: unknown = undefined;
+      const finish = () => {
+        if (settled) return false;
+        settled = true;
+        if (timeoutHandle !== undefined) cancelTimeout(timeoutHandle);
+        return true;
+      };
+      timeoutHandle = scheduleTimeout(
+        () => {
+          if (finish()) reject(new Error("service worker update check timed out"));
+        },
+        updateCheckTimeoutMs,
+      );
+      Promise.resolve().then(() => registration.update()).then(
+        (next) => {
+          if (finish()) resolve(next);
+        },
+        (error) => {
+          if (finish()) reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      );
+    });
+
+  const checkForUpdate = (): Promise<boolean> => {
+    const registration = activeRegistration;
+    const container = activeContainer;
+    if (!registration || !container?.controller || state.worker !== "ready") {
+      return Promise.resolve(false);
+    }
+    if (
+      state.update === "installing" || state.update === "ready" || state.update === "applying"
+    ) {
+      return Promise.resolve(false);
+    }
+    if (updateCheck) return updateCheck;
+    const checkedAt = now();
+    if (checkedAt - lastUpdateCheckAt < updateCheckIntervalMs) return Promise.resolve(false);
+    lastUpdateCheckAt = checkedAt;
+    update({
+      update: "checking",
+      failure: clearFailure("update-check"),
+    });
+    const operation = boundedRegistrationUpdate(registration).then(
+      () => {
+        if (state.update === "checking") {
+          update({ update: "idle", failure: clearFailure("update-check") });
+        }
+        return true;
+      },
+      () => {
+        if (state.update === "checking") failUpdate("update-check");
+        return true;
+      },
+    );
+    const tracked = operation.finally(() => {
+      if (updateCheck === tracked) updateCheck = null;
+    });
+    updateCheck = tracked;
+    return tracked;
+  };
+
+  const requestUpdateFromEvent = () => {
+    void checkForUpdate();
+  };
+  const onPageShow = (event: Event) => {
+    if ((event as PageTransitionEvent).persisted === true) requestUpdateFromEvent();
+  };
+  const onVisibilityChange = () => {
+    if (isVisible()) requestUpdateFromEvent();
+  };
+  const attachForegroundChecks = () => {
+    if (foregroundChecksAttached) return;
+    foregroundChecksAttached = true;
+    target().addEventListener("pageshow", onPageShow);
+    target().addEventListener("online", requestUpdateFromEvent);
+    visibilityTarget().addEventListener("visibilitychange", onVisibilityChange);
+  };
 
   const watchForUpdate = (
     registration: ServiceWorkerRegistration,
@@ -163,21 +312,41 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
   ) => {
     const exposeWaitingWorker = (worker: ServiceWorker) => {
       waitingWorker = worker;
-      update({ worker: "update-available", failure: undefined });
+      update({
+        worker: "ready",
+        update: "ready",
+        failure: clearFailure("installation", "update-check"),
+      });
+    };
+    const observeInstallingWorker = (worker: ServiceWorker) => {
+      if (observedUpdateWorkers.has(worker)) return;
+      observedUpdateWorkers.add(worker);
+      update({
+        worker: "ready",
+        update: "installing",
+        failure: clearFailure("installation", "update-check"),
+      });
+      const onStateChange = () => {
+        if (worker.state === "installed") {
+          exposeWaitingWorker(registration.waiting ?? worker);
+        } else if (worker.state === "activated") {
+          update({ worker: "ready", update: "idle" });
+        } else if (worker.state === "redundant") {
+          failUpdate("installation");
+        }
+      };
+      worker.addEventListener("statechange", onStateChange);
+      onStateChange();
     };
 
     if (registration.waiting && container.controller) exposeWaitingWorker(registration.waiting);
     registration.addEventListener("updatefound", () => {
       const worker = registration.installing;
-      if (!worker) return;
-      worker.addEventListener("statechange", () => {
-        if (worker.state === "installed" && container.controller) {
-          exposeWaitingWorker(registration.waiting ?? worker);
-        } else if (worker.state === "redundant") {
-          fail("installation");
-        }
-      });
+      if (worker && container.controller) observeInstallingWorker(worker);
     });
+    if (registration.installing && container.controller) {
+      observeInstallingWorker(registration.installing);
+    }
   };
 
   const watchInstallExperience = () => {
@@ -185,11 +354,11 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
     target().addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       deferredInstallPrompt = event as InstallPromptEvent;
-      update({ install: "available" });
+      update({ install: "available", failure: clearFailure("install-prompt") });
     });
     target().addEventListener("appinstalled", () => {
       deferredInstallPrompt = undefined;
-      update({ install: "installed" });
+      update({ install: "installed", failure: clearFailure("install-prompt") });
     });
   };
 
@@ -212,10 +381,20 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
       if (
         message?.type === "LOFI_PWA_FAILURE" &&
         (message.code === "precache" || message.code === "runtime-cache")
-      ) fail(message.code);
+      ) {
+        if (message.code === "precache") failWorker("precache");
+        else update({ failure: failure("runtime-cache") });
+      }
     });
     container.addEventListener("controllerchange", () => {
       if (!reloadForUpdate) return;
+      reloadForUpdate = false;
+      waitingWorker = undefined;
+      update({
+        worker: "ready",
+        update: "idle",
+        failure: clearFailure("installation", "update-check"),
+      });
       if (dependencies.reload) dependencies.reload();
       else location.reload();
     });
@@ -230,18 +409,22 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
       const registration = await container.register(workerUrl, {
         scope,
       });
+      activeRegistration = registration;
+      activeContainer = container;
       watchForUpdate(registration, container);
+      attachForegroundChecks();
       if (registration.waiting && container.controller) return;
+      if (registration.installing && container.controller) return;
       const worker = registration.installing ?? registration.active ?? registration.waiting;
       if (!worker) throw new Error("service worker registration has no worker");
       try {
         await waitForActivation(worker);
       } catch {
-        fail("installation");
+        failWorker("installation");
         return;
       }
-      update({ worker: "ready", failure: undefined });
-    })().catch(() => fail("registration"));
+      update({ worker: "ready", update: "idle", failure: undefined });
+    })().catch(() => failWorker("registration"));
   };
 
   return {
@@ -263,16 +446,24 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
         update({ install: outcome });
         return outcome;
       } catch {
-        update({ install: "unavailable" });
-        fail("installation");
-        return "unavailable";
+        const fallback = classifyInstallExperience(installEnvironment());
+        update({ install: fallback, failure: failure("install-prompt") });
+        return fallback;
       }
     },
+    checkForUpdate,
     applyUpdate() {
-      if (!waitingWorker) return false;
+      if (!waitingWorker || state.update !== "ready") return false;
       reloadForUpdate = true;
-      waitingWorker.postMessage({ type: "LOFI_SKIP_WAITING" });
-      return true;
+      try {
+        waitingWorker.postMessage({ type: "LOFI_SKIP_WAITING" });
+        update({ update: "applying", failure: clearFailure("installation", "update-check") });
+        return true;
+      } catch {
+        reloadForUpdate = false;
+        failUpdate("installation");
+        return false;
+      }
     },
     initialize,
   };
@@ -298,6 +489,14 @@ export function subscribePwaState(subscriber: (state: PwaState) => void): () => 
 /** Requests the deferred browser installation prompt when one is available. */
 export function requestPwaInstall(): Promise<PwaInstallState> {
   return pwaController.requestInstall();
+}
+
+/**
+ * Runs the shared controller's bounded update check when registration is ready.
+ * Resolves true when a check ran or was already in flight; inspect `PwaState.update` for outcome.
+ */
+export function checkPwaUpdate(): Promise<boolean> {
+  return pwaController.checkForUpdate();
 }
 
 /** Activates a waiting service worker; returns false when no update is ready. */

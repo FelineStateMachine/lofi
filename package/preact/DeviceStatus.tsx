@@ -145,6 +145,7 @@ export default function DeviceStatus(): VNode {
           <Row label="Display mode" value={report.displayMode} />
           <Row label="Install" value={pwa.install} />
           <Row label="Service worker" value={pwa.worker} />
+          <Row label="Update" value={pwa.update} />
         </dl>
         <PwaActions title="Install & updates" />
       </div>

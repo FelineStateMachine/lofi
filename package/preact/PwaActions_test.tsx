@@ -10,6 +10,7 @@ function controller(state: PwaState): PwaController {
       return () => undefined;
     },
     requestInstall: () => Promise.resolve(state.install),
+    checkForUpdate: () => Promise.resolve(false),
     applyUpdate: () => true,
     initialize: () => undefined,
   };
@@ -20,8 +21,8 @@ function renderState(state: PwaState): string {
 }
 
 Deno.test("PwaActions renders a Chromium action only while the prompt is available", () => {
-  const available = renderState({ worker: "ready", install: "available" });
-  const dismissed = renderState({ worker: "ready", install: "dismissed" });
+  const available = renderState({ worker: "ready", install: "available", update: "idle" });
+  const dismissed = renderState({ worker: "ready", install: "dismissed", update: "idle" });
   if (!available.includes("Install app")) throw new Error("install action was omitted");
   if (dismissed.includes("Install app")) throw new Error("install action outlived its prompt");
   if (!dismissed.includes("Installation dismissed")) {
@@ -30,25 +31,58 @@ Deno.test("PwaActions renders a Chromium action only while the prompt is availab
 });
 
 Deno.test("PwaActions renders complete iOS Add to Home Screen guidance", () => {
-  const html = renderState({ worker: "ready", install: "manual-ios" });
+  const html = renderState({ worker: "ready", install: "manual-ios", update: "idle" });
   for (const step of ["Open the Share menu.", "Choose Add to Home Screen.", "Confirm Add."]) {
     if (!html.includes(step)) throw new Error(`iOS guidance omitted: ${step}`);
   }
   if (/unavailable in (?:the )?EU/i.test(html)) throw new Error("obsolete EU guidance returned");
 });
 
-Deno.test("PwaActions renders the waiting-worker update action", () => {
-  const html = renderState({ worker: "update-available", install: "unavailable" });
-  if (!html.includes("Update app")) throw new Error("update action was omitted");
+Deno.test("PwaActions renders truthful generic manual-install guidance", () => {
+  const html = renderState({ worker: "ready", install: "manual-browser", update: "idle" });
+  if (!html.includes("No in-page install button is available right now")) {
+    throw new Error("missing prompt limitation");
+  }
+  if (!html.includes("if offered")) throw new Error("manual guidance invented availability");
+});
+
+Deno.test("PwaActions renders every active update phase", () => {
+  const checking = renderState({ worker: "ready", install: "installed", update: "checking" });
+  const installing = renderState({ worker: "ready", install: "installed", update: "installing" });
+  const ready = renderState({ worker: "ready", install: "installed", update: "ready" });
+  const applying = renderState({ worker: "ready", install: "installed", update: "applying" });
+  if (!checking.includes("Checking for updates")) throw new Error("checking state was omitted");
+  if (!installing.includes("Installing update")) throw new Error("installing state was omitted");
+  if (!ready.includes("Update app")) throw new Error("waiting-worker action was omitted");
+  if (!applying.includes("Applying update")) throw new Error("applying state was omitted");
+});
+
+Deno.test("PwaActions distinguishes unsupported installation", () => {
+  const html = renderState({ worker: "unsupported", install: "unsupported", update: "idle" });
+  if (!html.includes("not supported in this browser or browsing context")) {
+    throw new Error("unsupported environment was hidden");
+  }
 });
 
 Deno.test("actionable PWA failure messages are fixed, useful, and non-secret", () => {
-  for (const code of ["registration", "installation", "precache", "runtime-cache"] as const) {
+  for (
+    const code of [
+      "registration",
+      "installation",
+      "install-prompt",
+      "update-check",
+      "precache",
+      "runtime-cache",
+    ] as const
+  ) {
     const message = pwaFailureMessage(code);
-    if (!/(Reload|Reconnect)/.test(message)) throw new Error(`${code} lacks an action`);
+    if (!/(Reload|Reconnect|browser menu)/i.test(message)) {
+      throw new Error(`${code} lacks an action`);
+    }
     const html = renderState({
       worker: "failed",
-      install: "unavailable",
+      install: "unsupported",
+      update: code === "update-check" ? "failed" : "idle",
       failure: { code, message: "secret-value-must-not-render" },
     });
     if (!html.includes(message) || html.includes("secret-value")) {

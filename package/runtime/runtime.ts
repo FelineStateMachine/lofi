@@ -20,6 +20,11 @@ import {
   type SerializedResourceState,
   shutdownResource,
 } from "./resource-lifecycle.ts";
+import {
+  createBrokerIncompatibilityHandler,
+  runRuntimeStartup,
+  type RuntimeStartupFailure,
+} from "./startup-recovery.ts";
 
 /** The shared, lazily opened Jazz client and its application-facing adapters. */
 export type LofiRuntime = {
@@ -64,6 +69,18 @@ function notifyDiagnostics(state = slot()): void {
   for (const listener of state.diagnosticListeners) listener();
 }
 
+function recordStartupFailure(state: RuntimeSlot, failure: RuntimeStartupFailure): void {
+  const previous = state.diagnostics.startupFailure;
+  state.diagnostics.storageState = "failed";
+  state.diagnostics.startupFailure = failure;
+  if (
+    previous?.code !== failure.code || previous.runtimeMode !== failure.runtimeMode ||
+    previous.message !== failure.message
+  ) {
+    notifyDiagnostics(state);
+  }
+}
+
 // Local-first: a random per-device secret, created on demand and cached — so
 // the account opens immediately on first boot, offline, with no ceremony. The
 // same secret opens the same account whether or not sync is attached, so a
@@ -98,11 +115,30 @@ async function awaitLocalReady(db: Db): Promise<void> {
   if (firstTable) await db.all(firstTable.where({}) as never, { tier: "local" });
 }
 
-async function migrateLocalRows(db: Db, secret: string, namespace: string): Promise<void> {
+async function migrateLocalRows(
+  state: RuntimeSlot,
+  db: Db,
+  secret: string,
+  namespace: string,
+): Promise<void> {
   if (typeof localStorage === "undefined" || localStorage.getItem(migrateLocalRowsKey) !== "1") {
     return;
   }
-  const local = await createDb(databaseConfig(secret, namespace, "local"));
+  const record = (failure: RuntimeStartupFailure) => recordStartupFailure(state, failure);
+  const local = await runRuntimeStartup(
+    "local",
+    () =>
+      createDb(
+        databaseConfig(
+          secret,
+          namespace,
+          "local",
+          false,
+          createBrokerIncompatibilityHandler("local", record),
+        ),
+      ),
+    record,
+  );
   await awaitLocalReady(local);
   for (const table of runtimeTables()) {
     const rows = await local.all(table.where({}) as never, { tier: "local" }) as Array<
@@ -124,33 +160,42 @@ async function migrateLocalRows(db: Db, secret: string, namespace: string): Prom
 }
 
 async function createClient(state: RuntimeSlot): Promise<Db> {
-  try {
+  const managedNamespace = typeof localStorage !== "undefined" &&
+    localStorage.getItem(managedRuntimeKey) === "1";
+  const connect = syncing();
+  const runtimeMode = managedNamespace || connect ? "managed" : "local";
+  const record = (failure: RuntimeStartupFailure) => recordStartupFailure(state, failure);
+  state.diagnostics.storageState = "persistent-requested";
+  state.diagnostics.startupFailure = null;
+  notifyDiagnostics(state);
+  return await runRuntimeStartup(runtimeMode, async () => {
     assertDurableBrowser();
     const secret = await resolveAccountSecret();
     const namespace = await accountNamespace(secret);
-    const managedNamespace = typeof localStorage !== "undefined" &&
-      localStorage.getItem(managedRuntimeKey) === "1";
-    const connect = syncing();
     const db = await createDb(
-      databaseConfig(secret, namespace, managedNamespace || connect ? "managed" : "local", connect),
+      databaseConfig(
+        secret,
+        namespace,
+        runtimeMode,
+        connect,
+        createBrokerIncompatibilityHandler(runtimeMode, record),
+      ),
     );
     // Browser `createDb()` returns before its persistent worker bridge has
     // necessarily attached. A local-tier query is the public readiness barrier;
     // without it, an immediate post-replacement mutation can see no attainable
     // durability tier and be rejected even though OPFS is configured.
     await awaitLocalReady(db);
-    if (syncing()) await migrateLocalRows(db, secret, namespace);
+    if (syncing()) await migrateLocalRows(state, db, secret, namespace);
     state.principal = db.getAuthState().session?.user_id ?? null;
     state.serverConfigured = connect;
     state.diagnostics.storageState = "persistent-driver-open";
+    state.diagnostics.startupFailure = null;
     state.diagnostics.clientsCreated += 1;
     state.diagnostics.activeClients += 1;
     notifyDiagnostics(state);
     return db;
-  } catch (error) {
-    state.diagnostics.storageState = "failed";
-    throw error;
-  }
+  }, record);
 }
 
 async function destroyClient(state: RuntimeSlot, db: Db): Promise<void> {

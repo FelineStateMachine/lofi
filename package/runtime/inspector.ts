@@ -1,5 +1,6 @@
 export const DEVELOPMENT_INSPECTOR_MARKER = "lofi-development-inspector";
 // Package-owned development inspector.
+import type { RuntimeStartupFailureCode } from "./startup-recovery.ts";
 
 export type InspectorSnapshot = {
   identity: {
@@ -10,6 +11,7 @@ export type InspectorSnapshot = {
     driver: "persistent requested" | "persistent open" | "failed";
     persistence: "granted" | "not granted" | "unavailable" | "error";
     fallback: "none" | "explicit memory" | "unavailable";
+    startupFailure: RuntimeStartupFailureCode | "none";
   };
   sync: {
     mode: "local-only" | "managed configured";
@@ -58,6 +60,7 @@ export function inspectorRows(snapshot: InspectorSnapshot): InspectorRow[] {
     { label: "Storage driver", value: snapshot.storage.driver },
     { label: "Persistence", value: snapshot.storage.persistence },
     { label: "Storage fallback", value: snapshot.storage.fallback },
+    { label: "Storage startup", value: snapshot.storage.startupFailure },
     { label: "Sync mode", value: snapshot.sync.mode },
     { label: "Transport", value: snapshot.sync.transport },
     { label: "Pending lofi local", value: String(snapshot.sync.pendingLocalWrites) },

@@ -1,3 +1,5 @@
+import type { RuntimeStartupFailure } from "./startup-recovery.ts";
+
 /**
 // Package-owned runtime diagnostics.
  * Runtime-owned observability counters. These describe the framework's storage,
@@ -5,6 +7,7 @@
  */
 export type RuntimeDiagnostics = {
   storageState: "persistent-requested" | "persistent-driver-open" | "failed";
+  startupFailure: RuntimeStartupFailure | null;
   clientsCreated: number;
   activeClients: number;
   activeConsumers: number;
@@ -23,6 +26,7 @@ export type RuntimeDiagnostics = {
 export function createDiagnostics(): RuntimeDiagnostics {
   return {
     storageState: "persistent-requested",
+    startupFailure: null,
     clientsCreated: 0,
     activeClients: 0,
     activeConsumers: 0,

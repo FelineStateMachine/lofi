@@ -25,6 +25,14 @@ function slot(): AppSlot {
   return browserGlobal[slotName];
 }
 
+/** Raised when package runtime startup cannot resolve valid author-owned app configuration. */
+export class LofiConfigurationError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
+  override readonly name = "LofiConfigurationError";
+  /** Stable category for runtime startup classification. */
+  readonly code = "configuration-error";
+}
+
 /**
  * Defines the application-facing values the versioned runtime needs.
  *
@@ -34,8 +42,10 @@ function slot(): AppSlot {
 export function defineLofiApp<const Schema>(
   config: LofiAppConfig<Schema>,
 ): LofiAppConfig<Schema> {
-  if (!config.name.trim()) throw new Error("lofi app name must not be empty");
-  if (!config.databaseName.trim()) throw new Error("lofi database name must not be empty");
+  if (!config.name.trim()) throw new LofiConfigurationError("lofi app name must not be empty");
+  if (!config.databaseName.trim()) {
+    throw new LofiConfigurationError("lofi database name must not be empty");
+  }
   slot().config = config;
   return config;
 }
@@ -44,7 +54,7 @@ export function defineLofiApp<const Schema>(
 export function getLofiApp(): LofiAppConfig {
   const config = slot().config;
   if (!config) {
-    throw new Error(
+    throw new LofiConfigurationError(
       "lofi app is not defined; export defineLofiApp({...}) from src/app.ts before booting the runtime",
     );
   }

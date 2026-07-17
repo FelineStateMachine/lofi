@@ -23,6 +23,7 @@ const initial: TableSnapshot<Task> = {
 
 export function useTasks() {
   const [snapshot, setSnapshot] = useState(initial);
+  const [startupFailed, setStartupFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +37,7 @@ export function useTasks() {
       unsubscribe?.();
       unsubscribe = undefined;
       setSnapshot(initial);
+      setStartupFailed(false);
       void getRuntime().then((runtime) => {
         if (cancelled || generation !== connectionGeneration) return;
         const store = runtime.store(tasksTable);
@@ -44,6 +46,7 @@ export function useTasks() {
         update();
       }, (error) => {
         if (cancelled || generation !== connectionGeneration) return;
+        setStartupFailed(true);
         setSnapshot({
           ...initial,
           status: "error",
@@ -72,5 +75,11 @@ export function useTasks() {
     await (await store()).update(id, { completed });
   }, [store]);
 
-  return { ...snapshot, tasks: snapshot.rows, create, setCompleted };
+  return {
+    ...snapshot,
+    tasks: snapshot.rows,
+    failureKind: startupFailed ? "startup" as const : "write" as const,
+    create,
+    setCompleted,
+  };
 }

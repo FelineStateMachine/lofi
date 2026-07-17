@@ -54,6 +54,7 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
         ? "not granted"
         : device.persistentPermission,
       fallback: diagnostics.storageState === "failed" ? "unavailable" : "none",
+      startupFailure: diagnostics.startupFailure?.code ?? "none",
     },
     sync: {
       mode: serverUrl ? "managed configured" : "local-only",

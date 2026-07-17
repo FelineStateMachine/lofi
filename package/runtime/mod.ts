@@ -12,7 +12,7 @@
  * @module
  */
 
-export { defineLofiApp, type LofiAppConfig } from "./app.ts";
+export { defineLofiApp, type LofiAppConfig, LofiConfigurationError } from "./app.ts";
 export {
   type AuthCapability,
   type AuthDependencies,
@@ -69,6 +69,12 @@ export {
   shutdownRuntime,
   subscribeRuntimeDiagnostics,
 } from "./runtime.ts";
+export {
+  reloadAfterRuntimeStartupFailure,
+  RuntimeStartupError,
+  type RuntimeStartupFailure,
+  type RuntimeStartupFailureCode,
+} from "./startup-recovery.ts";
 export {
   AccountReplacementError,
   type AccountReplacementOptions,

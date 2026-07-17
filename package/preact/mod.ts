@@ -7,6 +7,7 @@
  * @module
  */
 export { default as DeviceStatus } from "./DeviceStatus.tsx";
+export { RuntimeRecovery, type RuntimeRecoveryProps } from "./RuntimeRecovery.tsx";
 export {
   PwaActions,
   type PwaActionsProps,

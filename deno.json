@@ -76,6 +76,7 @@
       "README.md",
       "docs/README.md",
       "docs/assets/brand/lofi-github-banner.png",
+      "docs/application-origin-migration.md",
       "docs/auth-identity.md",
       "docs/auth.md",
       "docs/decisions/passkey-backup-alpha53.md",

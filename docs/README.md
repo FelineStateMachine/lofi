@@ -27,7 +27,9 @@ flowchart LR
    lifecycle.
 5. [Testing](testing.md) — run fast tests and the opt-in two-client offline convergence example.
 6. [Deployment](deployment.md) — build, preview, customize, and host the static PWA.
-7. [Troubleshooting](troubleshooting.md) — diagnose common environment, browser, build, and test
+7. [Application-origin migration](application-origin-migration.md) — move a deployed app across a
+   browser security boundary with explicit recovery, verification, rollback, and retirement.
+8. [Troubleshooting](troubleshooting.md) — diagnose common environment, browser, build, and test
    failures.
 
 The root [README](../README.md) provides the shortest product overview and command summary.

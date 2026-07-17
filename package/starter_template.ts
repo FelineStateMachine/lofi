@@ -12,6 +12,7 @@ export const STARTER_FILES: readonly string[] = [
   "public/icon-192.png",
   "public/icon-512.png",
   "public/icon-maskable-512.png",
+  "public/icon-monochrome.svg",
   "public/manifest.webmanifest",
   "src/app.ts",
   "src/env.d.ts",

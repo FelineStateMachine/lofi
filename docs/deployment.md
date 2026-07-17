@@ -39,7 +39,8 @@ deno task preview --port 4173
 Before deploying, review:
 
 - `src/app.ts` — name, database namespace, stable credential origins, and repository URL;
-- `public/manifest.webmanifest` — installed name, icons, colors, start URL, and display mode;
+- `public/manifest.webmanifest` — stable install identity, locale, icons, colors, launch behavior,
+  and shortcuts;
 - `public/favicon.svg` and any added icon files;
 - page titles, descriptions, and starter copy;
 - `.env` — either no public Jazz pair for local-only mode or a complete pair for optional sync.
@@ -57,6 +58,33 @@ identity, and local preview. Upload the contents of `dist/` to that same mount p
 and a subpath build are different deployment artifacts; rebuild after changing `LOFI_BASE_PATH`.
 
 Run `deno task doctor` and `deno task test` before the production build.
+
+### Customize the web manifest before launch
+
+Treat `public/manifest.webmanifest` as product source, not generated build metadata. Before users
+install the app:
+
+- replace `name`, `short_name`, `description`, `id`, `lang`, and `dir` with product values;
+- choose an `id` URL token that will remain stable for the lifetime of the installed app; unlike
+  `start_url`, it identifies the app and does not need to be a navigable page;
+- keep `scope`, `start_url`, every shortcut URL, and every shortcut icon aligned with the deployed
+  base path;
+- replace the regular, maskable, Apple touch, and transparent monochrome icon assets while keeping
+  their purposes intact;
+- keep `orientation: "any"` unless the product genuinely needs a screen-orientation lock; and
+- replace or remove the starter `Open tasks` shortcut when replacing the task example.
+
+After launch, changing the name or start page is routine; changing `id` can make a browser treat the
+manifest as a different installed application. Choose it once. If the product ships in multiple
+languages, keep the default strings plus `lang` and `dir`, then add language maps such as
+`name_localized`, `short_name_localized`, and `description_localized`. Localized values whose text
+direction differs from the manifest default should declare their own `dir`.
+
+Storefront metadata is optional and product-specific. Add lowercase `categories` only when they
+truthfully describe the finished app. Add `iarc_rating_id` only after obtaining a real IARC
+certification code; never copy a placeholder rating. Rich screenshots are covered separately.
+Experimental capabilities such as file, protocol, share-target, and launch handlers are deliberately
+absent from the starter and should be added only with matching product behavior and tests.
 
 ## Deno Deploy
 

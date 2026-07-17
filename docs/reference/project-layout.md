@@ -37,7 +37,8 @@ project. Adding or removing a generated file requires updating this map in the s
 | `public/icon-192.png`            | Product asset           | Supplies the regular 192x192 install icon.                                             |
 | `public/icon-512.png`            | Product asset           | Supplies the regular 512x512 install icon.                                             |
 | `public/icon-maskable-512.png`   | Product asset           | Supplies a padded 512x512 maskable icon with a safe-zone-aware mark.                   |
-| `public/manifest.webmanifest`    | Product asset           | Declares install metadata, theme colors, scope, and raster icons.                      |
+| `public/icon-monochrome.svg`     | Product asset           | Supplies the transparent silhouette used where the OS applies a solid icon color.      |
+| `public/manifest.webmanifest`    | Product asset           | Declares stable install identity, locale, scope, orientation, icons, and shortcuts.    |
 | `src/app.ts`                     | Author-owned source     | Composes the app name, storage, sync, credential origins, and repository link.         |
 | `src/env.d.ts`                   | Generated configuration | Adds Astro and lofi build-time environment types.                                      |
 | `src/islands/AccountGate.tsx`    | Author-owned source     | Presents opt-in account backup, sync, and recovery controls.                           |

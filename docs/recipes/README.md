@@ -20,6 +20,8 @@ flowchart LR
   installed window while preserving ordinary launch behavior elsewhere.
 - [File handling and import previews](file-handler.md) — validate explicitly associated files into
   transient drafts before the user confirms persistence.
+- [Custom-protocol item links](protocol-handler.md) — parse one product-owned `web+` scheme into
+  allow-listed collaborative-list identifiers without arbitrary redirects.
 
 ## Contract for every recipe
 

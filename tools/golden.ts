@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 15, `expected 15 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 16, `expected 16 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -853,6 +853,67 @@ export default function FileImport() {
   );
 }
 
+async function installProtocolHandlerRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.protocol_handlers = [{ protocol: "web+lofi", url: "./open-item/?url=%s" }];
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "open-item.astro"),
+    `---
+import ProtocolItem from "../islands/ProtocolItem.tsx";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+---
+
+<Shell title="Open collaborative-list item">
+  <ProtocolItem client:load />
+</Shell>
+`,
+  );
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "islands", "ProtocolItem.tsx"),
+    `import { useEffect, useState } from "preact/hooks";
+import {
+  parseCollaborativeListProtocolTarget,
+  type CollaborativeListProtocolResult,
+} from "@nzip/lofi/recipes/protocol-handler";
+
+export default function ProtocolItem() {
+  const [result, setResult] = useState<CollaborativeListProtocolResult>();
+  useEffect(() => {
+    setResult(parseCollaborativeListProtocolTarget(location.search, {
+      protocol: "web+lofi",
+      parameter: "url",
+      maxLength: 256,
+    }));
+  }, []);
+  const base = import.meta.env.BASE_URL;
+  if (!result) return <p role="status">Opening item…</p>;
+  if (!result.ok) return (
+    <section class="island">
+      <h1>Open collaborative-list item</h1>
+      <p role="alert">This item link is not valid.</p>
+      <a data-protocol-fallback href={base}>Open the app normally</a>
+    </section>
+  );
+  const { listId, itemId } = result.target;
+  const fallback = new URL(base, location.origin);
+  fallback.searchParams.set("list", listId);
+  fallback.searchParams.set("item", itemId);
+  return (
+    <section class="island">
+      <h1>Open collaborative-list item</h1>
+      <p data-protocol-list>{listId}</p>
+      <p data-protocol-item>{itemId}</p>
+      <a data-protocol-fallback href={fallback.href}>Open with HTTPS</a>
+    </section>
+  );
+}
+`,
+  );
+}
+
 async function main() {
   const { source, version } = parseArgs(Deno.args);
   await Deno.remove(artifactsRoot, { recursive: true }).catch((error) => {
@@ -1099,6 +1160,10 @@ async function main() {
     await stage("install web-share recipe", () => installWebShareRecipe(projectRoot!));
     await stage("install launch-handler recipe", () => installLaunchHandlerRecipe(projectRoot!));
     await stage("install file-handler recipe", () => installFileHandlerRecipe(projectRoot!));
+    await stage(
+      "install protocol-handler recipe",
+      () => installProtocolHandlerRecipe(projectRoot!),
+    );
 
     await stage(
       "build",
@@ -1438,6 +1503,46 @@ async function main() {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(page!, taskAppReady, undefined, {
         description: "task app after file-handler exercise",
+      });
+    });
+    await stage("protocol-handler recipe browser", async () => {
+      await context!.setOffline(true);
+      try {
+        const payload = encodeURIComponent(
+          "web+lofi:collaborative-list/list_123/item/item_456",
+        );
+        await page!.goto(`${origin}open-item/?url=${payload}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await page!.getByText("list_123").waitFor({ state: "visible" });
+        await page!.getByText("item_456").waitFor({ state: "visible" });
+        const fallback = await page!.locator("[data-protocol-fallback]").getAttribute("href");
+        assert(
+          fallback === `${origin}?list=list_123&item=item_456`,
+          "protocol recipe did not preserve the ordinary HTTPS fallback",
+        );
+
+        const invalid = encodeURIComponent("web+lofi:https://outside.invalid/private-value");
+        await page!.goto(`${origin}open-item/?url=${invalid}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await page!.getByRole("alert").waitFor({ state: "visible" });
+        const rejected = await page!.locator("body").innerText();
+        assert(!rejected.includes("outside.invalid"), "rejected protocol host leaked into the UI");
+        assert(!rejected.includes("private-value"), "rejected protocol value leaked into the UI");
+
+        await page!.goto(`${origin}open-item/`, { waitUntil: "domcontentloaded" });
+        await page!.getByRole("alert").waitFor({ state: "visible" });
+        assert(
+          await page!.locator("[data-protocol-fallback]").getAttribute("href") === "/",
+          "direct handler visit lost its ordinary app fallback",
+        );
+      } finally {
+        await context!.setOffline(false);
+      }
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after protocol-handler exercise",
       });
     });
     await stage("waiting worker update browser", async () => {

@@ -62,17 +62,18 @@ allowing framework fixes to arrive through a package upgrade.
 
 The final package map is intentionally small:
 
-| Import                              | Supported use                                       |
-| ----------------------------------- | --------------------------------------------------- |
-| `@nzip/lofi`                        | App configuration, runtime, session, stores, PWA    |
-| `@nzip/lofi/access`                 | Private, direct-share, and fixed-role group helpers |
-| `@nzip/lofi/preact`                 | Package-owned Preact hooks and diagnostic UI        |
-| `@nzip/lofi/astro`                  | Package-owned Astro/Vite integration                |
-| `@nzip/lofi/recipes/file-handler`   | Optional validated installed-app file import drafts |
-| `@nzip/lofi/recipes/launch-handler` | Optional safe installed-window launch routing       |
-| `@nzip/lofi/recipes/web-share`      | Optional inbound/outbound text and link sharing     |
-| `@nzip/lofi/testing`                | Local-first Playwright helpers                      |
-| `@nzip/lofi/{create,dev,...}`       | Generator and generated-project command entrypoints |
+| Import                                | Supported use                                       |
+| ------------------------------------- | --------------------------------------------------- |
+| `@nzip/lofi`                          | App configuration, runtime, session, stores, PWA    |
+| `@nzip/lofi/access`                   | Private, direct-share, and fixed-role group helpers |
+| `@nzip/lofi/preact`                   | Package-owned Preact hooks and diagnostic UI        |
+| `@nzip/lofi/astro`                    | Package-owned Astro/Vite integration                |
+| `@nzip/lofi/recipes/file-handler`     | Optional validated installed-app file import drafts |
+| `@nzip/lofi/recipes/launch-handler`   | Optional safe installed-window launch routing       |
+| `@nzip/lofi/recipes/protocol-handler` | Optional allow-listed custom-protocol item links    |
+| `@nzip/lofi/recipes/web-share`        | Optional inbound/outbound text and link sharing     |
+| `@nzip/lofi/testing`                  | Local-first Playwright helpers                      |
+| `@nzip/lofi/{create,dev,...}`         | Generator and generated-project command entrypoints |
 
 All of these imports resolve through the single version pinned in `deno.json`. Upgrade that pin to
 receive framework fixes; do not copy package files into `src/` or import unpublished internal paths.

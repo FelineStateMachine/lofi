@@ -61,7 +61,12 @@ const preactFiles = [
   "use-device-capabilities.ts",
 ] as const;
 
-const recipeFiles = ["file-handler.ts", "launch-handler.ts", "web-share.ts"] as const;
+const recipeFiles = [
+  "file-handler.ts",
+  "launch-handler.ts",
+  "protocol-handler.ts",
+  "web-share.ts",
+] as const;
 
 async function readPackageFile(path: string): Promise<string> {
   const url = new URL(path, import.meta.url);
@@ -84,6 +89,13 @@ function renderConfig(projectRoot: string): string {
     "package",
     "recipes",
     "launch-handler.ts",
+  );
+  const protocolHandlerRecipe = join(
+    projectRoot,
+    ".lofi",
+    "package",
+    "recipes",
+    "protocol-handler.ts",
   );
   const webShareRecipe = join(projectRoot, ".lofi", "package", "recipes", "web-share.ts");
   return `import preact from "@astrojs/preact";
@@ -131,6 +143,9 @@ export default defineConfig({
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/launch-handler$/, replacement: ${
     JSON.stringify(launchHandlerRecipe)
   } },
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/protocol-handler$/, replacement: ${
+    JSON.stringify(protocolHandlerRecipe)
+  } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/web-share$/, replacement: ${
     JSON.stringify(webShareRecipe)
   } },
@@ -146,6 +161,9 @@ export default defineConfig({
         { find: /^npm:jazz-tools@[^/]+$/, replacement: "jazz-tools" },
         { find: "@nzip/lofi/recipes/launch-handler", replacement: ${
     JSON.stringify(launchHandlerRecipe)
+  } },
+        { find: "@nzip/lofi/recipes/protocol-handler", replacement: ${
+    JSON.stringify(protocolHandlerRecipe)
   } },
         { find: "@nzip/lofi/recipes/file-handler", replacement: ${
     JSON.stringify(fileHandlerRecipe)

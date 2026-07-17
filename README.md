@@ -1,3 +1,5 @@
+![lofi — local-first apps that keep working offline](docs/assets/brand/lofi-github-banner.png)
+
 # @nzip/lofi
 
 **Build installable Deno web apps that open immediately, keep working offline, and sync when users

@@ -401,6 +401,34 @@ async function parseAndValidateManifest(
         remediation,
       );
       issues.push(...screenshots.issues);
+      const validSources = new Set(screenshots.images.map((image) => image.src));
+      const formFactors = new Set<string>();
+      if (Array.isArray(manifest.screenshots)) {
+        for (const [index, raw] of manifest.screenshots.entries()) {
+          if (!isObject(raw)) continue;
+          const label = `${manifestFile}: screenshots[${index}]`;
+          if (!nonEmptyString(raw.label)) {
+            issues.push(issue(`${label}.label must describe the screenshot`, remediation));
+          }
+          if (raw.form_factor !== "narrow" && raw.form_factor !== "wide") {
+            issues.push(
+              issue(`${label}.form_factor must be narrow or wide`, remediation),
+            );
+          } else if (nonEmptyString(raw.src) && validSources.has(raw.src)) {
+            formFactors.add(raw.form_factor);
+          }
+        }
+      }
+      for (const formFactor of ["narrow", "wide"]) {
+        if (!formFactors.has(formFactor)) {
+          issues.push(
+            issue(
+              `${manifestFile}: screenshots need a valid labeled ${formFactor} image`,
+              remediation,
+            ),
+          );
+        }
+      }
     }
   }
   return { issues, manifest, scope };
@@ -425,6 +453,20 @@ function links(html: string): Array<{ rel: string; href: string }> {
   });
 }
 
+function emittedRoutePath(url: URL, basePath: string): string | undefined {
+  if (url.origin !== syntheticOrigin || !url.pathname.startsWith(basePath)) return undefined;
+  let path: string;
+  try {
+    path = decodeURIComponent(url.pathname.slice(basePath.length));
+  } catch {
+    return undefined;
+  }
+  if (path.split("/").some((part) => part === "..")) return undefined;
+  if (!path) return "index.html";
+  if (path.endsWith("/")) return `${path}index.html`;
+  return path.endsWith(".html") ? path : `${path}/index.html`;
+}
+
 async function filesUnder(root: string): Promise<string[]> {
   const files: string[] = [];
   async function visit(path: string) {
@@ -440,11 +482,33 @@ async function filesUnder(root: string): Promise<string[]> {
 
 const precacheExcludedPaths = new Set(["lofi-build.json", "lofi-precache.json", "sw.js"]);
 
+/** Returns manifest screenshot paths, which are install presentation rather than shell resources. */
+export function screenshotAssetPaths(manifest: unknown, deploymentBase = "/"): string[] {
+  if (!isObject(manifest) || !Array.isArray(manifest.screenshots)) return [];
+  const basePath = normalizeDeploymentBase(deploymentBase);
+  const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
+  return [
+    ...new Set(manifest.screenshots.flatMap((raw) => {
+      if (!isObject(raw) || !nonEmptyString(raw.src)) return [];
+      try {
+        const path = assetPath(new URL(raw.src, manifestUrl), basePath);
+        return path ? [path] : [];
+      } catch {
+        return [];
+      }
+    })),
+  ].sort();
+}
+
 /** Map build output paths to portable URLs expected in the service-worker precache. */
-export function expectedPrecacheUrls(paths: readonly string[]): string[] {
+export function expectedPrecacheUrls(
+  paths: readonly string[],
+  presentationPaths: readonly string[] = [],
+): string[] {
+  const presentation = new Set(presentationPaths.map((path) => path.replaceAll("\\", "/")));
   return paths
     .map((path) => path.replaceAll("\\", "/"))
-    .filter((path) => !precacheExcludedPaths.has(path))
+    .filter((path) => !precacheExcludedPaths.has(path) && !presentation.has(path))
     .map((path) => path === "index.html" ? "./" : `./${path}`)
     .sort();
 }
@@ -502,6 +566,25 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
   const htmlFiles = files.filter((path) => path.endsWith(".html"));
   if (htmlFiles.length === 0) {
     issues.push(issue("dist/: no prerendered HTML routes were emitted", remediation));
+  }
+  if (Array.isArray(result.manifest?.shortcuts)) {
+    const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
+    for (const [index, raw] of result.manifest.shortcuts.entries()) {
+      if (!isObject(raw) || !nonEmptyString(raw.url)) continue;
+      try {
+        const route = emittedRoutePath(new URL(raw.url, manifestUrl), basePath);
+        if (!route || !htmlFiles.includes(route)) {
+          issues.push(
+            issue(
+              `dist/${manifestFile}: shortcuts[${index}].url has no emitted offline route`,
+              remediation,
+            ),
+          );
+        }
+      } catch {
+        // Source validation already reports malformed shortcut URLs.
+      }
+    }
   }
   const expectedManifest = new URL(`${syntheticOrigin}${basePath}${manifestFile}`).href;
   const appleIcons = new Set<string>();
@@ -566,7 +649,10 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
       issue("dist/lofi-precache.json: missing or malformed precache manifest", remediation),
     );
   }
-  const expectedPrecache = expectedPrecacheUrls(files);
+  const expectedPrecache = expectedPrecacheUrls(
+    files,
+    screenshotAssetPaths(result.manifest, basePath),
+  );
   if (
     !Array.isArray(precache) || !precache.every((entry) => typeof entry === "string") ||
     JSON.stringify([...precache].sort()) !== JSON.stringify(expectedPrecache)

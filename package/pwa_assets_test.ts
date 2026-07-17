@@ -8,6 +8,13 @@ type ManifestShortcut = {
   url: string;
   icons?: Array<Omit<ManifestIcon, "purpose">>;
 };
+type ManifestScreenshot = {
+  src: string;
+  sizes: string;
+  type: string;
+  form_factor: "narrow" | "wide";
+  label: string;
+};
 
 type Manifest = {
   id: string;
@@ -17,6 +24,7 @@ type Manifest = {
   scope: string;
   orientation: string;
   icons: ManifestIcon[];
+  screenshots: ManifestScreenshot[];
   shortcuts: ManifestShortcut[];
   [member: string]: unknown;
 };
@@ -148,4 +156,32 @@ Deno.test("starter shortcut and its icons stay inside the application scope", as
     new URL("../apps/reference/src/islands/TaskList.tsx", import.meta.url),
   );
   assert(taskIsland.includes('id="tasks"'), "starter shortcut has no matching task anchor");
+});
+
+Deno.test("starter install screenshots are labeled narrow and wide captures", async () => {
+  const publicRoot = new URL("../apps/reference/public/", import.meta.url);
+  const manifest = JSON.parse(
+    await Deno.readTextFile(new URL("manifest.webmanifest", publicRoot)),
+  ) as Manifest;
+  const expected = new Map([
+    ["narrow", { file: "screenshot-narrow.png", width: 540, height: 720 }],
+    ["wide", { file: "screenshot-wide.png", width: 1280, height: 720 }],
+  ]);
+  assert(manifest.screenshots.length === expected.size, "starter screenshot set must stay small");
+  for (const screenshot of manifest.screenshots) {
+    const contract = expected.get(screenshot.form_factor);
+    assert(contract, `unexpected screenshot form factor ${screenshot.form_factor}`);
+    assert(basename(screenshot.src) === contract.file, `${screenshot.form_factor} file drifted`);
+    assert(screenshot.type === "image/png", `${contract.file} must declare image/png`);
+    assert(screenshot.label.trim().length > 0, `${contract.file} needs an accessible label`);
+    assert(
+      screenshot.sizes === `${contract.width}x${contract.height}`,
+      `${contract.file} has the wrong declared size`,
+    );
+    const dimensions = pngDimensions(await Deno.readFile(new URL(contract.file, publicRoot)));
+    assert(
+      dimensions.width === contract.width && dimensions.height === contract.height,
+      `${contract.file} is ${dimensions.width}x${dimensions.height}`,
+    );
+  }
 });

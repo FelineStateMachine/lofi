@@ -37,6 +37,22 @@
       "purpose": "monochrome"
     }
   ],
+  "screenshots": [
+    {
+      "src": "./screenshot-narrow.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "The local-first task list on a phone-sized screen"
+    },
+    {
+      "src": "./screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "The local-first task list on a desktop-sized screen"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Open tasks",

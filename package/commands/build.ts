@@ -13,7 +13,7 @@ import { LOFI_VERSION } from "../version.ts";
 import { prepareLofiAstroConfig } from "../astro/mod.ts";
 import { loadEnvironment, serverEnvironmentNames } from "../tooling/environment.ts";
 import { precacheUrls, scanSecrets, sourceFingerprint, walkFiles } from "../tooling/project.ts";
-import { productionPwaIssues } from "../tooling/pwa-validation.ts";
+import { productionPwaIssues, screenshotAssetPaths } from "../tooling/pwa-validation.ts";
 import { runDeno } from "../tooling/process.ts";
 import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
 
@@ -59,7 +59,11 @@ await Deno.writeTextFile(
   serviceWorkerPath,
   serviceWorker.replace("__LOFI_BUILD_REVISION__", sourceHash),
 );
-const precache = precacheUrls(await walkFiles("dist", { includeDist: true }));
+const productionManifest = JSON.parse(await Deno.readTextFile("dist/manifest.webmanifest"));
+const precache = precacheUrls(
+  await walkFiles("dist", { includeDist: true }),
+  screenshotAssetPaths(productionManifest, environment.LOFI_BASE_PATH),
+);
 await Deno.writeTextFile("dist/lofi-precache.json", `${JSON.stringify(precache.sort())}\n`);
 
 const pwaIssues = await productionPwaIssues(Deno.cwd(), environment.LOFI_BASE_PATH);

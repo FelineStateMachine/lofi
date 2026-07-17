@@ -143,8 +143,11 @@ export async function sourceFingerprint(root = Deno.cwd()): Promise<string> {
   return Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function precacheUrls(paths: readonly string[]): string[] {
-  return expectedPrecacheUrls(paths);
+export function precacheUrls(
+  paths: readonly string[],
+  presentationPaths: readonly string[] = [],
+): string[] {
+  return expectedPrecacheUrls(paths, presentationPaths);
 }
 
 function contains(haystack: Uint8Array, needle: Uint8Array): boolean {

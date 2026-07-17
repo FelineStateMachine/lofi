@@ -27,6 +27,7 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
     await Deno.stat(`${root}/.lofi/package/preact/DeviceStatus.tsx`);
     await Deno.stat(`${root}/.lofi/package/preact/RuntimeRecovery.tsx`);
     await Deno.stat(`${root}/.lofi/package/runtime/passkey-recovery.ts`);
+    await Deno.stat(`${root}/.lofi/package/runtime/live-query-store.ts`);
     await Deno.stat(`${root}/.lofi/package/runtime/startup-recovery.ts`);
     await Deno.stat(`${root}/.lofi/package/access/mod.ts`);
   } finally {

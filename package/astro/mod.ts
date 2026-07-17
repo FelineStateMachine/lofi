@@ -28,6 +28,7 @@ const runtimeFiles = [
   "foreground-recovery.ts",
   "inspector.ts",
   "lifecycle.ts",
+  "live-query-store.ts",
   "mod.ts",
   "passkey-recovery.ts",
   "probe.ts",

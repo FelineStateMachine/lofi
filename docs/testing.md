@@ -20,8 +20,9 @@ flowchart TB
 deno task test
 ```
 
-The default suite covers the generated runtime contracts and application tests without launching a
-browser. Keep domain logic and permission-shape checks in this fast path when possible.
+The default suite covers application tests without launching a browser. Framework runtime contracts
+run once in the `@nzip/lofi` package suite instead of being copied into every application. Keep
+domain logic and permission-shape checks in this fast path when possible.
 
 ## Test the production build manually
 

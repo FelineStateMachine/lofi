@@ -6,7 +6,7 @@ The generated task list demonstrates lofi's main authoring pattern:
 flowchart LR
     Schema["schema.ts<br/>table and row types"] --> Permissions["permissions.ts<br/>read and write policy"]
     Schema --> Hook["domain hook<br/>useTasks"]
-    Runtime["src/_lofi runtime<br/>storage and subscriptions"] --> Hook
+    Runtime["@nzip/lofi runtime<br/>storage and subscriptions"] --> Hook
     Hook --> Island["Preact island<br/>product UI"]
     Island -- "domain mutation" --> Hook
     Hook -- "insert, update, delete" --> Runtime
@@ -51,10 +51,10 @@ The generated `src/islands/use-tasks.ts` is the canonical example. Its important
 
 ```ts
 import { schema as s } from "jazz-tools";
-import { referenceApp } from "../app.ts";
-import { getRuntime } from "../_lofi/runtime.ts";
+import { getRuntime } from "@nzip/lofi";
+import { app } from "../app.ts";
 
-const notesTable = referenceApp.schema.notes;
+const notesTable = app.schema.notes;
 export type Note = s.RowOf<typeof notesTable>;
 ```
 

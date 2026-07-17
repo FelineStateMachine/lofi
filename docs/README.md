@@ -42,7 +42,7 @@ The root [README](../README.md) provides the shortest product overview and comma
 
 ## The author boundary
 
-Generated projects intentionally divide application code from framework runtime code:
+Generated projects intentionally divide application source from versioned framework code:
 
 ```mermaid
 flowchart TB
@@ -56,7 +56,7 @@ flowchart TB
     end
 
     subgraph Framework["lofi owns"]
-        Runtime["src/_lofi"]
+        Runtime["@nzip/lofi package"]
         Storage["storage and subscriptions"]
         Identity["identity and recovery"]
         Lifecycle["sync, PWA, lifecycle"]
@@ -70,9 +70,10 @@ flowchart TB
 
 - Change `src/schema.ts`, `src/permissions.ts`, `src/app.ts`, `src/pages/`, `src/islands/`, and
   `src/styles/`.
-- Treat `src/_lofi/` as generated runtime code. Application hooks may import its documented seams in
-  the same way as the starter, but ordinary product work should not edit those files.
-- Change files under `public/` when customizing the icon, manifest, or service worker assets.
+- Import documented runtime seams from `@nzip/lofi`; no framework implementation is copied into
+  `src/`.
+- Change files under `public/` when customizing the icon or manifest. The package build generates
+  the service worker.
 - Keep application tests under `tests/`.
 
 ## Framework contributor material

@@ -83,23 +83,26 @@ Keep these current constraints in mind:
 
 ## Project anatomy
 
-A generated project separates the files you own from the framework runtime:
+A generated project keeps application source separate from the versioned framework package:
 
 ```mermaid
 flowchart TB
-    Root["my-app/"] --> Config["deno.json + astro.config.ts"]
-    Root --> Public["public/<br/>manifest · service worker · icons"]
+    Root["my-app/"] --> Config["deno.json"]
+    Root --> Public["public/<br/>manifest · icons"]
     Root --> Src["src/"]
     Root --> Tests["tests/<br/>your tests + lofi testing contract"]
+    Root --> Framework["@nzip/lofi<br/>versioned framework package"]
 
     Src --> Model["schema.ts + permissions.ts<br/>your model and access policy"]
     Src --> App["app.ts<br/>your application config"]
     Src --> UI["pages + islands + styles<br/>your product experience"]
-    Src --> Runtime["_lofi/<br/>generated runtime—do not edit"]
+    Src --> Layout["layouts/<br/>your document shell"]
+    Framework --> Runtime["storage · identity · sync<br/>PWA · lifecycle · diagnostics"]
 ```
 
-Most product work stays in `schema.ts`, `permissions.ts`, `app.ts`, `pages/`, `islands/`, and
-`styles/`. Everything under `src/_lofi/` is generated runtime code.
+Product work stays in `schema.ts`, `permissions.ts`, `app.ts`, `pages/`, `layouts/`, `islands/`, and
+`styles/`. Framework behavior is imported from `@nzip/lofi`; upgrading the package updates runtime
+code without copying it into your source tree.
 
 ## Testing local-first behavior
 

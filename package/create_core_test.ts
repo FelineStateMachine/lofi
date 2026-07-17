@@ -99,14 +99,15 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       );
     }
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
+    assertEquals(config.imports["@nzip/lofi"], "jsr:@nzip/lofi@0.2.0");
     assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.2.0/");
     assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.2.0/testing");
     const lofiSpecifiers = Object.entries(config.imports)
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
     assert(
-      lofiSpecifiers.length === 8,
-      `expected one package prefix, six commands, and testing, received ${lofiSpecifiers.length}`,
+      lofiSpecifiers.length === 10,
+      `expected one package prefix, two integrations, six commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.2.0/")),
@@ -120,6 +121,22 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
 Deno.test("package manifest and generated version stay coupled", () => {
   assertEquals(packageManifest.name, "@nzip/lofi");
   assertEquals(packageManifest.version, LOFI_VERSION);
+  assertEquals(Object.keys(packageManifest.exports).sort(), [
+    ".",
+    "./astro",
+    "./build",
+    "./create",
+    "./dev",
+    "./doctor",
+    "./preact",
+    "./preview",
+    "./provision",
+    "./test",
+    "./testing",
+  ]);
+  assertEquals(packageManifest.exports["."], "./package/runtime/mod.ts");
+  assertEquals(packageManifest.exports["./astro"], "./package/astro/mod.ts");
+  assertEquals(packageManifest.exports["./preact"], "./package/preact/mod.ts");
   assertEquals(packageManifest.exports["./testing"], "./package/testing/mod.ts");
 });
 
@@ -169,6 +186,7 @@ Deno.test("createProject accepts an existing empty directory and a local package
       packagePrefix: "file:///clean-room/package/",
     });
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
+    assertEquals(config.imports["@nzip/lofi"], "file:///clean-room/package/runtime/mod.ts");
     assertEquals(config.imports["@nzip/lofi/"], "file:///clean-room/package/");
     assert(
       !await Array.fromAsync(Deno.readDir(result.destination)).then((entries) =>

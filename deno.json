@@ -4,11 +4,14 @@
   "license": "MIT",
   "description": "A local-first mobile PWA meta-framework for Deno: declare a schema, build Preact islands, and ship an installable offline-capable app whose UI always hydrates from local data.",
   "exports": {
+    ".": "./package/runtime/mod.ts",
+    "./astro": "./package/astro/mod.ts",
     "./build": "./package/commands/build.ts",
     "./create": "./package/create.ts",
     "./dev": "./package/commands/dev.ts",
     "./doctor": "./package/commands/doctor.ts",
     "./preview": "./package/commands/preview.ts",
+    "./preact": "./package/preact/mod.ts",
     "./provision": "./package/commands/provision.ts",
     "./testing": "./package/testing/mod.ts",
     "./test": "./package/commands/run_tests.ts"
@@ -38,7 +41,7 @@
   },
   "tasks": {
     "check": "deno fmt --check . && deno lint && deno task test:unit",
-    "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT,CI --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package apps/reference/src/_lofi apps/reference/tests",
+    "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT,CI --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package apps/reference/tests",
     "test:update:create": "LOFI_UPDATE_SNAPSHOT=1 deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-read --allow-write=. --allow-run package/create_core_test.ts",
     "test": "deno task test:unit",
     "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium",
@@ -69,7 +72,6 @@
       "docs/sync-and-recovery.md",
       "docs/testing.md",
       "docs/troubleshooting.md",
-      "apps/reference/astro.config.ts",
       "apps/reference/deno.json",
       "apps/reference/public",
       "apps/reference/src",

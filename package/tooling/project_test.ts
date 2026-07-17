@@ -34,14 +34,14 @@ Deno.test("source fingerprint is stable across file creation order and changes w
   }
 });
 
-Deno.test("source fingerprint includes authored service worker JavaScript", async () => {
+Deno.test("source fingerprint includes authored public JavaScript", async () => {
   const root = await makeTestRoot();
   try {
     await Deno.mkdir(join(root, "public"));
-    await Deno.writeTextFile(join(root, "public", "sw.js"), "const revision = 'one';\n");
+    await Deno.writeTextFile(join(root, "public", "app.js"), "const revision = 'one';\n");
     const first = await sourceFingerprint(root);
-    await Deno.writeTextFile(join(root, "public", "sw.js"), "const revision = 'two';\n");
-    assert(first !== await sourceFingerprint(root), "fingerprint ignored service worker source");
+    await Deno.writeTextFile(join(root, "public", "app.js"), "const revision = 'two';\n");
+    assert(first !== await sourceFingerprint(root), "fingerprint ignored authored public source");
   } finally {
     await Deno.remove(root, { recursive: true });
   }

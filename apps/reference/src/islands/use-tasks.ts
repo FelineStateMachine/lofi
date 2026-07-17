@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import { schema as s } from "jazz-tools";
-import { referenceApp } from "../app.ts";
-import { getRuntime, runtimeRecreatedEvent } from "../_lofi/runtime.ts";
-import type { TableSnapshot } from "../_lofi/table-store.ts";
+import { getRuntime, runtimeRecreatedEvent, type TableSnapshot } from "@nzip/lofi";
+import { app } from "../app.ts";
 
 /**
  * Author-owned example. This is the whole binding between a declared table and
  * the UI: pick a table from your schema, derive its row type, and wrap the
  * generic store's writes in domain verbs. Replace `tasks` and the methods below
- * with your own model — nothing under `src/_lofi/` needs to change.
+ * with your own model — framework runtime code remains in `@nzip/lofi`.
  */
-const tasksTable = referenceApp.schema.tasks;
+const tasksTable = app.schema.tasks;
 
 /** Row and insert types come straight from the declared schema. */
 export type Task = s.RowOf<typeof tasksTable>;

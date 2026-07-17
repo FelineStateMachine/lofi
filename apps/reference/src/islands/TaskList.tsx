@@ -1,11 +1,11 @@
 import { useState } from "preact/hooks";
-import { settleUiMutation } from "../_lofi/ui-mutation.ts";
+import { settleUiMutation } from "@nzip/lofi";
 import { useTasks } from "./use-tasks.ts";
 
 /**
  * Author-owned starter UI. One island over one table: add a row, list rows, and
- * toggle a boolean. Replace it with your own schema and components — the runtime
- * under `src/_lofi/` stays the same.
+ * toggle a boolean. Replace it with your own schema and components — the
+ * package-owned runtime stays the same.
  */
 export default function TaskList() {
   const { status, error, durability, tasks, create, setCompleted } = useTasks();

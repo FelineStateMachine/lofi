@@ -13,7 +13,7 @@ import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
 const environment = await validatedCommandEnvironment();
 const started = performance.now();
 const exitCode = await runDeno(
-  ["test", "--allow-read", "--allow-write=.", "src/_lofi", "tests"],
+  ["test", "--allow-read", "--allow-write=.", "tests"],
   environment,
 );
 exitOnFailure(exitCode, "local-first test suite; retained browser artifacts use test-results/");

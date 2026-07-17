@@ -65,7 +65,7 @@ is not handed out without confirming the person is present. Stated honestly: thi
 **confirmation**, not encryption. The account secret still lives in device storage so the app can
 open instantly; the passkey does not encrypt it. A device where WebAuthn is unavailable can still
 back up, and the UI says the reveal was unconfirmed. (For real at-rest encryption of the secret, the
-PRF primitive in `src/_lofi/auth.ts` is available — see below.)
+PRF primitive exported by `@nzip/lofi` is available — see below.)
 
 ### Boot flow
 
@@ -77,7 +77,7 @@ PRF primitive in `src/_lofi/auth.ts` is available — see below.)
 - **Stop syncing** → detaches the network and returns to local-only; the account and data are
   untouched, and electing again resumes against the same account.
 
-The framework side lives in `src/_lofi/session.ts` (`readSession`, `createBackupPasskey`,
+The framework side is exported by `@nzip/lofi` (`readSession`, `createBackupPasskey`,
 `confirmPhraseAccess`, `revealRecoveryPhrase`, `enableSyncBackup`, `stopSyncBackup`,
 `restoreFromRecoveryPhrase`); the gate is the author-owned example you can restyle or replace.
 
@@ -106,7 +106,7 @@ it expires. `.env` holds the server-only secrets and is git-ignored.
 
 ## Optional: protecting the secret at rest
 
-`src/_lofi/auth.ts` is a standalone device-credential primitive: enroll a WebAuthn passkey and
+The package auth runtime is a standalone device-credential primitive: enroll a WebAuthn passkey and
 derive a credential-bound key (PRF) to encrypt data — including the account secret — **at rest**. It
 is feature-detected and never faked. It is _not_ the account identity (deriving the account from a
 credential was removed, since a derived key is a different account and cannot carry local-only data

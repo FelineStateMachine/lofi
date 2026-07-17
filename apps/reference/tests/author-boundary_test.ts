@@ -7,19 +7,36 @@ const authorUiFiles = [
   new URL("../src/islands/TaskList.tsx", import.meta.url),
 ];
 
+const packageConsumers = [
+  new URL("../src/app.ts", import.meta.url),
+  new URL("../src/pages/index.astro", import.meta.url),
+  new URL("../src/layouts/Shell.astro", import.meta.url),
+  new URL("../src/islands/AccountGate.tsx", import.meta.url),
+  new URL("../src/islands/TaskList.tsx", import.meta.url),
+  new URL("../src/islands/use-tasks.ts", import.meta.url),
+];
+
 const forbidden = [
   { pattern: /jazz-tools/, name: "raw Jazz import" },
   { pattern: /(?:Shared|Service|Web)?Worker\s*\(/, name: "worker construction" },
   { pattern: /(?:wss?|https?):\/\//, name: "transport URL" },
   { pattern: /workbox/i, name: "Workbox configuration" },
   { pattern: /navigator\.|globalThis\.(?:isSecureContext|SharedWorker)/, name: "browser branch" },
-  {
-    pattern: /_lofi\/(?:boot|config|device-capabilities|probe|pwa|runtime)/,
-    name: "runtime plumbing import",
-  },
 ];
 
-test("author UI stays behind the lofi checklist boundary", async () => {
+test("author source consumes public lofi package seams and hides plumbing from product UI", async () => {
+  try {
+    await Deno.stat(new URL("../src/_lofi", import.meta.url));
+    throw new Error("generated project still contains a vendored src/_lofi runtime");
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+  for (const file of packageConsumers) {
+    const source = await Deno.readTextFile(file);
+    if (/_lofi\//.test(source)) {
+      throw new Error(`${file.pathname} imports vendored framework code`);
+    }
+  }
   for (const file of authorUiFiles) {
     const source = await Deno.readTextFile(file);
     for (const rule of forbidden) {

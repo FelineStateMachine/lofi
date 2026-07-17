@@ -52,13 +52,27 @@ output at `http://127.0.0.1:4321/` by default.
 | `src/pages/`         | Astro pages and shell composition                           |
 | `src/islands/`       | Preact hooks and interactive UI                             |
 | `src/styles/`        | Application styling                                         |
-| `public/`            | Manifest, icon, and service-worker assets                   |
+| `public/`            | Manifest, icon, and other product assets                    |
 | `tests/`             | Application and local-first browser tests                   |
-| `src/_lofi/`         | Generated framework runtime; do not edit                    |
 
-Application hooks can import runtime seams from `src/_lofi/`, as the generated `use-tasks.ts` does.
-The boundary means you should not modify the runtime implementation or import Jazz networking and
-storage machinery directly into product components.
+Application hooks import supported runtime seams from `@nzip/lofi`, as the generated `use-tasks.ts`
+does. The boundary keeps Jazz networking and storage machinery out of product components while
+allowing framework fixes to arrive through a package upgrade.
+
+The final package map is intentionally small:
+
+| Import                        | Supported use                                       |
+| ----------------------------- | --------------------------------------------------- |
+| `@nzip/lofi`                  | App configuration, runtime, session, stores, PWA    |
+| `@nzip/lofi/preact`           | Package-owned Preact hooks and diagnostic UI        |
+| `@nzip/lofi/astro`            | Package-owned Astro/Vite integration                |
+| `@nzip/lofi/testing`          | Local-first Playwright helpers                      |
+| `@nzip/lofi/{create,dev,...}` | Generator and generated-project command entrypoints |
+
+All of these imports resolve through the single version pinned in `deno.json`. Upgrade that pin to
+receive framework fixes; do not copy package files into `src/` or import unpublished internal paths.
+Direct vendor access is an unsupported escape hatch: isolate it from ordinary product files and do
+not expect lofi compatibility guarantees for it.
 
 ## Customize the application identity first
 

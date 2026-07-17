@@ -41,6 +41,17 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
+function cachedPrerenderedNavigation(request) {
+  const requestUrl = new URL(request.url);
+  const scope = new URL(self.registration.scope);
+  if (requestUrl.origin !== scope.origin || !requestUrl.pathname.startsWith(scope.pathname)) {
+    return undefined;
+  }
+  const route = requestUrl.pathname.slice(scope.pathname.length).replace(/^\/+|\/+$/g, "");
+  if (!route) return caches.match(scope);
+  return caches.match(new URL(`${route}/index.html`, scope));
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const requestUrl = new URL(event.request.url);
@@ -50,6 +61,10 @@ self.addEventListener("fetch", (event) => {
       ignoreSearch: event.request.mode === "navigate",
     });
     if (cached) return cached;
+    if (event.request.mode === "navigate") {
+      const prerendered = await cachedPrerenderedNavigation(event.request);
+      if (prerendered) return prerendered;
+    }
     try {
       const response = await fetch(event.request);
       if (response.ok) {

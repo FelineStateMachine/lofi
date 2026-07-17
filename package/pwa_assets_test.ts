@@ -49,7 +49,9 @@ Deno.test("starter manifest references install-grade raster icons with exact dim
     new URL("../apps/reference/src/layouts/Shell.astro", import.meta.url),
   );
   assert(
-    shell.includes('rel="apple-touch-icon" href="./apple-touch-icon.png"'),
-    "iOS icon is not linked",
+    shell.includes("const deploymentBase = import.meta.env.BASE_URL") &&
+      shell.includes('publicAsset("apple-touch-icon.png")') &&
+      shell.includes('publicAsset("manifest.webmanifest")'),
+    "install assets are not linked through the deployment base",
   );
 });

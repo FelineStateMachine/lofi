@@ -28,7 +28,7 @@ console.log(
       : "local-only"
   }`,
 );
-console.log("PWA:         development service worker disabled");
+console.log(`PWA:         development service worker disabled; base ${environment.LOFI_BASE_PATH}`);
 console.log("Device:      stable HTTPS URL not configured; device preview graduates in M3");
 
 const forwarded = Deno.args[0] === "--" ? Deno.args.slice(1) : Deno.args;

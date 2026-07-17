@@ -19,6 +19,8 @@ Deno.test("service worker uses cached navigation shell as the offline fallback",
   for (
     const contract of [
       'event.request.mode === "navigate"',
+      "cachedPrerenderedNavigation(event.request)",
+      "new URL(`${route}/index.html`, scope)",
       'caches.match(new URL("./", self.registration.scope))',
       'reportFailure(\n            "runtime-cache"',
     ]

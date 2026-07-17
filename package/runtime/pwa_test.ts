@@ -5,6 +5,7 @@ import {
   type PwaController,
   type PwaInstallState,
   type PwaState,
+  resolvePwaResources,
   waitForActivation,
 } from "./pwa.ts";
 
@@ -41,8 +42,12 @@ class FakeContainer extends EventTarget {
   controller: ServiceWorker | null = null;
   registration = new FakeRegistration();
   registerError: Error | undefined;
+  registeredUrl: string | undefined;
+  registeredScope: string | undefined;
 
-  register(): Promise<ServiceWorkerRegistration> {
+  register(url: string | URL, options?: RegistrationOptions): Promise<ServiceWorkerRegistration> {
+    this.registeredUrl = String(url);
+    this.registeredScope = options?.scope;
     if (this.registerError) return Promise.reject(this.registerError);
     return Promise.resolve(this.registration as unknown as ServiceWorkerRegistration);
   }
@@ -58,6 +63,7 @@ function testController(options: {
   target?: EventTarget;
   install?: PwaInstallState;
   reload?: () => void;
+  deploymentBaseUrl?: string;
 } = {}): PwaController {
   const environment = options.install === "manual-ios"
     ? { platform: "iPhone", maxTouchPoints: 5 }
@@ -71,10 +77,36 @@ function testController(options: {
       ...environment,
     }),
     production: () => options.production ?? false,
-    documentBaseURI: () => "http://127.0.0.1:4321/",
+    deploymentBaseUrl: () => options.deploymentBaseUrl ?? "http://127.0.0.1:4321/",
     reload: options.reload,
   });
 }
+
+test("PWA resources resolve from the deployment base instead of the current route", () => {
+  const resources = resolvePwaResources("https://example.com/field-notes");
+  if (resources.workerUrl.href !== "https://example.com/field-notes/sw.js") {
+    throw new Error(`unexpected worker URL ${resources.workerUrl.href}`);
+  }
+  if (resources.scope !== "/field-notes/") throw new Error(`unexpected scope ${resources.scope}`);
+});
+
+test("nested direct visits register the worker at the configured non-root base", async () => {
+  const container = new FakeContainer();
+  container.registration.active = asServiceWorker(new FakeServiceWorker("activated"));
+  const controller = testController({
+    container,
+    production: true,
+    deploymentBaseUrl: "https://example.com/field-notes/",
+  });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  if (container.registeredUrl !== "https://example.com/field-notes/sw.js") {
+    throw new Error(`registered the wrong worker URL: ${container.registeredUrl}`);
+  }
+  if (container.registeredScope !== "/field-notes/") {
+    throw new Error(`registered the wrong scope: ${container.registeredScope}`);
+  }
+});
 
 function waitForState(controller: PwaController, predicate: (state: PwaState) => boolean) {
   return new Promise<PwaState>((resolve) => {

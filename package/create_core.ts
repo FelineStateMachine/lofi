@@ -32,7 +32,11 @@ test-results/
 `;
 
 const generatedEnvironment =
-  `# Optional public Jazz cloud configuration. Leave both blank for local-only mode.
+  `# Public deployment base. Keep / for an origin-root deployment, or use /my-app/ when
+# the static host mounts this build below the origin root.
+LOFI_BASE_PATH=/
+
+# Optional public Jazz cloud configuration. Leave both blank for local-only mode.
 # Run \`deno task jazz:provision\` to generate a managed Jazz app and fill these in.
 JAZZ_APP_ID=
 JAZZ_SERVER_URL=
@@ -95,6 +99,10 @@ static site — they push the built \`dist/\` as the deploy root, which serves i
 - \`deno task deploy\` — thereafter: build and push \`dist/\`.
 
 Point them at any other static host by editing those two tasks.
+
+Deployments use the origin root by default. If the host mounts the app below it, copy
+\`.env.example\`, set \`LOFI_BASE_PATH=/my-app/\`, and rebuild. Upload \`dist/\` at that same path;
+the manifest, public assets, service worker, worker scope, and preview URL all follow this value.
 `;
 }
 

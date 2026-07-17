@@ -5,6 +5,8 @@ export interface Props {
 }
 
 const { title } = Astro.props;
+const deploymentBase = import.meta.env.BASE_URL;
+const publicAsset = (name: string) => `${deploymentBase}${name}`;
 ---
 
 <!doctype html>
@@ -13,9 +15,9 @@ const { title } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <meta name="theme-color" content="#18231f" />
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href={publicAsset("favicon.svg")} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={publicAsset("apple-touch-icon.png")} />
+    <link rel="manifest" href={publicAsset("manifest.webmanifest")} />
     <title>{title}</title>
   </head>
   <body>

@@ -102,7 +102,8 @@ export async function doctorReport(
     {
       name: "PWA",
       status: "pending",
-      detail: "development service worker disabled; production activation checked in browser",
+      detail:
+        `deployment base ${validation.basePath}; development service worker disabled; production activation checked in browser`,
     },
     {
       name: "Device URL",

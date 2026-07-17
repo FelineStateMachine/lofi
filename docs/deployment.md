@@ -44,6 +44,18 @@ Before deploying, review:
 - page titles, descriptions, and starter copy;
 - `.env` — either no public Jazz pair for local-only mode or a complete pair for optional sync.
 
+The default deployment base is `/`. When a static host mounts the application below the origin root,
+set the path once in `.env` before running `dev` or `build`:
+
+```dotenv
+LOFI_BASE_PATH=/field-notes/
+```
+
+The value must be an absolute path, not an origin. Lofi feeds it into Astro's `base` setting and
+uses the resulting base for public asset links, the manifest, the service worker, its scope, build
+identity, and local preview. Upload the contents of `dist/` to that same mount point. A root build
+and a subpath build are different deployment artifacts; rebuild after changing `LOFI_BASE_PATH`.
+
 Run `deno task doctor` and `deno task test` before the production build.
 
 ## Deno Deploy
@@ -71,6 +83,10 @@ Upload the contents of `dist/` to any host that can:
 - serve the application over HTTPS;
 - keep the service worker at the intended scope;
 - fall back to the appropriate prerendered HTML for application routes.
+
+Every prerendered route is included in the shell precache. While offline, a direct navigation such
+as `/field-notes/settings/` resolves its cached `settings/index.html`; if that route was not
+emitted, the worker falls back to the cached application root.
 
 Do not run a server-side Jazz credential in the static host or expose `JAZZ_ADMIN_SECRET` or
 `BACKEND_SECRET` as public environment variables.

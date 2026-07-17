@@ -82,6 +82,7 @@ const cloudServerUrl = process.env.JAZZ_SERVER_URL?.trim();
 const managedJazzServer = process.env.LOFI_SKIP_JAZZ_MANAGED === "1"
   ? false
   : { allowLocalFirstAuth: true };
+const deploymentBase = process.env.LOFI_BASE_PATH || "/";
 
 if (Boolean(cloudAppId) !== Boolean(cloudServerUrl)) {
   throw new Error(
@@ -95,7 +96,9 @@ if (cloudAppId && cloudServerUrl) {
 }
 
 export default defineConfig({
+  base: deploymentBase,
   output: "static",
+  trailingSlash: "always",
   integrations: [preact({ compat: true, devtools: true })],
   vite: {
     plugins: [jazzPlugin({ schemaDir, inspector: false, server: managedJazzServer })],

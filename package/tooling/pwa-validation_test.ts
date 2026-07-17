@@ -174,6 +174,29 @@ Deno.test("source PWA validation checks an opt-in text share target", async () =
   }
 });
 
+Deno.test("source PWA validation checks an opt-in launch handler", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.launch_handler = {
+      client_mode: ["focus-existing", "focus-existing", "invented"],
+      navigation: "unsafe",
+    };
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project);
+    assert(hasIssue(issues, "contains unsupported members"), "unknown launch member was accepted");
+    assert(hasIssue(issues, "supports auto"), "unknown client mode was accepted");
+    assert(hasIssue(issues, "must not repeat modes"), "duplicate client mode was accepted");
+
+    manifest.launch_handler = { client_mode: ["focus-existing", "auto"] };
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project);
+    assert(valid.length === 0, `valid launch handler was rejected: ${JSON.stringify(valid)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation permits replacement branding and optional members", async () => {
   const { root, project } = await makeProject();
   try {

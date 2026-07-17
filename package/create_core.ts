@@ -129,6 +129,10 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
   "@nzip/lofi/preview": { subpath: "preview", localPath: "commands/preview.ts" },
   "@nzip/lofi/preact": { subpath: "preact", localPath: "preact/mod.ts" },
   "@nzip/lofi/provision": { subpath: "provision", localPath: "commands/provision.ts" },
+  "@nzip/lofi/recipes/launch-handler": {
+    subpath: "recipes/launch-handler",
+    localPath: "recipes/launch-handler.ts",
+  },
   "@nzip/lofi/recipes/web-share": {
     subpath: "recipes/web-share",
     localPath: "recipes/web-share.ts",

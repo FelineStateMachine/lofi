@@ -72,6 +72,7 @@ The final package map is intentionally small:
 | `@nzip/lofi/recipes/launch-handler`        | Optional safe installed-window launch routing       |
 | `@nzip/lofi/recipes/protocol-handler`      | Optional allow-listed custom-protocol item links    |
 | `@nzip/lofi/recipes/related-app-discovery` | Optional presentation-only companion discovery      |
+| `@nzip/lofi/recipes/scope-extension`       | Optional reciprocal cross-origin app-window scope   |
 | `@nzip/lofi/recipes/web-share`             | Optional inbound/outbound text and link sharing     |
 | `@nzip/lofi/testing`                       | Local-first Playwright helpers                      |
 | `@nzip/lofi/{create,dev,...}`              | Generator and generated-project command entrypoints |

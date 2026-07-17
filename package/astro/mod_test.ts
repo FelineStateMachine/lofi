@@ -18,6 +18,7 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
         ".lofi/package/recipes/file-handler.ts",
         ".lofi/package/recipes/protocol-handler.ts",
         ".lofi/package/recipes/related-app-discovery.ts",
+        ".lofi/package/recipes/scope-extension.ts",
         ".lofi/package/recipes/web-share.ts",
         "^jsr:@nzip\\/lofi@[^/]+",
         "^npm:preact@[^/]+",
@@ -40,6 +41,7 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
     await Deno.stat(`${root}/.lofi/package/recipes/launch-handler.ts`);
     await Deno.stat(`${root}/.lofi/package/recipes/protocol-handler.ts`);
     await Deno.stat(`${root}/.lofi/package/recipes/related-app-discovery.ts`);
+    await Deno.stat(`${root}/.lofi/package/recipes/scope-extension.ts`);
     await Deno.stat(`${root}/.lofi/package/recipes/web-share.ts`);
   } finally {
     await Deno.remove(root, { recursive: true });

@@ -299,6 +299,38 @@ Deno.test("source PWA validation checks opt-in related applications without pref
   }
 });
 
+Deno.test("source PWA validation checks opt-in scope extensions", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.scope_extensions = [
+      {
+        type: "invented",
+        origin: "http://user:secret@help.example.com/path?unsafe=1",
+        authorization: true,
+      },
+      { type: "origin", origin: "https://help.example.com" },
+      {
+        type: "origin",
+        origin: "https://help.example.com",
+      },
+    ];
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project);
+    assert(hasIssue(issues, "type must be origin"), "invented extension type was accepted");
+    assert(hasIssue(issues, "exact credential-free HTTPS origin"), "unsafe origin was accepted");
+    assert(hasIssue(issues, "contains unsupported members"), "unknown extension member passed");
+    assert(hasIssue(issues, "origin must not repeat"), "duplicate origin was accepted");
+
+    manifest.scope_extensions = [{ type: "origin", origin: "https://help.example.com" }];
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project);
+    assert(valid.length === 0, `valid scope extension was rejected: ${JSON.stringify(valid)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation permits replacement branding and optional members", async () => {
   const { root, project } = await makeProject();
   try {

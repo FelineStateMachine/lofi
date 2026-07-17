@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 17, `expected 17 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 18, `expected 18 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -949,6 +949,38 @@ export default function CompanionDiscovery() {
   );
 }
 
+async function installScopeExtensionRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.scope_extensions = [{ type: "origin", origin: "https://help.example.com" }];
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "scope-extension.astro"),
+    `---
+import {
+  createScopeExtension,
+  createWebAppOriginAssociation,
+  verifyWebAppOriginAssociation,
+} from "@nzip/lofi/recipes/scope-extension";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+const declaration = createScopeExtension("https://help.example.com");
+const expected = { manifestId: "https://app.example.com/notes", scope: "/notes/" };
+const association = createWebAppOriginAssociation(expected);
+const verified = verifyWebAppOriginAssociation(association, expected);
+---
+<Shell title="Product help">
+  <section class="island">
+    <h1>Product help origin</h1>
+    <output data-scope-origin>{declaration.origin}</output>
+    <output data-scope-association>{verified ? JSON.stringify(association) : "invalid"}</output>
+    <a data-scope-fallback href="https://help.example.com/notes/">Open product help</a>
+  </section>
+</Shell>
+`,
+  );
+}
+
 async function main() {
   const { source, version } = parseArgs(Deno.args);
   await Deno.remove(artifactsRoot, { recursive: true }).catch((error) => {
@@ -1202,6 +1234,10 @@ async function main() {
     await stage(
       "install related-app-discovery recipe",
       () => installRelatedAppDiscoveryRecipe(projectRoot!),
+    );
+    await stage(
+      "install scope-extension recipe",
+      () => installScopeExtensionRecipe(projectRoot!),
     );
 
     await stage(
@@ -1630,6 +1666,27 @@ async function main() {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(page!, taskAppReady, undefined, {
         description: "task app after related-app discovery exercise",
+      });
+    });
+    await stage("scope-extension recipe browser", async () => {
+      await page!.goto(`${origin}scope-extension/`, { waitUntil: "domcontentloaded" });
+      assert(
+        await page!.locator("[data-scope-origin]").textContent() === "https://help.example.com",
+        "scope extension origin was not normalized",
+      );
+      const association = await page!.locator("[data-scope-association]").textContent() ?? "";
+      assert(
+        association.includes('"https://app.example.com/notes":{"scope":"/notes/"}'),
+        "reciprocal association was not generated and verified",
+      );
+      assert(
+        await page!.locator("[data-scope-fallback]").getAttribute("href") ===
+          "https://help.example.com/notes/",
+        "unsupported scope extension lost ordinary external navigation",
+      );
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after scope-extension exercise",
       });
     });
     await stage("waiting worker update browser", async () => {

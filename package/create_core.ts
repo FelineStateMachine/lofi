@@ -85,7 +85,7 @@ OS-facing capabilities remain absent until the product opts in. Start with the
 for tested manifest patches, feature detection, input validation, offline behavior, and normal-web
 fallbacks. Isolated entrypoints cover Web Share, installed-window launch handling, and validated
 file-import previews, custom protocol links, and presentation-only companion discovery without adding
-any to the starter.
+any to the starter. Cross-origin app-window scope remains a reciprocal deployment opt-in.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
@@ -145,6 +145,10 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
   "@nzip/lofi/recipes/related-app-discovery": {
     subpath: "recipes/related-app-discovery",
     localPath: "recipes/related-app-discovery.ts",
+  },
+  "@nzip/lofi/recipes/scope-extension": {
+    subpath: "recipes/scope-extension",
+    localPath: "recipes/scope-extension.ts",
   },
   "@nzip/lofi/recipes/web-share": {
     subpath: "recipes/web-share",

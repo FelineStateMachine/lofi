@@ -18,6 +18,7 @@
     "./recipes/launch-handler": "./package/recipes/launch-handler.ts",
     "./recipes/protocol-handler": "./package/recipes/protocol-handler.ts",
     "./recipes/related-app-discovery": "./package/recipes/related-app-discovery.ts",
+    "./recipes/scope-extension": "./package/recipes/scope-extension.ts",
     "./recipes/web-share": "./package/recipes/web-share.ts",
     "./testing": "./package/testing/mod.ts",
     "./test": "./package/commands/run_tests.ts"

@@ -369,6 +369,49 @@ async function parseAndValidateManifest(
       }
     }
   }
+  if (manifest.scope_extensions !== undefined) {
+    if (!Array.isArray(manifest.scope_extensions) || manifest.scope_extensions.length === 0) {
+      issues.push(
+        issue(`${manifestFile}: scope_extensions must be a non-empty array`, remediation),
+      );
+    } else {
+      const origins = new Set<string>();
+      for (const [index, raw] of manifest.scope_extensions.entries()) {
+        const label = `${manifestFile}: scope_extensions[${index}]`;
+        if (!isObject(raw)) {
+          issues.push(issue(`${label} must be an object`, remediation));
+          continue;
+        }
+        if (Object.keys(raw).some((member) => !["type", "origin"].includes(member))) {
+          issues.push(issue(`${label} contains unsupported members`, remediation));
+        }
+        if (raw.type !== "origin") {
+          issues.push(issue(`${label}.type must be origin`, remediation));
+        }
+        if (!nonEmptyString(raw.origin)) {
+          issues.push(issue(`${label}.origin must be an HTTPS origin`, remediation));
+          continue;
+        }
+        try {
+          const origin = new URL(raw.origin);
+          if (
+            origin.protocol !== "https:" || origin.username || origin.password ||
+            origin.pathname !== "/" || origin.search || origin.hash || origin.origin !== raw.origin
+          ) {
+            issues.push(
+              issue(`${label}.origin must be an exact credential-free HTTPS origin`, remediation),
+            );
+          }
+          if (origins.has(origin.origin)) {
+            issues.push(issue(`${label}.origin must not repeat`, remediation));
+          }
+          origins.add(origin.origin);
+        } catch {
+          issues.push(issue(`${label}.origin is not a valid URL`, remediation));
+        }
+      }
+    }
+  }
   for (const member of ["background_color", "theme_color"] as const) {
     if (!isLikelyCssColor(manifest[member])) {
       issues.push(issue(`${manifestFile}: ${member} must be a CSS color`, remediation));

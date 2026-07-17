@@ -24,6 +24,8 @@ flowchart LR
   allow-listed collaborative-list identifiers without arbitrary redirects.
 - [Related-application discovery](related-app-discovery.md) — hide redundant companion onboarding
   from exact verified-app matches without changing authentication or PWA installability.
+- [Cross-origin app-window scope](scope-extension.md) — keep product-owned secondary-origin paths
+  inside an installed window after reciprocal deployment verification.
 
 ## Contract for every recipe
 

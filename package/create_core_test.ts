@@ -99,9 +99,9 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       );
     }
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
-    assertEquals(config.imports["@nzip/lofi"], "jsr:@nzip/lofi@0.3.1");
-    assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.3.1/");
-    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.3.1/testing");
+    assertEquals(config.imports["@nzip/lofi"], "jsr:@nzip/lofi@0.3.2");
+    assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.3.2/");
+    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.3.2/testing");
     const lofiSpecifiers = Object.entries(config.imports)
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
@@ -110,7 +110,7 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       `expected one package prefix, access, two integrations, six commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
-      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.3.1/")),
+      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.3.2/")),
       "generated lofi commands do not resolve through one exact package version",
     );
     const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -136,6 +136,10 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
 Deno.test("package manifest and generated version stay coupled", () => {
   assertEquals(packageManifest.name, "@nzip/lofi");
   assertEquals(packageManifest.version, LOFI_VERSION);
+  assert(
+    !Object.keys(packageManifest.imports).some((name) => name.startsWith("@nzip/lofi")),
+    "published package config must not redirect its own public imports to local files",
+  );
   assertEquals(Object.keys(packageManifest.exports).sort(), [
     ".",
     "./access",

@@ -12,6 +12,7 @@ const entrypoints = [
   "package/recipes/file-handler.ts",
   "package/recipes/launch-handler.ts",
   "package/recipes/protocol-handler.ts",
+  "package/recipes/related-app-discovery.ts",
   "package/recipes/web-share.ts",
   "package/testing/mod.ts",
   "package/commands/run_tests.ts",

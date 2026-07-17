@@ -22,6 +22,8 @@ flowchart LR
   transient drafts before the user confirms persistence.
 - [Custom-protocol item links](protocol-handler.md) — parse one product-owned `web+` scheme into
   allow-listed collaborative-list identifiers without arbitrary redirects.
+- [Related-application discovery](related-app-discovery.md) — hide redundant companion onboarding
+  from exact verified-app matches without changing authentication or PWA installability.
 
 ## Contract for every recipe
 

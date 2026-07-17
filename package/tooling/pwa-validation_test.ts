@@ -268,6 +268,37 @@ Deno.test("source PWA validation checks opt-in protocol handlers", async () => {
   }
 });
 
+Deno.test("source PWA validation checks opt-in related applications without preferring them", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.prefer_related_applications = true;
+    manifest.related_applications = [{
+      platform: "invented",
+      url: "http://user:secret@store.invalid/app",
+      extra: true,
+    }];
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project);
+    assert(hasIssue(issues, "preserve PWA installability"), "native preference was accepted");
+    assert(hasIssue(issues, "platform is not supported"), "invented platform was accepted");
+    assert(hasIssue(issues, "credential-free HTTPS"), "unsafe related URL was accepted");
+    assert(hasIssue(issues, "contains unsupported members"), "unknown related member passed");
+
+    manifest.prefer_related_applications = false;
+    manifest.related_applications = [{
+      platform: "play",
+      id: "com.example.companion",
+      url: "https://play.google.com/store/apps/details?id=com.example.companion",
+    }];
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project);
+    assert(valid.length === 0, `valid related app was rejected: ${JSON.stringify(valid)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation permits replacement branding and optional members", async () => {
   const { root, project } = await makeProject();
   try {

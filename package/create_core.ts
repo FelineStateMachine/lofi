@@ -84,7 +84,8 @@ OS-facing capabilities remain absent until the product opts in. Start with the
 [installed-app recipe catalog](https://github.com/FelineStateMachine/lofi/blob/main/docs/recipes/README.md)
 for tested manifest patches, feature detection, input validation, offline behavior, and normal-web
 fallbacks. Isolated entrypoints cover Web Share, installed-window launch handling, and validated
-file-import previews, and allow-listed custom protocol links without adding any to the starter.
+file-import previews, custom protocol links, and presentation-only companion discovery without adding
+any to the starter.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
@@ -140,6 +141,10 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
   "@nzip/lofi/recipes/protocol-handler": {
     subpath: "recipes/protocol-handler",
     localPath: "recipes/protocol-handler.ts",
+  },
+  "@nzip/lofi/recipes/related-app-discovery": {
+    subpath: "recipes/related-app-discovery",
+    localPath: "recipes/related-app-discovery.ts",
   },
   "@nzip/lofi/recipes/web-share": {
     subpath: "recipes/web-share",

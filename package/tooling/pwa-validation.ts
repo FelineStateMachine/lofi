@@ -23,6 +23,15 @@ const launchClientModes = new Set([
   "navigate-existing",
   "navigate-new",
 ]);
+const relatedApplicationPlatforms = new Set([
+  "amazon",
+  "chrome_web_store",
+  "chromeos_play",
+  "f-droid",
+  "play",
+  "webapp",
+  "windows",
+]);
 const imageTypes = new Map([
   ["image/jpeg", new Set([".jpeg", ".jpg"])],
   ["image/png", new Set([".png"])],
@@ -291,6 +300,74 @@ async function parseAndValidateManifest(
         remediation,
       ),
     );
+  }
+  if (manifest.prefer_related_applications !== undefined) {
+    if (typeof manifest.prefer_related_applications !== "boolean") {
+      issues.push(
+        issue(`${manifestFile}: prefer_related_applications must be boolean`, remediation),
+      );
+    } else if (manifest.prefer_related_applications) {
+      issues.push(
+        issue(
+          `${manifestFile}: prefer_related_applications must stay false to preserve PWA installability`,
+          remediation,
+        ),
+      );
+    }
+  }
+
+  if (manifest.related_applications !== undefined) {
+    if (
+      !Array.isArray(manifest.related_applications) || manifest.related_applications.length === 0
+    ) {
+      issues.push(
+        issue(`${manifestFile}: related_applications must be a non-empty array`, remediation),
+      );
+    } else {
+      const declarations = new Set<string>();
+      for (const [index, raw] of manifest.related_applications.entries()) {
+        const label = `${manifestFile}: related_applications[${index}]`;
+        if (!isObject(raw)) {
+          issues.push(issue(`${label} must be an object`, remediation));
+          continue;
+        }
+        const unknown = Object.keys(raw).filter((member) =>
+          !["platform", "id", "url"].includes(member)
+        );
+        if (unknown.length > 0) {
+          issues.push(issue(`${label} contains unsupported members`, remediation));
+        }
+        if (!nonEmptyString(raw.platform) || !relatedApplicationPlatforms.has(raw.platform)) {
+          issues.push(issue(`${label}.platform is not supported by this recipe`, remediation));
+        }
+        const hasId = nonEmptyString(raw.id) && raw.id.length <= 512;
+        const hasUrl = nonEmptyString(raw.url) && raw.url.length <= 512;
+        if (!hasId && !hasUrl) {
+          issues.push(issue(`${label} needs a bounded id or HTTPS url`, remediation));
+        }
+        let normalizedUrl = "";
+        if (raw.url !== undefined) {
+          if (!hasUrl) {
+            issues.push(issue(`${label}.url must be a bounded non-empty string`, remediation));
+          } else {
+            try {
+              const url = new URL(raw.url as string);
+              if (url.protocol !== "https:" || url.username || url.password) {
+                issues.push(issue(`${label}.url must be credential-free HTTPS`, remediation));
+              } else normalizedUrl = url.href;
+            } catch {
+              issues.push(issue(`${label}.url is not a valid URL`, remediation));
+            }
+          }
+        }
+        if (raw.id !== undefined && !hasId) {
+          issues.push(issue(`${label}.id must be a bounded non-empty string`, remediation));
+        }
+        const key = JSON.stringify([raw.platform, hasId ? raw.id : "", normalizedUrl]);
+        if (declarations.has(key)) issues.push(issue(`${label} must not repeat`, remediation));
+        declarations.add(key);
+      }
+    }
   }
   for (const member of ["background_color", "theme_color"] as const) {
     if (!isLikelyCssColor(manifest[member])) {

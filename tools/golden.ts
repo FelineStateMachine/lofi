@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 16, `expected 16 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 17, `expected 17 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -914,6 +914,41 @@ export default function ProtocolItem() {
   );
 }
 
+async function installRelatedAppDiscoveryRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.prefer_related_applications = false;
+  manifest.related_applications = [{
+    platform: "play",
+    id: "com.example.companion",
+    url: "https://play.google.com/store/apps/details?id=com.example.companion",
+  }];
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "companion.astro"),
+    `---
+import CompanionDiscovery from "../islands/CompanionDiscovery.tsx";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+---
+<Shell title="Companion app"><CompanionDiscovery client:load /></Shell>
+`,
+  );
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "islands", "CompanionDiscovery.tsx"),
+    `import { useEffect, useState } from "preact/hooks";
+import { discoverRelatedApplications, type RelatedApplicationDiscovery } from "@nzip/lofi/recipes/related-app-discovery";
+const allow = [{ platform: "play", id: "com.example.companion", url: "https://play.google.com/store/apps/details?id=com.example.companion" }] as const;
+export default function CompanionDiscovery() {
+  const [result, setResult] = useState<RelatedApplicationDiscovery>();
+  useEffect(() => { void discoverRelatedApplications({ allow }).then(setResult); }, []);
+  const installed = result?.status === "installed";
+  return <section class="island"><h1>Companion app</h1><output data-related-status>{result?.status ?? "checking"}</output>{!installed && <p data-related-onboarding>Get the companion app</p>}{installed && <p data-related-installed>Companion already installed</p>}<p data-related-auth>Sign-in and permissions are unchanged.</p></section>;
+}
+`,
+  );
+}
+
 async function main() {
   const { source, version } = parseArgs(Deno.args);
   await Deno.remove(artifactsRoot, { recursive: true }).catch((error) => {
@@ -1163,6 +1198,10 @@ async function main() {
     await stage(
       "install protocol-handler recipe",
       () => installProtocolHandlerRecipe(projectRoot!),
+    );
+    await stage(
+      "install related-app-discovery recipe",
+      () => installRelatedAppDiscoveryRecipe(projectRoot!),
     );
 
     await stage(
@@ -1543,6 +1582,54 @@ async function main() {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(page!, taskAppReady, undefined, {
         description: "task app after protocol-handler exercise",
+      });
+    });
+    await stage("related-app-discovery recipe browser", async () => {
+      const unsupportedPage = await context!.newPage();
+      try {
+        await unsupportedPage.addInitScript(() => {
+          Object.defineProperty(navigator, "getInstalledRelatedApps", {
+            configurable: true,
+            value: undefined,
+          });
+        });
+        await unsupportedPage.goto(`${origin}companion/`, { waitUntil: "domcontentloaded" });
+        await unsupportedPage.locator("[data-related-onboarding]").waitFor({ state: "visible" });
+        await waitForReady(
+          unsupportedPage,
+          () => document.querySelector("[data-related-status]")?.textContent === "unsupported",
+          undefined,
+          { description: "unsupported related-app discovery" },
+        );
+      } finally {
+        await unsupportedPage.close();
+      }
+      await page!.addInitScript(() => {
+        Object.defineProperty(navigator, "getInstalledRelatedApps", {
+          configurable: true,
+          value: () =>
+            Promise.resolve([{
+              platform: "play",
+              id: "com.example.companion",
+              url: "https://play.google.com/store/apps/details?id=com.example.companion",
+              version: "private-version",
+            }]),
+        });
+      });
+      await page!.goto(`${origin}companion/`, { waitUntil: "domcontentloaded" });
+      await page!.locator("[data-related-installed]").waitFor({ state: "visible" });
+      assert(
+        await page!.locator("[data-related-auth]").textContent() ===
+          "Sign-in and permissions are unchanged.",
+        "discovery presentation implied an auth or authorization change",
+      );
+      assert(
+        !(await page!.locator("body").innerText()).includes("private-version"),
+        "browser-supplied companion version leaked into presentation",
+      );
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after related-app discovery exercise",
       });
     });
     await stage("waiting worker update browser", async () => {

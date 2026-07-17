@@ -65,6 +65,7 @@ const recipeFiles = [
   "file-handler.ts",
   "launch-handler.ts",
   "protocol-handler.ts",
+  "related-app-discovery.ts",
   "web-share.ts",
 ] as const;
 
@@ -96,6 +97,13 @@ function renderConfig(projectRoot: string): string {
     "package",
     "recipes",
     "protocol-handler.ts",
+  );
+  const relatedAppDiscoveryRecipe = join(
+    projectRoot,
+    ".lofi",
+    "package",
+    "recipes",
+    "related-app-discovery.ts",
   );
   const webShareRecipe = join(projectRoot, ".lofi", "package", "recipes", "web-share.ts");
   return `import preact from "@astrojs/preact";
@@ -146,6 +154,9 @@ export default defineConfig({
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/protocol-handler$/, replacement: ${
     JSON.stringify(protocolHandlerRecipe)
   } },
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/related-app-discovery$/, replacement: ${
+    JSON.stringify(relatedAppDiscoveryRecipe)
+  } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/web-share$/, replacement: ${
     JSON.stringify(webShareRecipe)
   } },
@@ -164,6 +175,9 @@ export default defineConfig({
   } },
         { find: "@nzip/lofi/recipes/protocol-handler", replacement: ${
     JSON.stringify(protocolHandlerRecipe)
+  } },
+        { find: "@nzip/lofi/recipes/related-app-discovery", replacement: ${
+    JSON.stringify(relatedAppDiscoveryRecipe)
   } },
         { find: "@nzip/lofi/recipes/file-handler", replacement: ${
     JSON.stringify(fileHandlerRecipe)

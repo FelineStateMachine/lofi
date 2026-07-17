@@ -7,11 +7,9 @@ import { getRuntime, getRuntimeDiagnostics, subscribeRuntimeDiagnostics } from "
 
 export type LofiDevelopmentBridge = InspectorAdapter;
 
-declare global {
-  interface Window {
-    __LOFI_INSPECTOR__?: LofiDevelopmentBridge;
-  }
-}
+type LofiDevelopmentGlobal = typeof globalThis & {
+  __LOFI_INSPECTOR__?: LofiDevelopmentBridge;
+};
 
 const stateListeners = new Set<() => void>();
 let transportPaused = false;
@@ -120,10 +118,10 @@ const bridge: LofiDevelopmentBridge = {
 };
 
 if (typeof document !== "undefined") {
-  (globalThis as typeof globalThis & Window).__LOFI_INSPECTOR__ = bridge;
+  (globalThis as LofiDevelopmentGlobal).__LOFI_INSPECTOR__ = bridge;
   const mounted = mountInspector(bridge);
   import.meta.hot?.dispose(() => {
     mounted.dispose();
-    delete (globalThis as typeof globalThis & Window).__LOFI_INSPECTOR__;
+    delete (globalThis as LofiDevelopmentGlobal).__LOFI_INSPECTOR__;
   });
 }

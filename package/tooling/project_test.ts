@@ -55,7 +55,8 @@ Deno.test("precache URLs are portable app-shell URLs", () => {
     "lofi-precache.json",
     "assets\\client.js",
     "manifest.webmanifest",
-  ]);
+    "screenshot-wide.png",
+  ], ["screenshot-wide.png"]);
   assert(
     JSON.stringify(urls) === JSON.stringify([
       "./",

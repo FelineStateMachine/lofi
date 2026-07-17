@@ -38,6 +38,8 @@ project. Adding or removing a generated file requires updating this map in the s
 | `public/icon-512.png`            | Product asset           | Supplies the regular 512x512 install icon.                                             |
 | `public/icon-maskable-512.png`   | Product asset           | Supplies a padded 512x512 maskable icon with a safe-zone-aware mark.                   |
 | `public/icon-monochrome.svg`     | Product asset           | Supplies the transparent silhouette used where the OS applies a solid icon color.      |
+| `public/screenshot-narrow.png`   | Product asset           | Supplies a replaceable labeled phone-sized install screenshot.                         |
+| `public/screenshot-wide.png`     | Product asset           | Supplies a replaceable labeled desktop-sized install screenshot.                       |
 | `public/manifest.webmanifest`    | Product asset           | Declares stable install identity, locale, scope, orientation, icons, and shortcuts.    |
 | `src/app.ts`                     | Author-owned source     | Composes the app name, storage, sync, credential origins, and repository link.         |
 | `src/env.d.ts`                   | Generated configuration | Adds Astro and lofi build-time environment types.                                      |

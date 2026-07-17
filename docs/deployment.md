@@ -84,9 +84,46 @@ direction differs from the manifest default should declare their own `dir`.
 
 Storefront metadata is optional and product-specific. Add lowercase `categories` only when they
 truthfully describe the finished app. Add `iarc_rating_id` only after obtaining a real IARC
-certification code; never copy a placeholder rating. Rich screenshots are covered separately.
-Experimental capabilities such as file, protocol, share-target, and launch handlers are deliberately
-absent from the starter and should be added only with matching product behavior and tests.
+certification code; never copy a placeholder rating. Experimental capabilities such as file,
+protocol, share-target, and launch handlers are deliberately absent from the starter and should be
+added only with matching product behavior and tests.
+
+### Replace or remove install presentation
+
+The starter manifest includes one labeled `540x720` narrow screenshot, one labeled `1280x720` wide
+screenshot, and one **Open tasks** shortcut. They are examples of the real generated app, not
+generic promotional art. Before launch:
+
+- replace both screenshots with current product captures and update each `sizes`, `label`, and
+  `form_factor`, or remove the entire `screenshots` member and both files;
+- replace the shortcut name, description, route, and icon with one useful product entry point, or
+  remove the entire `shortcuts` member;
+- keep shortcut routes inside manifest scope and backed by a prerendered route so they cold-start
+  offline; and
+- keep shortcut icons inside scope with truthful MIME types and dimensions.
+
+Build validation checks every referenced asset, requires labeled narrow and wide variants when the
+`screenshots` member is present, and rejects shortcut routes that were not emitted. Screenshots are
+deliberately excluded from the required shell precache; deleting promotional captures cannot break
+offline startup.
+
+The starter does not claim a Web Share Target. If a product opts in, first add a same-scope,
+prerendered action route, then add a manifest member such as:
+
+```json
+{
+  "share_target": {
+    "action": "./share/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}
+```
+
+The receiving island must ignore unknown parameters, cap title/text lengths, and accept a shared URL
+only after parsing it and allow-listing the intended protocols (normally `https:` and `http:`). Test
+direct, malformed, oversized, and offline launches before shipping the opt-in route.
 
 ## Deno Deploy
 

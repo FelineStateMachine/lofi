@@ -430,11 +430,20 @@ async function assertProductionOutput(projectRoot: string) {
       "icon-192.png",
       "icon-512.png",
       "icon-maskable-512.png",
+      "screenshot-narrow.png",
+      "screenshot-wide.png",
     ]
   ) assert(files.includes(required), `production output is missing ${required}`);
 
   const manifest = JSON.parse(await Deno.readTextFile(join(dist, "manifest.webmanifest"))) as {
     icons: Array<{ src: string; sizes: string; type: string; purpose: string }>;
+    screenshots: Array<{
+      src: string;
+      sizes: string;
+      type: string;
+      form_factor: string;
+      label: string;
+    }>;
   };
   const expected = new Map([
     [
@@ -471,6 +480,22 @@ async function assertProductionOutput(projectRoot: string) {
     }
   }
   assert(manifest.icons.length === expected.size, "manifest does not contain the exact icon set");
+  const screenshots = new Map([
+    ["narrow", ["screenshot-narrow.png", 540, 720] as const],
+    ["wide", ["screenshot-wide.png", 1280, 720] as const],
+  ]);
+  for (const screenshot of manifest.screenshots) {
+    const contract = screenshots.get(screenshot.form_factor);
+    assert(contract, `manifest references unexpected ${screenshot.form_factor} screenshot`);
+    const file = basename(screenshot.src);
+    assert(file === contract[0], `${screenshot.form_factor} screenshot file drifted`);
+    assert(screenshot.type === "image/png", `${file} has incorrect manifest type`);
+    assert(screenshot.sizes === `${contract[1]}x${contract[2]}`, `${file} size drifted`);
+    assert(screenshot.label.trim().length > 0, `${file} has no label`);
+    const [width, height] = pngDimensions(await Deno.readFile(join(dist, file)));
+    assert(width === contract[1] && height === contract[2], `${file} dimensions are incorrect`);
+  }
+  assert(manifest.screenshots.length === screenshots.size, "manifest screenshot set is incomplete");
   const [appleWidth, appleHeight] = pngDimensions(
     await Deno.readFile(join(dist, "apple-touch-icon.png")),
   );
@@ -489,6 +514,9 @@ async function assertProductionOutput(projectRoot: string) {
       "./icon-maskable-512.png",
     ]
   ) assert(precache.includes(shellAsset), `precache is missing ${shellAsset}`);
+  for (const screenshot of ["screenshot-narrow.png", "screenshot-wide.png"]) {
+    assert(!precache.includes(`./${screenshot}`), `${screenshot} leaked into the required shell`);
+  }
   const worker = await Deno.readTextFile(join(dist, "sw.js"));
   assert(
     !worker.includes("__LOFI_BUILD_REVISION__"),

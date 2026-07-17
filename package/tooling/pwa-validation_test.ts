@@ -4,6 +4,7 @@ import {
   expectedPrecacheUrls,
   productionContentType,
   productionPwaIssues,
+  screenshotAssetPaths,
   sourcePwaIssues,
 } from "./pwa-validation.ts";
 
@@ -132,6 +133,8 @@ Deno.test("source PWA validation checks optional shortcuts and screenshots", asy
     const issues = await sourcePwaIssues(project, "/field-notes/");
     assert(hasIssue(issues, "shortcuts[0].url must stay inside"), "escaped shortcut was accepted");
     assert(hasIssue(issues, "missing asset missing-shot.png"), "missing screenshot was accepted");
+    assert(hasIssue(issues, "label must describe"), "unlabeled screenshot was accepted");
+    assert(hasIssue(issues, "form_factor must be narrow or wide"), "missing form factor passed");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -198,9 +201,12 @@ async function makeProductionFixture(): Promise<string> {
     `const revision = "fixture-hash"; new URL("./lofi-precache.json", self.registration.scope);\n`,
   );
   files.push("index.html", "settings/index.html", "lofi-build.json", "sw.js");
+  const manifest = JSON.parse(await Deno.readTextFile(join(dist, "manifest.webmanifest")));
   await Deno.writeTextFile(
     join(dist, "lofi-precache.json"),
-    `${JSON.stringify(expectedPrecacheUrls(files))}\n`,
+    `${
+      JSON.stringify(expectedPrecacheUrls(files, screenshotAssetPaths(manifest, "/field-notes/")))
+    }\n`,
   );
   return root;
 }
@@ -228,10 +234,17 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
       join(dist, "sw.js"),
       `new URL("./lofi-precache.json", self.registration.scope);\n`,
     );
+    const manifest = JSON.parse(await Deno.readTextFile(join(dist, "manifest.webmanifest")));
+    manifest.shortcuts[0].url = "./missing/";
+    await Deno.writeTextFile(
+      join(dist, "manifest.webmanifest"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
     const issues = await productionPwaIssues(root, "/field-notes/");
     assert(hasIssue(issues, "settings/index.html: must link"), "nested manifest link drift passed");
     assert(hasIssue(issues, "entries do not match"), "precache drift passed");
     assert(hasIssue(issues, "build revision does not match"), "worker revision drift passed");
+    assert(hasIssue(issues, "has no emitted offline route"), "missing shortcut route passed");
   } finally {
     await Deno.remove(root, { recursive: true });
   }

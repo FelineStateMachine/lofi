@@ -68,6 +68,7 @@ The final package map is intentionally small:
 | `@nzip/lofi/access`                 | Private, direct-share, and fixed-role group helpers |
 | `@nzip/lofi/preact`                 | Package-owned Preact hooks and diagnostic UI        |
 | `@nzip/lofi/astro`                  | Package-owned Astro/Vite integration                |
+| `@nzip/lofi/recipes/file-handler`   | Optional validated installed-app file import drafts |
 | `@nzip/lofi/recipes/launch-handler` | Optional safe installed-window launch routing       |
 | `@nzip/lofi/recipes/web-share`      | Optional inbound/outbound text and link sharing     |
 | `@nzip/lofi/testing`                | Local-first Playwright helpers                      |

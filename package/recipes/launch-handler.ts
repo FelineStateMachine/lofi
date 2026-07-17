@@ -51,6 +51,14 @@ export type InstalledLaunchConsumer = {
   dispose(): void;
 };
 
+/** Options for registering one raw browser launch-queue consumer. */
+export type InstallLaunchQueueConsumerOptions = {
+  /** Override the browser queue for tests. */
+  queue?: InstalledAppLaunchQueue;
+  /** Receives browser launch parameters without trusting or interpreting them. */
+  onLaunch(parameters: InstalledAppLaunchParameters): void;
+};
+
 const owners = new WeakMap<InstalledAppLaunchQueue, symbol>();
 
 function configuredScope(value: string | URL): URL {
@@ -102,17 +110,35 @@ export function parseInstalledAppLaunchTarget(
 export function installInstalledAppLaunchConsumer(
   options: InstallLaunchConsumerOptions,
 ): InstalledLaunchConsumer {
+  const scope = configuredScope(options.scope);
+  return installInstalledAppLaunchQueueConsumer({
+    queue: options.queue,
+    onLaunch(parameters) {
+      const result = parseInstalledAppLaunchTarget(parameters.targetURL, scope);
+      if (result.ok) options.onLaunch(result.target);
+      else options.onRejected?.(result.issue);
+    },
+  });
+}
+
+/**
+ * Feature-detect and install one raw launch-queue consumer.
+ *
+ * This is the composition seam used by recipes such as file handling. The most
+ * recently installed consumer owns the queue, including across different lofi
+ * launch recipes. Treat every delivered parameter as untrusted input.
+ */
+export function installInstalledAppLaunchQueueConsumer(
+  options: InstallLaunchQueueConsumerOptions,
+): InstalledLaunchConsumer {
   const queue = options.queue ?? browserLaunchQueue();
   if (!queue) return { supported: false, dispose() {} };
-  const scope = configuredScope(options.scope);
   const owner = Symbol("lofi-launch-consumer");
   let active = true;
   owners.set(queue, owner);
   queue.setConsumer((parameters) => {
     if (!active || owners.get(queue) !== owner) return;
-    const result = parseInstalledAppLaunchTarget(parameters.targetURL, scope);
-    if (result.ok) options.onLaunch(result.target);
-    else options.onRejected?.(result.issue);
+    options.onLaunch(parameters);
   });
   return {
     supported: true,

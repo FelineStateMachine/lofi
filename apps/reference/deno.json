@@ -12,6 +12,7 @@
     "@nzip/lofi/preview": "../../package/commands/preview.ts",
     "@nzip/lofi/preact": "../../package/preact/mod.ts",
     "@nzip/lofi/provision": "../../package/commands/provision.ts",
+    "@nzip/lofi/recipes/file-handler": "../../package/recipes/file-handler.ts",
     "@nzip/lofi/recipes/launch-handler": "../../package/recipes/launch-handler.ts",
     "@nzip/lofi/recipes/web-share": "../../package/recipes/web-share.ts",
     "@nzip/lofi/test": "../../package/commands/run_tests.ts",

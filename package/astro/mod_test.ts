@@ -12,6 +12,11 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
         "jazz-tools/dev/vite",
         "JAZZ_APP_ID",
         ".lofi/package/runtime/mod.ts",
+        "^jsr:@nzip\\/lofi@[^/]+",
+        "^npm:preact@[^/]+",
+        "^npm:jazz-tools@[^/]+",
+        'replacement: "preact/hooks"',
+        'replacement: "jazz-tools/passphrase"',
       ]
     ) {
       if (!source.includes(expected)) throw new Error(`generated config omitted ${expected}`);

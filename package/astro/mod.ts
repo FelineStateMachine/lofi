@@ -106,6 +106,16 @@ export default defineConfig({
     },
     resolve: {
       alias: [
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/preact$/, replacement: ${JSON.stringify(preactEntry)} },
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/access$/, replacement: ${JSON.stringify(accessEntry)} },
+        { find: /^jsr:@nzip\\/lofi@[^/]+$/, replacement: ${JSON.stringify(runtimeEntry)} },
+        { find: /^npm:preact@[^/]+\\/hooks$/, replacement: "preact/hooks" },
+        { find: /^npm:preact@[^/]+\\/jsx-dev-runtime$/, replacement: "preact/jsx-dev-runtime" },
+        { find: /^npm:preact@[^/]+\\/jsx-runtime$/, replacement: "preact/jsx-runtime" },
+        { find: /^npm:preact@[^/]+$/, replacement: "preact" },
+        { find: /^npm:jazz-tools@[^/]+\\/passkey-backup$/, replacement: "jazz-tools/passkey-backup" },
+        { find: /^npm:jazz-tools@[^/]+\\/passphrase$/, replacement: "jazz-tools/passphrase" },
+        { find: /^npm:jazz-tools@[^/]+$/, replacement: "jazz-tools" },
         { find: "@nzip/lofi/preact", replacement: ${JSON.stringify(preactEntry)} },
         { find: "@nzip/lofi/access", replacement: ${JSON.stringify(accessEntry)} },
         { find: "@nzip/lofi", replacement: ${JSON.stringify(runtimeEntry)} },

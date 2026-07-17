@@ -430,6 +430,79 @@ async function parseAndValidateManifest(
         }
       }
     }
+
+    if (manifest.share_target !== undefined) {
+      const label = `${manifestFile}: share_target`;
+      const target = manifest.share_target;
+      if (!isObject(target)) {
+        issues.push(issue(`${label} must be an object`, remediation));
+      } else {
+        if (!nonEmptyString(target.action)) {
+          issues.push(issue(`${label}.action must be a non-empty URL`, remediation));
+        } else {
+          try {
+            const action = new URL(target.action, manifestUrl);
+            if (!withinScope(action, scope)) {
+              issues.push(issue(`${label}.action must stay inside manifest scope`, remediation));
+            }
+            if (action.search || action.hash) {
+              issues.push(
+                issue(`${label}.action must not contain a query or fragment`, remediation),
+              );
+            }
+          } catch {
+            issues.push(issue(`${label}.action is not a valid URL`, remediation));
+          }
+        }
+        if (target.method !== undefined && target.method !== "GET") {
+          issues.push(
+            issue(
+              `${label}.method must be GET; POST and file shares require a custom worker recipe`,
+              remediation,
+            ),
+          );
+        }
+        if (
+          target.enctype !== undefined &&
+          target.enctype !== "application/x-www-form-urlencoded"
+        ) {
+          issues.push(
+            issue(`${label}.enctype must be application/x-www-form-urlencoded`, remediation),
+          );
+        }
+        if (!isObject(target.params)) {
+          issues.push(issue(`${label}.params must be an object`, remediation));
+        } else {
+          const names: string[] = [];
+          for (const member of ["title", "text", "url"] as const) {
+            const value = target.params[member];
+            if (value === undefined) continue;
+            if (!nonEmptyString(value)) {
+              issues.push(
+                issue(`${label}.params.${member} must be a non-empty string`, remediation),
+              );
+            } else names.push(value);
+          }
+          if (target.params.files !== undefined) {
+            issues.push(
+              issue(`${label}.params.files requires a POST/file-share worker recipe`, remediation),
+            );
+          }
+          const unknown = Object.keys(target.params).filter((member) =>
+            !["title", "text", "url", "files"].includes(member)
+          );
+          if (unknown.length > 0) {
+            issues.push(issue(`${label}.params contains unsupported members`, remediation));
+          }
+          if (names.length === 0) {
+            issues.push(issue(`${label}.params needs title, text, or url`, remediation));
+          }
+          if (new Set(names).size !== names.length) {
+            issues.push(issue(`${label}.params names must be unique`, remediation));
+          }
+        }
+      }
+    }
   }
   return { issues, manifest, scope };
 }
@@ -583,6 +656,25 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
         }
       } catch {
         // Source validation already reports malformed shortcut URLs.
+      }
+    }
+  }
+  if (isObject(result.manifest?.share_target)) {
+    const target = result.manifest.share_target;
+    if (nonEmptyString(target.action)) {
+      const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
+      try {
+        const route = emittedRoutePath(new URL(target.action, manifestUrl), basePath);
+        if (!route || !htmlFiles.includes(route)) {
+          issues.push(
+            issue(
+              `dist/${manifestFile}: share_target.action has no emitted offline route`,
+              remediation,
+            ),
+          );
+        }
+      } catch {
+        // Source validation already reports malformed action URLs.
       }
     }
   }

@@ -42,6 +42,7 @@ The root [README](../README.md) provides the shortest product overview and comma
 - [Shared example](examples/shared.md)
 - [Group example](examples/group.md)
 - [Collaborative list recipe](examples/collaborative-list.md)
+- [Optional installed-app recipes](recipes/README.md)
 - [Advanced device-auth primitive](auth.md)
 
 ## The author boundary

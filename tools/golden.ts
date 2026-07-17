@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 12, `expected 12 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 13, `expected 13 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -423,6 +423,7 @@ async function assertProductionOutput(projectRoot: string) {
   for (
     const required of [
       "index.html",
+      "share/index.html",
       "manifest.webmanifest",
       "sw.js",
       "lofi-precache.json",
@@ -444,7 +445,15 @@ async function assertProductionOutput(projectRoot: string) {
       form_factor: string;
       label: string;
     }>;
+    share_target: {
+      action: string;
+      method: string;
+      enctype: string;
+      params: { title: string; text: string; url: string };
+    };
   };
+  assert(manifest.share_target.action === "./share/", "share target action drifted");
+  assert(manifest.share_target.method === "GET", "share target method drifted");
   const expected = new Map([
     [
       "icon-192.png",
@@ -618,6 +627,72 @@ async function selectVirtualCredential(page: Page, credentialId: string): Promis
       },
     });
   }, credentialId);
+}
+
+async function installWebShareRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.share_target = {
+    action: "./share/",
+    method: "GET",
+    enctype: "application/x-www-form-urlencoded",
+    params: { title: "title", text: "text", url: "url" },
+  };
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "share.astro"),
+    `---
+import ShareReceiver from "../islands/ShareReceiver.tsx";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+---
+
+<Shell title="Review shared content">
+  <ShareReceiver client:load />
+</Shell>
+`,
+  );
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "islands", "ShareReceiver.tsx"),
+    `import { useEffect, useState } from "preact/hooks";
+import {
+  parseTextShareTarget,
+  shareOrFallback,
+  type TextShareTargetResult,
+  type WebShareOutcome,
+} from "@nzip/lofi/recipes/web-share";
+
+export default function ShareReceiver() {
+  const [result, setResult] = useState<TextShareTargetResult>();
+  const [confirmed, setConfirmed] = useState(false);
+  const [outcome, setOutcome] = useState<WebShareOutcome>();
+
+  useEffect(() => setResult(parseTextShareTarget(location.search)), []);
+  if (!result) return <p role="status">Opening shared draft…</p>;
+  if (!result.ok) return <p role="alert">This shared content is not valid.</p>;
+  const draft = result.draft;
+  return (
+    <section class="island" data-share-draft>
+      <h1>Review shared content</h1>
+      {draft.title && <p data-share-title>{draft.title}</p>}
+      {draft.text && <p data-share-text>{draft.text}</p>}
+      {draft.url && <a data-share-url href={draft.url}>{draft.url}</a>}
+      <button type="button" onClick={() => setConfirmed(true)}>Add to app</button>
+      {confirmed && <p role="status">Draft confirmed.</p>}
+      <button
+        type="button"
+        onClick={() => void shareOrFallback(draft, {
+          fallback: () => setOutcome("fallback"),
+        }).then(setOutcome)}
+      >
+        Share this draft
+      </button>
+      {outcome && <output data-share-outcome>{outcome}</output>}
+    </section>
+  );
+}
+`,
+  );
 }
 
 async function main() {
@@ -863,6 +938,8 @@ async function main() {
     await stage("development shutdown", () => dev!.stop());
     dev = undefined;
 
+    await stage("install web-share recipe", () => installWebShareRecipe(projectRoot!));
+
     await stage(
       "build",
       () =>
@@ -977,6 +1054,72 @@ async function main() {
         state.sync === "available — not yet backed up",
         `unexpected public sync state ${state.sync}`,
       );
+    });
+    await stage("web-share recipe browser", async () => {
+      await context!.setOffline(true);
+      try {
+        await page!.goto(
+          `${origin}share/?title=One+task&text=Review+it&url=https%3A%2F%2Fexample.com%2Fnotes`,
+          { waitUntil: "domcontentloaded" },
+        );
+        await page!.getByRole("heading", { name: "Review shared content" }).waitFor({
+          state: "visible",
+        });
+        assert(
+          await page!.locator("[data-share-title]").textContent() === "One task",
+          "offline share title was not parsed",
+        );
+        assert(
+          await page!.locator("[data-share-url]").getAttribute("href") ===
+            "https://example.com/notes",
+          "offline share URL was not normalized",
+        );
+        assert(
+          await page!.getByText("Draft confirmed.").count() === 0,
+          "received share was confirmed before the user action",
+        );
+        await page!.getByRole("button", { name: "Add to app" }).click();
+        await page!.getByText("Draft confirmed.").waitFor({ state: "visible" });
+        await page!.getByRole("button", { name: "Share this draft" }).click();
+        await page!.locator("[data-share-outcome]").waitFor({ state: "visible" });
+        assert(
+          await page!.locator("[data-share-outcome]").textContent() === "fallback",
+          "unsupported outbound share did not use the normal web fallback",
+        );
+
+        await page!.goto(`${origin}share/?url=javascript%3Aalert%281%29`, {
+          waitUntil: "domcontentloaded",
+        });
+        await page!.getByRole("alert").waitFor({ state: "visible" });
+        const invalidText = await page!.locator("body").innerText();
+        assert(!invalidText.includes("javascript:"), "invalid share value was echoed in the UI");
+      } finally {
+        await context!.setOffline(false);
+      }
+
+      await page!.addInitScript(() => {
+        Object.defineProperty(navigator, "canShare", {
+          configurable: true,
+          value: () => true,
+        });
+        Object.defineProperty(navigator, "share", {
+          configurable: true,
+          value: () => Promise.reject(new DOMException("closed", "AbortError")),
+        });
+      });
+      await page!.goto(`${origin}share/?text=Cancelled+share`, {
+        waitUntil: "domcontentloaded",
+      });
+      await page!.getByRole("button", { name: "Share this draft" }).click();
+      await page!.locator("[data-share-outcome]").waitFor({ state: "visible" });
+      assert(
+        await page!.locator("[data-share-outcome]").textContent() === "cancelled",
+        "browser cancellation was reported as a failure",
+      );
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after share recipe exercise",
+      });
     });
     await stage("waiting worker update browser", async () => {
       const workerPath = join(projectRoot!, "dist", "sw.js");

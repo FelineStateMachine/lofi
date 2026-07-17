@@ -140,6 +140,40 @@ Deno.test("source PWA validation checks optional shortcuts and screenshots", asy
   }
 });
 
+Deno.test("source PWA validation checks an opt-in text share target", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.share_target = {
+      action: "../outside?existing=1",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: { title: "shared", text: "shared", files: { name: "files" }, extra: "value" },
+    };
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project, "/field-notes/");
+    assert(hasIssue(issues, "action must stay inside"), "escaped share action was accepted");
+    assert(hasIssue(issues, "must not contain a query"), "share action query was accepted");
+    assert(hasIssue(issues, "method must be GET"), "POST share action was accepted");
+    assert(hasIssue(issues, "enctype must be application"), "multipart share action was accepted");
+    assert(hasIssue(issues, "params.files requires"), "file share params were accepted");
+    assert(hasIssue(issues, "unsupported members"), "unknown share param was accepted");
+    assert(hasIssue(issues, "params names must be unique"), "duplicate param names were accepted");
+
+    manifest.share_target = {
+      action: "./share/",
+      method: "GET",
+      enctype: "application/x-www-form-urlencoded",
+      params: { title: "title", text: "text", url: "url" },
+    };
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project, "/field-notes/");
+    assert(valid.length === 0, `valid share target was rejected: ${JSON.stringify(valid)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation permits replacement branding and optional members", async () => {
   const { root, project } = await makeProject();
   try {
@@ -236,6 +270,12 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
     );
     const manifest = JSON.parse(await Deno.readTextFile(join(dist, "manifest.webmanifest")));
     manifest.shortcuts[0].url = "./missing/";
+    manifest.share_target = {
+      action: "./share/",
+      method: "GET",
+      enctype: "application/x-www-form-urlencoded",
+      params: { title: "title", text: "text", url: "url" },
+    };
     await Deno.writeTextFile(
       join(dist, "manifest.webmanifest"),
       `${JSON.stringify(manifest, null, 2)}\n`,
@@ -245,6 +285,10 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
     assert(hasIssue(issues, "entries do not match"), "precache drift passed");
     assert(hasIssue(issues, "build revision does not match"), "worker revision drift passed");
     assert(hasIssue(issues, "has no emitted offline route"), "missing shortcut route passed");
+    assert(
+      hasIssue(issues, "share_target.action has no emitted offline route"),
+      "missing share-target route passed",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }

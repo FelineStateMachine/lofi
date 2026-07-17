@@ -107,8 +107,9 @@ Build validation checks every referenced asset, requires labeled narrow and wide
 deliberately excluded from the required shell precache; deleting promotional captures cannot break
 offline startup.
 
-The starter does not claim a Web Share Target. If a product opts in, first add a same-scope,
-prerendered action route, then add a manifest member such as:
+The starter does not claim a Web Share Target. If a product opts in, follow the tested
+[Web Share recipe](recipes/web-share.md): first add a same-scope, prerendered action route, then add
+a manifest member such as:
 
 ```json
 {
@@ -121,9 +122,11 @@ prerendered action route, then add a manifest member such as:
 }
 ```
 
-The receiving island must ignore unknown parameters, cap title/text lengths, and accept a shared URL
-only after parsing it and allow-listing the intended protocols (normally `https:` and `http:`). Test
-direct, malformed, oversized, and offline launches before shipping the opt-in route.
+Use `parseTextShareTarget()` in the receiving island to ignore unknown parameters, reject duplicate
+or oversized values, and accept a shared URL only after parsing it and allow-listing `https:` and
+`http:`. Present the result as a draft: receiving a share is not user confirmation to persist it.
+Build validation rejects malformed declarations, POST/file shares without a matching worker recipe,
+and action routes that were not emitted for offline startup.
 
 ## Deno Deploy
 

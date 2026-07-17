@@ -1,11 +1,15 @@
 # OPFS device checklist
 
+> Framework QA checklist. This is retained with the spike evidence and is not part of the normal
+> generated-app onboarding path. Adapt labels and selectors to the current starter before running
+> it.
+
 Issue: [#4](https://github.com/FelineStateMachine/lofi/issues/4)\
 Build: fill from the site's `lofi-build.json`\
 Jazz: 2.0.0-alpha.53
 
-Never record environment values, identity secrets, or note contents that are sensitive. Use unique
-throwaway note labels such as `ios-tab-A-1`.
+Never record environment values, identity secrets, or task contents that are sensitive. Use unique
+throwaway task labels such as `ios-tab-A-1`.
 
 ## Record before testing
 
@@ -30,17 +34,18 @@ a memory fallback.
 
 ## Durability
 
-Use a new throwaway label for each row and confirm it appears in both islands.
+Use a new throwaway label for each row. Confirm it appears in the task list and that the status line
+reports local durability.
 
 | Test                | Action                                                       | Required result                         | Result |
 | ------------------- | ------------------------------------------------------------ | --------------------------------------- | ------ |
-| Reload              | Add note, reload page                                        | Note returns                            |        |
-| Browser termination | Add note, terminate browser from app switcher, reopen URL    | Note returns                            |        |
-| App termination     | Installed surface: add note, terminate installed app, reopen | Note returns                            |        |
-| Device restart      | Add note, restart device, reopen same surface                | Note returns                            |        |
-| Background          | Add note, background 5+ minutes, foreground                  | Note remains; app becomes reactive      |        |
-| Offline foreground  | Load once, airplane mode, reopen installed surface, add note | Shell and local write work              |        |
-| Reconnect           | Disable airplane mode                                        | Local note remains; no false sync claim |        |
+| Reload              | Add task, reload page                                        | Task returns                            |        |
+| Browser termination | Add task, terminate browser from app switcher, reopen URL    | Task returns                            |        |
+| App termination     | Installed surface: add task, terminate installed app, reopen | Task returns                            |        |
+| Device restart      | Add task, restart device, reopen same surface                | Task returns                            |        |
+| Background          | Add task, background 5+ minutes, foreground                  | Task remains; app becomes reactive      |        |
+| Offline foreground  | Load once, airplane mode, reopen installed surface, add task | Shell and local write work              |        |
+| Reconnect           | Disable airplane mode                                        | Local task remains; no false sync claim |        |
 
 ## Multi-tab / multi-window
 
@@ -48,7 +53,7 @@ Use a new throwaway label for each row and confirm it appears in both islands.
 2. Confirm both show `persistent-driver-open`.
 3. Add `A-<timestamp>` in A; confirm B updates without reload.
 4. Add `B-<timestamp>` in B; confirm A updates without reload.
-5. Submit once from both surfaces as closely together as possible; confirm both distinct notes
+5. Submit once from both surfaces as closely together as possible; confirm both distinct tasks
    appear in both surfaces.
 6. Close A; write in B; reopen A and confirm the write.
 7. Confirm every live page shows one active client and one underlying subscription locally. Counts

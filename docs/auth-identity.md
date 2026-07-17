@@ -1,5 +1,8 @@
 # Local-first accounts: open now, back up later
 
+This document explains the account and custody model. For project setup and a shipping checklist,
+see [Sync and recovery](sync-and-recovery.md).
+
 lofi's identity model is **local-first**. A new app opens immediately on a private, on-device
 account — no sign-in, no ceremony, nothing sent anywhere. From there the user can _elect_ to back up
 and sync that account, and recover it on another device. Electing to sync preserves everything
@@ -107,4 +110,4 @@ it expires. `.env` holds the server-only secrets and is git-ignored.
 derive a credential-bound key (PRF) to encrypt data — including the account secret — **at rest**. It
 is feature-detected and never faked. It is _not_ the account identity (deriving the account from a
 credential was removed, since a derived key is a different account and cannot carry local-only data
-forward). See [docs/auth.md](auth.md).
+forward). See [Advanced device auth](auth.md).

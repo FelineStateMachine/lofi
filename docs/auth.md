@@ -3,11 +3,16 @@
 Status: **primitive validated in reference source; `./auth` subpath deferred to a later milestone**\
 Scope: **device-local WebAuthn + PRF at-rest key derivation**
 
+> **Advanced/internal seam.** Generated applications do not expose this as a supported package
+> subpath, and normal product work should not edit `src/_lofi/auth.ts`. Use this document only when
+> deliberately evaluating the optional device-credential primitive. Account sync and recovery are
+> documented separately in [Sync and recovery](sync-and-recovery.md).
+
 lofi device auth is a small, honest **primitive**, not a mandated identity or recovery scheme.
 Local-first identity is device-local and cryptographic — there is no central store to authenticate
 against — so this module does exactly three things: enroll a device passkey, authenticate with it,
-and derive a credential-bound key to encrypt data **at rest**. Everything else (accounts, recovery,
-multi-device) is left to the application, deliberately.
+and derive a credential-bound key to encrypt data **at rest**. The generated session runtime handles
+accounts, recovery phrases, and optional multi-device sync separately.
 
 The runtime lives at `apps/reference/src/_lofi/auth.ts`.
 

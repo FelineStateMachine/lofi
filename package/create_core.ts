@@ -46,6 +46,8 @@ function generatedReadme(name: string): string {
 
 This local-first PWA was created with \`@nzip/lofi\`.
 
+[Framework documentation](https://github.com/FelineStateMachine/lofi/tree/main/docs)
+
 \`\`\`sh
 deno task dev
 \`\`\`
@@ -63,6 +65,10 @@ to sync never changes its identity. See the framework side in \`src/_lofi/sessio
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
+
+Start with the framework's
+[generated-app guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/getting-started.md)
+when replacing the task example with your own schema, permissions, hook, and UI.
 
 ## Hosting
 

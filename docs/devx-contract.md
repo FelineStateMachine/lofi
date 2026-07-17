@@ -1,14 +1,19 @@
 # lofi developer-experience contract
 
-Status: **v0 validated through the M2 source layers; combined promotion review in progress**\
-Scope: **M0 contract, M1 feasibility, and M2 DevX graduation**\
+Status: **framework contributor contract with retained M1/M2 history**\
+Scope: **product promises, M1 feasibility, and M2 DevX graduation**\
 Last reviewed: **2026-07-15**
+
+> Application developers should start with the [developer documentation](README.md). Milestone,
+> issue, and evidence language below is retained for framework contributors and should not be read
+> as a generated-project tutorial.
 
 This is the product contract for lofi. Implementation choices are provisional until they satisfy
 these promises. Each M1 spike must cite the contract IDs it tested, retain repeatable evidence, and
 record a contract delta even when the result does not change the contract.
 
-The older `init.md` is research input, not an authoritative description of Jazz or browser behavior.
+The older [prototype seed](seed.md) is research input, not an authoritative description of Jazz or
+browser behavior.
 
 ## Status and merge rules
 
@@ -26,8 +31,7 @@ honesty of the graduated reference application.
 
 ### North-star generated-project journey
 
-This is the product experience validated from M2 source. The registry command remains unavailable
-until the first explicitly authorized publish and registry-backed smoke.
+This is the current generated-project product journey:
 
 ```sh
 deno run -A jsr:@nzip/lofi/create my-app
@@ -35,10 +39,9 @@ cd my-app
 deno task dev
 ```
 
-The JSR surface is one package, `@nzip/lofi`, with one version and publish operation. M2 validates
-the command subpaths plus `./testing`; remaining runtime subpaths such as `./core`, `./sync`,
-`./auth`, `./ui`, and `./pwa` graduate only when M4 proves their seams through another application.
-See [ADR 0005](decisions/0005-publish-one-nzip-lofi-package.md).
+The JSR surface is one package, `@nzip/lofi`, with one version and publish operation. Its supported
+public surface is the generator, command subpaths, and `./testing`. Runtime modules remain generated
+under `src/_lofi/` until another application proves a stable package seam.
 
 From there the developer makes a retained local write, reloads it, works offline, runs checks,
 builds, previews, and opens the same stable secure origin on a physical device.
@@ -62,17 +65,17 @@ required global runtime for a generated application.
 
 ## End-to-end journey contract
 
-| Step          | Developer action                                                                | Required result                                                                                       | Representative failure and recovery                                                                          |
-| ------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Create        | Run the create command with a project name.                                     | A complete directory is produced without prompts and the next two commands are printed.               | Existing/non-empty destination names the conflict and suggests a new path; no overwrite occurs.              |
-| Configure     | Start with no `.env`, or copy `.env.example` and provide the public cloud pair. | No config selects explicit local-only mode; a complete pair selects cloud mode.                       | Partial/invalid config stops boot, states that sync cannot start, and says which name to set or remove.      |
-| Develop       | Run `deno task dev`.                                                            | One local URL, storage mode, identity state, sync mode, and PWA readiness are printed.                | Unsupported durable storage stops or requires explicit ephemeral opt-in; it never silently degrades.         |
-| First write   | Use the starter UI to create data.                                              | UI updates without awaiting network; data survives reload or runtime recreation.                      | A failed durable write is visible in UI and diagnostics with impact and remediation.                         |
-| Reload/HMR    | Reload and edit an island five times.                                           | Identity and local data remain; client/subscription counts do not grow.                               | Duplicate runtime resources fail a development assertion with the responsible subsystem named.               |
-| Offline       | Disable network, cold-start, read, and edit.                                    | Local behavior continues; returning online makes no unsupported connection-state claim.               | Unsupported or failed sync remains visible; convergence waits for an explicit observable test seam.          |
-| Check/test    | Run `deno task check` and `deno task test`.                                     | Static checks and deterministic local-first tests pass without hidden global tools in generated apps. | Failure prints the failing check and preserves browser/log evidence.                                         |
-| Build/preview | Run `deno task build`, then `deno task preview`.                                | Production output is served through the supported Deno path.                                          | npm-compat or adapter failure names the internal fallback; no undocumented user-facing Node command appears. |
-| Device        | Open the printed stable HTTPS origin on a phone.                                | Secure-context, storage, install, and passkey capability are diagnosed.                               | An unstable relying-party ID is rejected before passkey creation and the stable-origin action is named.      |
+| Step          | Developer action                                                                | Required result                                                                                          | Representative failure and recovery                                                                          |
+| ------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Create        | Run the create command with a project name.                                     | A complete directory is produced without prompts and the next two commands are printed.                  | Existing/non-empty destination names the conflict and suggests a new path; no overwrite occurs.              |
+| Configure     | Start with no `.env`, or copy `.env.example` and provide the public cloud pair. | No config selects explicit local-only mode; a complete pair selects cloud mode.                          | Partial/invalid config stops boot, states that sync cannot start, and says which name to set or remove.      |
+| Develop       | Run `deno task dev`.                                                            | One local URL, storage mode, identity state, sync mode, and PWA readiness are printed.                   | Unsupported durable storage stops or requires explicit ephemeral opt-in; it never silently degrades.         |
+| First write   | Use the starter UI to create data.                                              | UI updates without awaiting network; data survives reload or runtime recreation.                         | A failed durable write is visible in UI and diagnostics with impact and remediation.                         |
+| Reload/HMR    | Reload and edit an island five times.                                           | Identity and local data remain; client/subscription counts do not grow.                                  | Duplicate runtime resources fail a development assertion with the responsible subsystem named.               |
+| Offline       | Disable network, cold-start, read, and edit.                                    | Local behavior continues; returning online makes no unsupported connection-state claim.                  | Unsupported or failed sync remains visible; convergence waits for an explicit observable test seam.          |
+| Diagnose/test | Run `deno task doctor` and `deno task test`.                                    | Readiness checks and deterministic local-first tests pass without hidden global tools in generated apps. | Failure names the blocked check and preserves browser/log evidence.                                          |
+| Build/preview | Run `deno task build`, then `deno task preview`.                                | Production output is served through the supported Deno path.                                             | npm-compat or adapter failure names the internal fallback; no undocumented user-facing Node command appears. |
+| Device        | Open the printed stable HTTPS origin on a phone.                                | Secure-context, storage, install, and passkey capability are diagnosed.                                  | An unstable relying-party ID is rejected before passkey creation and the stable-origin action is named.      |
 
 ## Measurement protocol
 
@@ -92,41 +95,39 @@ required global runtime for a generated application.
 
 ## Measurable promises
 
-| ID              | Promise                                                        | v0 budget or condition                                                                                                                                          | Evidence owner                   | M1 gate | Status    |
-| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------- | --------- |
-| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                                                                                 | M2 source; cold registry pending | no      | proposed  |
-| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, check, test, build, preview only.                                                                                                          | #2 and #6                        | yes     | validated |
-| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                                                                                   | M2 source; cold registry pending | no      | proposed  |
-| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                                                                                         | integrated M1 prototype          | yes     | validated |
-| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                                                                                   | #6                               | yes     | validated |
-| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one vendor subscription per shared query after five edits.                                                       | #5 and #6                        | yes     | validated |
-| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.                                                                         | integrated prototype             | yes     | validated |
-| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.                                                                | #5, #6, integration              | yes     | validated |
-| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.                                                               | #7                               | yes     | validated |
-| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                                                                                          | #4 and #7                        | yes     | validated |
-| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                                                                            | #7 and integration               | yes     | validated |
-| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named.                                                            | #7                               | yes     | validated |
-| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.                                                             | #3, #7, final build              | yes     | validated |
-| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                                                                                | #3, #4, #6                       | yes     | validated |
-| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI identifies the device-local key, blocks the rejected alpha passkey path, and defines any future phrase as an identity bearer secret rather than data backup. | #8                               | yes     | revised   |
-| DX-DEVICE-01    | Device/auth tests use a stable, appropriately isolated origin. | M1 proves a stable HTTPS PWA scope for OPFS; installed-app RP-ID preservation and identity isolation remain required before any replacement passkey ceremony.   | #4 and #8                        | yes     | revised   |
-| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                                                                             | M3                               | no      | proposed  |
-| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                                                                                    | feasibility #4; full M3          | no      | proposed  |
-| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                                                                                  | #6                               | yes     | validated |
-| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                                                                                  | #7 and M2 Layer 3                | no      | validated |
+| ID              | Promise                                                        | v0 budget or condition                                                                                                                                          | Evidence owner              | M1 gate | Status    |
+| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------- | --------- |
+| DX-CREATE-01    | Named creation is non-interactive.                             | Deno is the only required global runtime; zero prompts; uncached time reported.                                                                                 | M2 source and release smoke | no      | validated |
+| DX-CMD-01       | The public command surface is small.                           | create, dev, doctor, test, build, preview, plus explicit sync/schema/deploy tasks.                                                                              | #2, #6, and M2              | yes     | revised   |
+| DX-TTFW-01      | Generated create-to-retained-write is fast.                    | At most three shell commands and two minutes on the recorded machine/network.                                                                                   | M2 source and release smoke | no      | validated |
+| DX-PROTOTYPE-01 | The M1 checkout reaches a retained write quickly.              | `deno task dev` to retained write within 60 seconds after cached setup.                                                                                         | integrated M1 prototype     | yes     | validated |
+| DX-START-01     | Cached development startup feels immediate.                    | Warm median at most 2 seconds; slowest at most 5 seconds across five samples.                                                                                   | #6                          | yes     | validated |
+| DX-HMR-01       | UI edits retain state and runtime cardinality.                 | Median feedback at most 300 ms; one client and one vendor subscription per shared query after five edits.                                                       | #5 and #6                   | yes     | validated |
+| DX-AUTHOR-01    | Product edits avoid framework plumbing.                        | The integrated task changes only schema, app config, page/island, style, or test files.                                                                         | integrated prototype        | yes     | validated |
+| DX-LEAK-01      | Runtime machinery stays outside product UI.                    | No provider, raw client, worker, transport URL, Workbox config, or browser branch in product UI.                                                                | #5, #6, integration         | yes     | validated |
+| DX-LOCAL-01     | Local work does not await network/auth round trips.            | Subscribed UI reflects an offline write in the same event turn or next render; reload retains it.                                                               | #7                          | yes     | validated |
+| DX-DUR-01       | Durable mode never silently becomes ephemeral.                 | Boot reports durable, unsupported, or explicitly opted-in memory mode.                                                                                          | #4 and #7                   | yes     | validated |
+| DX-SYNC-01      | Application-data transport has one lofi-owned surface.         | App config selects a named adapter; product UI never constructs peers or transports.                                                                            | #7 and integration          | yes     | validated |
+| DX-OBS-01       | Diagnostics expose only truthful signals.                      | Configured state and per-write durability map to public APIs; unavailable transport detail is named.                                                            | #7                          | yes     | validated |
+| DX-ENV-01       | Environment handling is safe by construction.                  | Real env ignored; allowlisted loader; server values absent from client projection and built output.                                                             | #3, #7, final build         | yes     | validated |
+| DX-ERROR-01     | Failures state capability, impact, and action.                 | No secret values; common config recovery is one edit plus rerun.                                                                                                | #3, #4, #6                  | yes     | validated |
+| DX-AUTH-01      | Identity wording matches custody/recovery.                     | UI identifies the device-local key, blocks the rejected alpha passkey path, and defines any future phrase as an identity bearer secret rather than data backup. | #8                          | yes     | revised   |
+| DX-DEVICE-01    | Device/auth tests use a stable, appropriately isolated origin. | M1 proves a stable HTTPS PWA scope for OPFS; installed-app RP-ID preservation and identity isolation remain required before any replacement passkey ceremony.   | #4 and #8                   | yes     | revised   |
+| DX-DEVICE-UX-01 | Device preview is one productized command.                     | Primary path prints stable URL, capability report, and remediation.                                                                                             | M3                          | no      | proposed  |
+| DX-OFFLINE-01   | Installed production cold-start renders retained data offline. | Airplane-mode launch renders shell and data.                                                                                                                    | feasibility #4; full M3     | no      | proposed  |
+| DX-BUILD-01     | Development and production share the Deno command contract.    | `deno task build` and `preview`; no undocumented Node command.                                                                                                  | #6                          | yes     | validated |
+| DX-TEST-01      | Local-first tests avoid hand-timed sleeps.                     | Readiness-based offline/two-client primitives.                                                                                                                  | #7 and M2 Layer 3           | no      | validated |
 
 ## Canonical command surface and output contract
 
-These outputs are implemented and verified from M2 source. The `create` registry invocation remains
-conditional on an explicitly authorized publish and registry-backed smoke; the generated command
-surface itself is covered by the source-backed golden journey.
+These outputs define the generated command surface. Release acceptance also requires a
+registry-backed smoke of the published package.
 
 | Command                                    | Success output must contain                                | Failure output must contain                                                |
 | ------------------------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `deno run -A jsr:@nzip/lofi/create <name>` | Created path and exact `cd`/`deno task dev` next steps.    | Conflicting input/path, unchanged-files guarantee, and corrective command. |
 | `deno task dev`                            | Usable URL plus storage, identity, sync, and PWA states.   | Failed subsystem, developer impact, and one remediation.                   |
 | `deno task doctor`                         | Versioned capability/configuration table without values.   | Invalid/unsupported item plus remediation; nonzero exit for blockers.      |
-| `deno task check`                          | Checks run and concise pass summary.                       | First failing check and rerun command.                                     |
 | `deno task test`                           | Suites, durations, and retained failure-artifact location. | Failing scenario and artifact location without fixed-sleep advice.         |
 | `deno task build`                          | Output path, route count, and secret-scan result.          | Failed internal tool/adapter and supported fallback action.                |
 | `deno task preview`                        | Production URL and build identity.                         | Missing/stale build and exact build command.                               |
@@ -288,6 +289,9 @@ runtime package seams and a second consumer remain M4 work.
 
 ## M2 layered graduation
 
+> The remainder of this section records the historical M2 integration process. It is retained as
+> decision context, not current release or application guidance.
+
 M2 integrated into the `m2` branch as three separately reviewed layers. Each layer passed its own
 checks and independent pull-request review before merge. The combined branch is now being
 re-reviewed before it may merge into `dev`.
@@ -307,9 +311,8 @@ clean-room and review boundary before promotion to `dev`.
 | 3 — testing and inspection         | #12, #10                      | Reusable offline/convergence controls and truthful developer diagnostics without leaking machinery into product UI. |
 
 Layer 1 alone did not close #11: checkout-mode evidence was necessary, and Layer 2 subsequently
-passed the source-backed generated-project journey. Registry-backed acceptance remains conditional
-on explicit publication authorization. Remaining abstraction leaks are tracked in
-`docs/m2-abstraction-leaks.md` rather than hidden behind premature package APIs.
+passed the source-backed generated-project journey. Remaining abstraction leaks stayed explicit
+rather than being hidden behind premature package APIs.
 
 Layer 2 has two distinct package gates. Before publication, the generated-project journey invokes
 the real local `./create` entrypoint and uses an explicitly test-only file-URL package override so
@@ -325,8 +328,7 @@ it does not call transport pause "browser offline" and does not infer live conne
 queue depth, or leader/follower role. Real network control and readiness-first two-client fixtures
 graduate at `@nzip/lofi/testing`. The convergence fixture uses two isolated OPFS replicas with one
 identity restored only in memory because the current creator-only permissions do not allow two
-distinct identities to edit the same row. See
-[ADR 0006](decisions/0006-bound-layer3-inspection-and-testing.md).
+distinct identities to edit the same row.
 
 Layer 1 keeps M1's `lofi-prototype-<appId>` OPFS namespace so existing device rows remain visible to
 the reviewed notes-to-tasks lens. Jazz discovers that lens and its snapshots beside `schema.ts` in

@@ -1,13 +1,19 @@
 # @nzip/lofi
 
-**A local-first mobile PWA meta-framework for Deno.** Declare a schema, build Preact islands, ship
-an installable offline-capable app. The UI always hydrates from local data, identity never waits on
-a server, and the sync module is the only network surface you touch.
+**Build installable Deno web apps that open immediately, keep working offline, and sync when users
+choose.**
 
-Built on [Jazz 2](https://jazz.tools) (CRDT data + sync) · [Preact](https://preactjs.com) islands in
-[Astro](https://astro.build) · the [Deno](https://deno.com) toolchain.
+lofi generates an [Astro](https://astro.build) + [Preact](https://preactjs.com) app backed by
+durable local data. Users start with a private, on-device account—no sign-in or network required—and
+can add [Jazz](https://jazz.tools)-powered sync and recovery later without replacing that identity
+or rewriting product code.
+
+[Documentation](docs/README.md) · [JSR package](https://jsr.io/@nzip/lofi) ·
+[GitHub](https://github.com/FelineStateMachine/lofi) · [MIT License](LICENSE)
 
 ## Quick start
+
+Requires **Deno 2.9+**. It is the only global runtime you need.
 
 ```sh
 deno run -A jsr:@nzip/lofi/create my-app
@@ -15,106 +21,145 @@ cd my-app
 deno task dev
 ```
 
-That's the whole onboarding. You now have an installable, offline-capable local-first PWA — make a
-write, reload it, go offline, and the UI keeps working because it reads from durable local storage,
-not the network.
+Open the URL printed by the development server. The starter is a small task app: add a task and
+reload the page to see that it remains in durable local storage. Once the page is open, disconnect
+the network and you can keep reading and writing data locally.
 
-Want sync and account backup from the start? Scaffold with `--sync`:
+The generated app starts in local-only mode. You do not need an account, a backend, or an `.env`
+file to begin building.
+
+Continue with the [generated-app guide](docs/getting-started.md) when you are ready to replace the
+task example with your own schema, permissions, hook, and UI.
+
+## What you get
+
+- **Local-first data.** The UI reads from durable local storage instead of waiting on the network.
+  Storage failures are surfaced rather than silently falling back to memory.
+- **Identity from the first launch.** Each user begins with a private on-device account, even when
+  the app has no sync service configured.
+- **Optional sync and recovery.** Users can make that same account portable when you connect the app
+  to managed Jazz sync.
+- **A narrow authoring surface.** Product code owns the schema, permissions, configuration, Preact
+  islands, styles, and tests. lofi owns storage, identity, sync, lifecycle, and PWA plumbing.
+- **Local-first test helpers.** Playwright-backed fixtures cover offline writes, multiple clients,
+  convergence, and readiness without hand-timed sleeps.
+- **Explicit mobile support.** Unsupported browsers receive a clear explanation instead of a
+  partially working app that risks data loss.
+
+## Add sync and account recovery
+
+To provision sync while scaffolding:
 
 ```sh
 deno run -A jsr:@nzip/lofi/create --sync my-app
 ```
 
-It provisions a managed Jazz app and writes the project's `.env`, so the app can offer synced,
-recoverable accounts immediately.
+For an existing generated project:
 
-> Requires **Deno 2.9+**, the only global runtime. With no `.env` the app runs local-only (stated
-> explicitly at boot). For managed sync + backup, run `deno task jazz:provision` (or scaffold with
-> `create --sync`) to generate a Jazz app and write the `.env` — or set the public `JAZZ_APP_ID` /
-> `JAZZ_SERVER_URL` pair by hand. Server-only secrets never reach client output.
-
-## What a generated project looks like
-
-A new project is split into two zones — what you own, and the runtime you don't touch:
-
-```text
-my-app/
-├── deno.json              # tasks + pinned toolchain
-├── astro.config.ts
-├── public/                # manifest, service worker, icons
-├── src/
-│   ├── schema.ts          # ← your data model
-│   ├── permissions.ts     # ← your access policy
-│   ├── app.ts             # ← your app configuration
-│   ├── pages/             # ← your Astro shell
-│   ├── islands/           # ← your Preact UI (starts as a minimal task list to replace)
-│   ├── styles/
-│   └── _lofi/             # runtime: storage, identity, sync, lifecycle, diagnostics — don't edit
-└── tests/                 # your tests + the @nzip/lofi/testing contract
+```sh
+deno task jazz:provision
 ```
 
-You write `schema.ts`, `permissions.ts`, islands, and styles. Everything under `src/_lofi/` is the
-framework runtime; product work never needs to touch it.
+Provisioning creates a managed Jazz app and writes the public `JAZZ_APP_ID` and `JAZZ_SERVER_URL`
+configuration to the project's `.env`. Server-only credentials remain outside client output.
 
-## Commands
+Once sync is configured, a user can choose to back up and sync their existing account, then recover
+it on another device with a 24-word recovery phrase. Enabling sync preserves data created while the
+app was local-only because the account identity does not change.
 
-Every generated project ships this task surface (`deno task <name>`):
+## Where lofi fits
 
-| Command                                 | What it does                                                  |
-| --------------------------------------- | ------------------------------------------------------------- |
-| `dev`                                   | Astro dev server; prints storage, identity, and sync state.   |
-| `doctor`                                | Value-free readiness report — no secrets, no faked claims.    |
-| `test`                                  | Deterministic local-first tests (no hand-timed sleeps).       |
-| `build`                                 | Static production build into `dist/`.                         |
-| `preview`                               | Serves the production build locally.                          |
-| `deploy` / `deploy:create`              | Host the static build on Deno Deploy.                         |
-| `jazz:provision`                        | Generate a managed Jazz app and write `.env` for sync/backup. |
-| `schema:validate` / `schema:deploy`     | Validate and publish your Jazz schema.                        |
-| `migrations:create` / `migrations:push` | Author and push schema migrations.                            |
+lofi is designed for mobile web apps where offline operation is a requirement, not a best-effort
+enhancement. It is a good fit when you want Deno tooling, an Astro shell, Preact islands, and an
+opinionated boundary between product code and local-first infrastructure.
+
+Keep these current constraints in mind:
+
+- lofi is an early, pre-1.0 release.
+- The data layer is Jazz 2 alpha and deliberately pinned to a reviewed version.
+- The supported browser floors are Android Chrome 148+ and iOS Safari 16.4+.
+- Recovery is user-controlled: lofi does not retain recoverable account material on the server, so
+  the recovery phrase must be kept safe.
+
+## Project anatomy
+
+A generated project separates the files you own from the framework runtime:
+
+```mermaid
+flowchart TB
+    Root["my-app/"] --> Config["deno.json + astro.config.ts"]
+    Root --> Public["public/<br/>manifest · service worker · icons"]
+    Root --> Src["src/"]
+    Root --> Tests["tests/<br/>your tests + lofi testing contract"]
+
+    Src --> Model["schema.ts + permissions.ts<br/>your model and access policy"]
+    Src --> App["app.ts<br/>your application config"]
+    Src --> UI["pages + islands + styles<br/>your product experience"]
+    Src --> Runtime["_lofi/<br/>generated runtime—do not edit"]
+```
+
+Most product work stays in `schema.ts`, `permissions.ts`, `app.ts`, `pages/`, `islands/`, and
+`styles/`. Everything under `src/_lofi/` is generated runtime code.
 
 ## Testing local-first behavior
 
-`@nzip/lofi/testing` provides Playwright-backed helpers for the parts that are genuinely hard to
-test — offline and multi-client behavior: a two-client fixture, concurrent-offline convergence,
-readiness waits without arbitrary sleeps, and value-free (secret-free) failure artifacts. Every
-project includes a worked example at `tests/convergence_e2e_test.ts`.
+`@nzip/lofi/testing` provides Playwright-backed helpers for behavior that is difficult to test with
+ordinary unit tests: two-client fixtures, concurrent offline writes, convergence, readiness waits,
+and secret-free failure artifacts.
 
-## Why lofi
+Every generated project includes a worked example at `tests/convergence_e2e_test.ts`.
 
-- **Local-first without the plumbing.** Product code touches schema, config, islands, styles, and
-  tests — never providers, workers, transports, or service-worker internals.
-- **Honest by construction.** Durable storage never silently degrades to memory; diagnostics only
-  claim what the underlying APIs can actually observe; identity wording matches real custody and
-  recovery semantics.
-- **Mobile PWA first.** Platform floors (Android Chrome 148+, iOS Safari 16.4+) are enforced boot
-  gates, not advisory footnotes. Unsupported browsers get an explicit answer, never silent data
-  loss.
+## Commands
 
-## Stack
+Every generated project exposes these tasks as `deno task <name>`.
 
-| Layer      | Choice                                        | Pinned at           |
-| ---------- | --------------------------------------------- | ------------------- |
-| Data/sync  | jazz-tools 2.0 alpha, OPFS                    | `2.0.0-alpha.53`    |
-| UI runtime | Preact islands, `client:only`, thin adapter   | Preact 10 / Astro 7 |
-| Shell      | Astro, fully prerendered, static-through-Deno | Astro 7             |
-| Toolchain  | Deno tasks + npm-compat                       | Deno 2.9            |
+### Everyday development
 
-Version pins are deliberate: the data layer is an alpha, so every bump is a reviewed decision.
+| Command   | What it does                                                      |
+| --------- | ----------------------------------------------------------------- |
+| `dev`     | Runs the Astro development server and prints runtime state.       |
+| `doctor`  | Checks readiness without printing configuration or secret values. |
+| `test`    | Runs the deterministic local-first test suite.                    |
+| `build`   | Creates a static production build in `dist/`.                     |
+| `preview` | Serves the production build locally.                              |
 
-## Status
+### Sync, schema, and deployment
 
-Early release, pre-1.0. Identity is **local-first**: a new app opens on a private, on-device account
-with no sign-in and no network. When a managed Jazz app is configured (`deno task jazz:provision`),
-the user can elect to back up and sync that account and recover it from a 24-word **recovery
-phrase** — the same account, made portable. Electing to sync preserves everything created while
-local-only, because the account identity never changes. lofi holds no recoverable account material
-server-side: the phrase is the backup, so keeping it is the user's custody. (The passkey/PRF module
-in `src/_lofi/auth.ts` remains as an optional at-rest-encryption primitive; deriving the account
-_from_ a credential was removed because it cannot preserve a pre-existing local-only account's
-data.)
+| Command                                 | What it does                                      |
+| --------------------------------------- | ------------------------------------------------- |
+| `jazz:provision`                        | Creates a managed Jazz app and configures `.env`. |
+| `schema:validate` / `schema:deploy`     | Validates and publishes the Jazz schema.          |
+| `migrations:create` / `migrations:push` | Authors and pushes schema migrations.             |
+| `deploy` / `deploy:create`              | Hosts the static build on Deno Deploy.            |
 
----
+## Stack and version policy
 
-This repository is also the framework's development monorepo: `package/` is the `@nzip/lofi` source
-and `apps/reference/` is the reference app the generator is validated against. See
-[CONTRIBUTING.md](CONTRIBUTING.md) and the [DevX contract](docs/devx-contract.md).
+| Layer      | Choice                                     | Pinned at           |
+| ---------- | ------------------------------------------ | ------------------- |
+| Data/sync  | Jazz 2, CRDTs, OPFS                        | `2.0.0-alpha.53`    |
+| UI runtime | Preact islands with a thin adapter         | Preact 10 / Astro 7 |
+| Shell      | Fully prerendered Astro, statically hosted | Astro 7             |
+| Toolchain  | Deno tasks and npm compatibility           | Deno 2.9            |
+
+Version pins are deliberate. Because the data layer is an alpha, every upgrade is reviewed and
+validated before it becomes part of the generated project.
+
+## Identity and recovery model
+
+A new app opens immediately on a private, on-device account. When managed sync is configured, the
+user can back up and sync that same account and recover it elsewhere with the recovery phrase. The
+phrase is the portable backup; keeping it safe is the user's responsibility.
+
+See [Sync and recovery](docs/sync-and-recovery.md) for setup and shipping guidance, and
+[Local-first accounts: open now, back up later](docs/auth-identity.md) for the detailed account
+states, recovery guarantees, custody model, and optional passkey-based protection at rest.
+
+## Developing lofi itself
+
+This repository is the framework's development monorepo. `package/` contains the `@nzip/lofi`
+source, while `apps/reference/` is the reference app against which the generator is validated.
+
+See [CONTRIBUTING.md](https://github.com/FelineStateMachine/lofi/blob/main/CONTRIBUTING.md) for the
+repository workflow and the
+[DevX contract](https://github.com/FelineStateMachine/lofi/blob/main/docs/devx-contract.md) for the
+framework's testable promises and boundaries.

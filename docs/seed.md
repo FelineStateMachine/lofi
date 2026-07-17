@@ -1,8 +1,9 @@
 # lofi — Local-First Mobile PWA Meta-Framework (Prototype Plan)
 
-> **Status: research input, not the current product contract.** The executable developer-experience
-> contract lives in `docs/devx-contract.md`. M1 spikes are expected to correct or reject claims in
-> this draft as Jazz 2 and target-browser behavior are verified.
+> **Historical prototype plan—do not use as API or template documentation.** Several identities,
+> paths, package exports, and implementation choices below were rejected or replaced. Application
+> developers should use the [current developer documentation](README.md); framework contributors can
+> consult the [developer-experience contract](devx-contract.md) and retained spike evidence.
 
 Working name **`lofi`** (import paths like `@nzip/lofi/core`). Goal: validate that Jazz + Preact
 islands + Astro + Deno can be wrapped into an ergonomic framework where the UI always hydrates from

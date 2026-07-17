@@ -37,6 +37,7 @@
     "jsxImportSource": "preact"
   },
   "tasks": {
+    "check": "deno fmt --check . && deno lint && deno task test:unit",
     "test:unit": "deno test --allow-env=LOFI_UPDATE_SNAPSHOT,CI --allow-net=127.0.0.1 --allow-read --allow-write=. --allow-run tools package apps/reference/src/_lofi apps/reference/tests",
     "test:update:create": "LOFI_UPDATE_SNAPSHOT=1 deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-read --allow-write=. --allow-run package/create_core_test.ts",
     "test": "deno task test:unit",
@@ -57,6 +58,17 @@
     "include": [
       "LICENSE",
       "README.md",
+      "docs/README.md",
+      "docs/auth-identity.md",
+      "docs/auth.md",
+      "docs/data-and-ui.md",
+      "docs/deployment.md",
+      "docs/getting-started.md",
+      "docs/permissions.md",
+      "docs/reference",
+      "docs/sync-and-recovery.md",
+      "docs/testing.md",
+      "docs/troubleshooting.md",
       "apps/reference/astro.config.ts",
       "apps/reference/deno.json",
       "apps/reference/public",

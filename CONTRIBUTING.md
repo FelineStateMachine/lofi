@@ -15,9 +15,16 @@ alpha data layer stays honest about what actually works.
 deno task check
 ```
 
-This runs formatting, linting, type checks, Astro checks, the deterministic test suite, the
-environment-contract check, and the secret-leak scan. A change is not ready for review until it
-passes locally. There are no other hidden global tools.
+This runs formatting, linting, and the deterministic test suite. Deno type-checks the imported
+application and runtime modules as part of the suite, which also includes the environment contract
+and secret-leak scan. A change is not ready for review until it passes locally. There are no hidden
+global tools.
+
+Before publishing, also inspect the package artifact:
+
+```sh
+deno task publish:dry --allow-dirty
+```
 
 ## Contract-driven changes
 

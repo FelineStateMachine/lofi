@@ -9,7 +9,8 @@ export const referenceApp = {
   // Identity is local-first: first boot opens a private, on-device account with
   // no sign-in. When a managed Jazz app is configured (JAZZ_APP_ID / JAZZ_SERVER_URL —
   // see `deno task jazz:provision`), the AccountGate island lets the user elect to
-  // back up and sync it, and recover it from a phrase. See docs/auth-identity.md.
+  // back up and sync it, and recover it from a phrase. See the framework's
+  // `docs/sync-and-recovery.md` guide.
   //
   // Hostnames you have committed to keeping stable, for the optional device-credential
   // primitive in `src/_lofi/auth.ts` (WebAuthn/PRF at-rest encryption). A credential

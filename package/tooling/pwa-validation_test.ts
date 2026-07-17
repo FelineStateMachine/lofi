@@ -197,6 +197,29 @@ Deno.test("source PWA validation checks an opt-in launch handler", async () => {
   }
 });
 
+Deno.test("source PWA validation checks window controls overlay with standalone fallback", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.display_override = ["tabbed", "window-controls-overlay", "window-controls-overlay"];
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project);
+    assert(
+      hasIssue(issues, "without a tested lofi recipe"),
+      "tabbed mode was presented as shipped",
+    );
+    assert(hasIssue(issues, "must not repeat modes"), "duplicate display override passed");
+
+    manifest.display_override = ["window-controls-overlay"];
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project);
+    assert(valid.length === 0, `valid window controls override failed: ${JSON.stringify(valid)}`);
+    assert(manifest.display === "standalone", "fixture lost its standalone fallback");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation checks opt-in file handlers", async () => {
   const { root, project } = await makeProject();
   try {

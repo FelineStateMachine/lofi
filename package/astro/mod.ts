@@ -68,6 +68,7 @@ const recipeFiles = [
   "related-app-discovery.ts",
   "scope-extension.ts",
   "web-share.ts",
+  "window-controls-overlay.ts",
 ] as const;
 
 async function readPackageFile(path: string): Promise<string> {
@@ -114,6 +115,13 @@ function renderConfig(projectRoot: string): string {
     "scope-extension.ts",
   );
   const webShareRecipe = join(projectRoot, ".lofi", "package", "recipes", "web-share.ts");
+  const windowControlsOverlayRecipe = join(
+    projectRoot,
+    ".lofi",
+    "package",
+    "recipes",
+    "window-controls-overlay.ts",
+  );
   return `import preact from "@astrojs/preact";
 import { defineConfig } from "astro/config";
 import { jazzPlugin } from "jazz-tools/dev/vite";
@@ -171,6 +179,9 @@ export default defineConfig({
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/web-share$/, replacement: ${
     JSON.stringify(webShareRecipe)
   } },
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/window-controls-overlay$/, replacement: ${
+    JSON.stringify(windowControlsOverlayRecipe)
+  } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/preact$/, replacement: ${JSON.stringify(preactEntry)} },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/access$/, replacement: ${JSON.stringify(accessEntry)} },
         { find: /^jsr:@nzip\\/lofi@[^/]+$/, replacement: ${JSON.stringify(runtimeEntry)} },
@@ -197,6 +208,9 @@ export default defineConfig({
     JSON.stringify(fileHandlerRecipe)
   } },
         { find: "@nzip/lofi/recipes/web-share", replacement: ${JSON.stringify(webShareRecipe)} },
+        { find: "@nzip/lofi/recipes/window-controls-overlay", replacement: ${
+    JSON.stringify(windowControlsOverlayRecipe)
+  } },
         { find: "@nzip/lofi/preact", replacement: ${JSON.stringify(preactEntry)} },
         { find: "@nzip/lofi/access", replacement: ${JSON.stringify(accessEntry)} },
         { find: "@nzip/lofi", replacement: ${JSON.stringify(runtimeEntry)} },

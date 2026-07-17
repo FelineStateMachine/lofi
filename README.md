@@ -136,8 +136,8 @@ permission APIs.
 OS-facing capabilities stay out of the starter until the product opts in. The
 [installed-app recipe catalog](docs/recipes/README.md) contains tested, isolated entrypoints for Web
 Share, launch handling, file-import previews, custom-protocol links, presentation-only companion
-discovery, and reciprocal cross-origin app-window scope. Each keeps manifest changes opt-in and
-documents validation, behavior, and fallbacks.
+discovery, reciprocal cross-origin app-window scope, and desktop titlebar geometry. Each keeps
+manifest changes opt-in and documents validation, behavior, and fallbacks.
 
 ## Testing local-first behavior
 

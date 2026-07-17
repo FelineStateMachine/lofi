@@ -17,6 +17,13 @@ type ImageResource = {
 const manifestFile = "manifest.webmanifest";
 const syntheticOrigin = "https://lofi.invalid";
 const displayModes = new Set(["browser", "fullscreen", "minimal-ui", "standalone"]);
+const displayOverrideModes = new Set([
+  "browser",
+  "fullscreen",
+  "minimal-ui",
+  "standalone",
+  "window-controls-overlay",
+]);
 const launchClientModes = new Set([
   "auto",
   "focus-existing",
@@ -300,6 +307,29 @@ async function parseAndValidateManifest(
         remediation,
       ),
     );
+  }
+  if (manifest.display_override !== undefined) {
+    if (!Array.isArray(manifest.display_override) || manifest.display_override.length === 0) {
+      issues.push(
+        issue(`${manifestFile}: display_override must be a non-empty array`, remediation),
+      );
+    } else {
+      if (
+        !manifest.display_override.every((mode) =>
+          typeof mode === "string" && displayOverrideModes.has(mode)
+        )
+      ) {
+        issues.push(
+          issue(
+            `${manifestFile}: display_override contains a mode without a tested lofi recipe`,
+            remediation,
+          ),
+        );
+      }
+      if (new Set(manifest.display_override).size !== manifest.display_override.length) {
+        issues.push(issue(`${manifestFile}: display_override must not repeat modes`, remediation));
+      }
+    }
   }
   if (manifest.prefer_related_applications !== undefined) {
     if (typeof manifest.prefer_related_applications !== "boolean") {

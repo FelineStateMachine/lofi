@@ -107,6 +107,13 @@ Deno.test("official Jazz harness enforces private and direct-share templates", a
       user_id: "editor",
       can_edit: true,
     }).wait({ tier: "global" });
+    let ownerRows: Array<s.RowOf<typeof app.sharedDocs>> = [];
+    let readerRows: Array<s.RowOf<typeof app.sharedDocs>> = [];
+    let editorRows: Array<s.RowOf<typeof app.sharedDocs>> = [];
+    const liveSharedDoc = app.sharedDocs.where({ id: sharedDoc.id });
+    const stopOwner = owner.subscribeAll(liveSharedDoc, (delta) => ownerRows = delta.all);
+    const stopReader = reader.subscribeAll(liveSharedDoc, (delta) => readerRows = delta.all);
+    const stopEditor = editor.subscribeAll(liveSharedDoc, (delta) => editorRows = delta.all);
 
     assert(
       (await reader.all(app.sharedDocs.where({ id: sharedDoc.id }))).length === 1,
@@ -121,14 +128,28 @@ Deno.test("official Jazz harness enforces private and direct-share templates", a
       "stranger read shared row",
     );
     reader.expectDenied((db) => db.update(app.sharedDocs, sharedDoc.id, { title: "denied" }));
-    editor.expectAllowed((db) => db.update(app.sharedDocs, sharedDoc.id, { title: "allowed" }));
+    await editor.update(app.sharedDocs, sharedDoc.id, { title: "allowed" }).wait({
+      tier: "global",
+    });
+    assert(
+      ownerRows[0]?.title === "allowed" && editorRows[0]?.title === "allowed",
+      "authorized live queries did not observe the shared update",
+    );
     stranger.expectDenied((db) => db.delete(app.sharedDocs, sharedDoc.id));
 
     await owner.delete(app.sharedDocGrants, readGrant.id).wait({ tier: "global" });
+    assert(readerRows.length === 0, "revocation did not remove the row from the active query");
     assert(
       (await reader.all(app.sharedDocs.where({ id: sharedDoc.id }))).length === 0,
       "revoked reader retained access",
     );
+    assert(
+      ownerRows.length === 1 && editorRows.length === 1,
+      "revocation affected other identities",
+    );
+    stopOwner();
+    stopReader();
+    stopEditor();
   } finally {
     await testApp.shutdown();
   }
@@ -192,6 +213,39 @@ Deno.test("official Jazz harness enforces fixed group roles and membership lifec
       .wait({
         tier: "global",
       });
+    let adminRows: Array<s.RowOf<typeof app.groupDocs>> = [];
+    let readerRows: Array<s.RowOf<typeof app.groupDocs>> = [];
+    let writerRows: Array<s.RowOf<typeof app.groupDocs>> = [];
+    const liveGroupDocs = app.groupDocs.where({ workspaceId: groupId });
+    const stopAdmin = admin.subscribeAll(liveGroupDocs, (delta) => adminRows = delta.all);
+    const stopReader = reader.subscribeAll(liveGroupDocs, (delta) => readerRows = delta.all);
+    const stopWriter = writer.subscribeAll(liveGroupDocs, (delta) => writerRows = delta.all);
+    const liveDoc = await contributor.insert(app.groupDocs, {
+      workspaceId: groupId,
+      title: "live insert",
+    }).wait({ tier: "global" });
+    assert(
+      [adminRows, readerRows, writerRows].every((rows) =>
+        rows.some((row) => row.id === liveDoc.id)
+      ),
+      "authorized live queries did not observe the group insert",
+    );
+    await writer.update(app.groupDocs, liveDoc.id, { title: "live update" }).wait({
+      tier: "global",
+    });
+    assert(
+      [adminRows, readerRows, writerRows].every((rows) =>
+        rows.find((row) => row.id === liveDoc.id)?.title === "live update"
+      ),
+      "authorized live queries did not observe the group update",
+    );
+    await admin.delete(app.groupDocs, liveDoc.id).wait({ tier: "global" });
+    assert(
+      [adminRows, readerRows, writerRows].every((rows) =>
+        rows.every((row) => row.id !== liveDoc.id)
+      ),
+      "authorized live queries did not observe the group delete",
+    );
 
     reader.expectDenied((db) =>
       db.insert(app.groupDocs, { workspaceId: groupId, title: "reader cannot create" })
@@ -219,6 +273,9 @@ Deno.test("official Jazz harness enforces fixed group roles and membership lifec
     admin.expectAllowed((db) => db.delete(app.workspaceMembers, memberships[1].id));
     writer.expectAllowed((db) => db.delete(app.workspaceMembers, memberships[2].id));
     stranger.expectDenied((db) => db.delete(app.workspaceMembers, memberships[2].id));
+    stopAdmin();
+    stopReader();
+    stopWriter();
   } finally {
     await testApp.shutdown();
   }

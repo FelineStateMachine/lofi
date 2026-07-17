@@ -437,19 +437,38 @@ async function assertProductionOutput(projectRoot: string) {
     icons: Array<{ src: string; sizes: string; type: string; purpose: string }>;
   };
   const expected = new Map([
-    ["icon-192.png", [192, "any"] as const],
-    ["icon-512.png", [512, "any"] as const],
-    ["icon-maskable-512.png", [512, "maskable"] as const],
+    [
+      "icon-192.png",
+      { sizes: "192x192", type: "image/png", purpose: "any", dimensions: 192 } as const,
+    ],
+    [
+      "icon-512.png",
+      { sizes: "512x512", type: "image/png", purpose: "any", dimensions: 512 } as const,
+    ],
+    [
+      "icon-maskable-512.png",
+      { sizes: "512x512", type: "image/png", purpose: "maskable", dimensions: 512 } as const,
+    ],
+    [
+      "icon-monochrome.svg",
+      { sizes: "any", type: "image/svg+xml", purpose: "monochrome" } as const,
+    ],
   ]);
   for (const icon of manifest.icons) {
     const file = basename(icon.src);
     const contract = expected.get(file);
     assert(contract, `manifest references unexpected ${file}`);
-    assert(icon.type === "image/png", `${file} has incorrect manifest type`);
-    assert(icon.sizes === `${contract[0]}x${contract[0]}`, `${file} has incorrect manifest size`);
-    assert(icon.purpose === contract[1], `${file} has incorrect manifest purpose`);
-    const [width, height] = pngDimensions(await Deno.readFile(join(dist, file)));
-    assert(width === contract[0] && height === contract[0], `${file} dimensions are incorrect`);
+    assert(icon.type === contract.type, `${file} has incorrect manifest type`);
+    assert(icon.sizes === contract.sizes, `${file} has incorrect manifest size`);
+    assert(icon.purpose === contract.purpose, `${file} has incorrect manifest purpose`);
+    await Deno.stat(join(dist, file));
+    if ("dimensions" in contract) {
+      const [width, height] = pngDimensions(await Deno.readFile(join(dist, file)));
+      assert(
+        width === contract.dimensions && height === contract.dimensions,
+        `${file} dimensions are incorrect`,
+      );
+    }
   }
   assert(manifest.icons.length === expected.size, "manifest does not contain the exact icon set");
   const [appleWidth, appleHeight] = pngDimensions(

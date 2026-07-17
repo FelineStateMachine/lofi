@@ -1,32 +1,31 @@
 # Data and UI
 
-The generated task list demonstrates lofi's main authoring pattern:
+Lofi keeps realtime plumbing out of product components. Authors declare Jazz tables and policies,
+build exact typed queries, and compose two package hooks inside a domain hook:
 
 ```mermaid
 flowchart LR
-    Schema["schema.ts<br/>table and row types"] --> Permissions["permissions.ts<br/>read and write policy"]
-    Schema --> Hook["domain hook<br/>useTasks"]
-    Runtime["@nzip/lofi runtime<br/>storage and subscriptions"] --> Hook
-    Hook --> Island["Preact island<br/>product UI"]
-    Island -- "domain mutation" --> Hook
-    Hook -- "insert, update, delete" --> Runtime
-    Runtime -- "typed snapshot" --> Hook
+    Schema["Typed Jazz schema"] --> Policy["Private, Shared, or Group policy"]
+    Schema --> Query["Typed scoped query"]
+    Query --> Live["useLiveQuery"]
+    Table["Typed table"] --> Mutations["useTableMutations"]
+    Live --> Domain["Author-owned domain hook"]
+    Mutations --> Domain
+    Domain --> UI["Preact product UI"]
 ```
 
-The runtime owns the database, durable storage, subscriptions, and sync lifecycle. The domain hook
-selects a table and exposes product-specific reads and mutations to the UI.
+The root package owns shared query stores, runtime recreation, subscription teardown, mutation
+errors, and durability tracking. `@nzip/lofi/preact` owns only the Preact lifecycle adapter.
 
-## 1. Declare a table
-
-`src/schema.ts` uses the pinned Jazz schema API directly:
+## Declare a table and policy
 
 ```ts
 import { schema as s } from "jazz-tools";
 
 const schema = {
-  notes: s.table({
+  records: s.table({
+    workspaceId: s.string(),
     title: s.string(),
-    body: s.string(),
     archived: s.boolean(),
     createdAt: s.timestamp(),
   }),
@@ -36,110 +35,111 @@ type AppSchema = s.Schema<typeof schema>;
 export const app: s.App<AppSchema> = s.defineApp(schema);
 ```
 
-Keep table names stable once data has shipped. A schema change can require a migration; validate the
-schema and review the Jazz CLI output before deploying it.
+Every table needs a policy in `src/permissions.ts`. Permissions determine which rows enter a live
+query and which mutations succeed; realtime access is not a separate permission mode. See
+[Permissions](permissions.md), [direct sharing](examples/shared.md), and
+[group ownership](examples/group.md).
 
-## 2. Define permissions for the table
-
-Every new table needs an explicit policy in `src/permissions.ts`. The starter policy lets a user
-insert rows and limits reads, updates, and deletes to the row creator. See
-[Permissions](permissions.md) before changing that boundary.
-
-## 3. Bind the table to a typed hook
-
-The generated `src/islands/use-tasks.ts` is the canonical example. Its important pieces are:
+## Bind an exact typed query
 
 ```ts
-import { schema as s } from "jazz-tools";
-import { getRuntime } from "@nzip/lofi";
+import { useLiveQuery } from "@nzip/lofi/preact";
 import { app } from "../app.ts";
 
-const notesTable = app.schema.notes;
-export type Note = s.RowOf<typeof notesTable>;
+const records = useLiveQuery(
+  () =>
+    app.schema.records
+      .where({ workspaceId, archived: false })
+      .orderBy("createdAt", "desc"),
+  [workspaceId],
+);
 ```
 
-`s.RowOf` derives the row type from the schema, including its `id`. Do not duplicate persisted row
-types by hand.
-
-When the hook connects, it asks the runtime for a shared store:
+The result preserves the row produced by the exact builder, including `select` and `include`
+projections:
 
 ```ts
-const runtime = await getRuntime();
-const store = runtime.store(notesTable);
+const titles = useLiveQuery(
+  () => app.schema.records.select("title").where({ workspaceId }),
+  [workspaceId],
+);
+// titles.rows contains id and title, not the unselected application columns.
 ```
 
-Repeated calls for the same table return the same store. Multiple consumers therefore share one
-underlying Jazz subscription.
+Equivalent mounted queries share one Jazz subscription. When dependencies change, Lofi releases the
+obsolete query before opening the replacement. The last consumer evicts the store. Runtime or
+account recreation reconnects mounted queries and ignores callbacks from an obsolete client.
 
-Use the generated hook's subscription and cleanup structure rather than opening a raw Jazz
-subscription in a component. It handles unmounting and reconnects after a user enables sync or
-restores another account.
+Read state is deliberately small:
 
-## 4. Expose domain mutations
+| Field    | Values                      | Meaning                                  |
+| -------- | --------------------------- | ---------------------------------------- |
+| `status` | `loading`, `ready`, `error` | Subscription/read state                  |
+| `rows`   | Exact typed query rows      | Current authorized result                |
+| `error`  | Message or `null`           | Query setup or runtime acquisition error |
 
-The table store provides three mutations:
+An empty array with `status: "ready"` is an empty result, not a loading signal.
+
+## Mutate the underlying table
 
 ```ts
-await store.insert({ title, body, archived: false, createdAt: new Date() });
-await store.update(noteId, { archived: true });
-await store.delete(noteId);
+import { useTableMutations } from "@nzip/lofi/preact";
+
+const records = useTableMutations(app.schema.records);
+const created = await records.insert({
+  workspaceId,
+  title: "Release notes",
+  archived: false,
+  createdAt: new Date(),
+});
+await records.update(created.id, { archived: true });
+await records.remove(created.id);
 ```
 
-Wrap these in domain verbs such as `createNote`, `archiveNote`, and `deleteNote`. Product components
-should not need to know which table or runtime implements them.
+`insert` returns the created row, including its generated `id`. Mutation promises resolve only after
+local durability. When managed sync is active, global confirmation continues in the background and
+updates the shared table-scoped state:
 
-Each mutation waits for local durability before its promise resolves. When the user has elected to
-sync, the store also tracks global durability in the background.
+| Field        | Values                              | Meaning                            |
+| ------------ | ----------------------------------- | ---------------------------------- |
+| `pending`    | Number                              | Local durability waits in progress |
+| `durability` | `none`, `local`, `global`, `failed` | Latest mutation outcome            |
+| `error`      | Message or `null`                   | Awaited or asynchronous rejection  |
 
-```mermaid
-sequenceDiagram
-    participant UI as Preact island
-    participant Hook as Domain hook
-    participant Store as Table store
-    participant Disk as OPFS
-    participant Sync as Managed sync
+Several filtered queries can observe the same table mutation without owning mutation listeners. All
+`useTableMutations` consumers for one schema table share one listener and one state surface.
 
-    UI->>Hook: createNote(...)
-    Hook->>Store: insert(...)
-    Store->>Disk: persist mutation
-    Disk-->>Store: local durability
-    Store-->>Hook: mutation resolves
-    Hook-->>UI: update status
-    opt User elected to sync
-        Store->>Sync: replicate mutation
-        Sync-->>Store: global durability
-    end
+## Keep product UI domain-shaped
+
+```ts
+export function useWorkspaceRecords(workspaceId: string) {
+  const query = useLiveQuery(
+    () => app.schema.records.where({ workspaceId, archived: false }),
+    [workspaceId],
+  );
+  const mutations = useTableMutations(app.schema.records);
+  return {
+    ...query,
+    durability: mutations.durability,
+    createRecord: (title: string) =>
+      mutations.insert({
+        workspaceId,
+        title,
+        archived: false,
+        createdAt: new Date(),
+      }),
+    archiveRecord: (id: string) => mutations.update(id, { archived: true }),
+  };
+}
 ```
 
-## 5. Render every state honestly
-
-A table snapshot contains:
-
-| Field        | Values                              | Meaning                         |
-| ------------ | ----------------------------------- | ------------------------------- |
-| `status`     | `loading`, `ready`, `error`         | Subscription/read state         |
-| `rows`       | Typed row array                     | Current local view              |
-| `durability` | `none`, `local`, `global`, `failed` | Most recent mutation durability |
-| `error`      | A message or `null`                 | Read or mutation failure        |
-
-Render loading and failure states rather than treating an empty row array as proof that loading
-finished. A locally durable write is safe in device storage; a globally durable write has also
-reached configured sync.
+Components consume `createRecord` and `archiveRecord`; they do not call `getRuntime`, manage Jazz
+subscriptions, or listen for runtime recreation. The generated task hook is the smallest working
+example. For a complete access-aware composition, see the
+[collaborative list recipe](examples/collaborative-list.md).
 
 ## Schema changes and migrations
 
-Generated projects provide these Jazz CLI tasks:
-
-```sh
-deno task schema:validate
-deno task migrations:create
-deno task migrations:push
-deno task schema:deploy
-```
-
-Use `schema:validate` while editing. When a change affects existing data, use the migration command
-to create the migration under `src/migrations/`, review the generated change, and test it against
-non-sensitive fixture data before pushing or deploying it.
-
-`migrations:push` and `schema:deploy` use the managed Jazz configuration in `.env`. Never paste its
-server-only secrets into source, client code, screenshots, or issue text.
+Use `deno task schema:validate` while editing. For existing data, create and review a migration with
+`deno task migrations:create`, then use `migrations:push` and `schema:deploy` only with the intended
+managed configuration. Never put server-only secrets in source or browser code.

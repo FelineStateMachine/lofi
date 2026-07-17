@@ -60,9 +60,11 @@ on-device account with no sign-in. To enable managed sync and account backup, ru
 
 ## Accounts: back up & recover
 
-With a Jazz app configured, the \`AccountGate\` island lets a user back up and sync their local account
-and recover it from a 24-word recovery phrase. The account they already have carries over — electing
-to sync never changes its identity. The framework implementation is provided by \`@nzip/lofi\`.
+With a Jazz app configured, the \`AccountGate\` island lets a user back up and sync their local account,
+restore it with a recoverable passkey, or use the portable 24-word recovery phrase fallback. The
+account they already have carries over — electing to sync never changes its identity. Passkey restore
+is scoped to the app's stable relying-party ID; provider syncing is not universally portable. The
+framework implementation is provided by \`@nzip/lofi\`.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
@@ -95,6 +97,7 @@ Point them at any other static host by editing those two tasks.
 // verbatim, so the template is the single source of truth for project config.
 const lofiImportTargets: Record<string, { subpath: string; localPath: string }> = {
   "@nzip/lofi": { subpath: "", localPath: "runtime/mod.ts" },
+  "@nzip/lofi/access": { subpath: "access", localPath: "access/mod.ts" },
   "@nzip/lofi/astro": { subpath: "astro", localPath: "astro/mod.ts" },
   "@nzip/lofi/build": { subpath: "build", localPath: "commands/build.ts" },
   "@nzip/lofi/dev": { subpath: "dev", localPath: "commands/dev.ts" },

@@ -2,15 +2,20 @@ import { useCallback, useEffect, useState } from "preact/hooks";
 import {
   confirmPhraseAccess,
   createBackupPasskey,
+  createRecoverablePasskeyBackup,
   enableSyncBackup,
+  isAccountReplacementError,
   isAuthError,
+  isRecoverablePasskeyError,
   isRecoveryError,
-  readSession,
+  readAccountSession,
+  restoreFromPasskey,
   restoreFromRecoveryPhrase,
   revealRecoveryPhrase,
   type Session,
   stopSyncBackup,
 } from "@nzip/lofi";
+import { encodeSharingIdentity } from "@nzip/lofi/access";
 
 /**
  * Author-owned account example. lofi is local-first: the app already opened on a
@@ -24,7 +29,14 @@ import {
  * phrase only matters once there is somewhere to sync to.
  */
 
-type Busy = "enable" | "stop" | "reveal" | "restore" | "protect";
+type Busy =
+  | "enable"
+  | "stop"
+  | "reveal"
+  | "restore"
+  | "passkey-restore"
+  | "recoverable"
+  | "protect";
 
 // Turns any thrown value into a sentence a person can act on.
 function describe(error: unknown): string {
@@ -39,6 +51,7 @@ function describe(error: unknown): string {
     }
   }
   if (isRecoveryError(error)) return error.message;
+  if (isRecoverablePasskeyError(error) || isAccountReplacementError(error)) return error.message;
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -49,12 +62,14 @@ export default function AccountGate() {
   const [phrase, setPhrase] = useState<string | null>(null);
   const [phraseInput, setPhraseInput] = useState("");
   const [restoring, setRestoring] = useState(false);
+  const [confirmReplacement, setConfirmReplacement] = useState(false);
+  const sharingIdentity = session?.user_id ? encodeSharingIdentity(session.user_id) : null;
   // Set when a backup proceeded without a passkey guard (WebAuthn unavailable),
   // so the phrase block can say so honestly rather than imply a confirmation.
   const [unguarded, setUnguarded] = useState(false);
 
   useEffect(() => {
-    setSession(readSession());
+    void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
   }, []);
 
   const run = useCallback(
@@ -113,11 +128,29 @@ export default function AccountGate() {
         </header>
         <p>
           This account replicates to your managed Jazz app and can be recovered with its phrase.
-          {session.phraseGuarded
-            ? " Revealing the phrase asks for your passkey first."
-            : " Reveal the phrase again any time to save it on another device."}
+          {session.passkeyRecoverable
+            ? " Its account-recovery passkey can restore the same identity where your passkey provider makes it available."
+            : " Create an account-recovery passkey if this browser supports one."}
         </p>
+        {sharingIdentity && (
+          <p class="account-note">
+            Share identity: <code data-sharing-identity>{sharingIdentity}</code>
+          </p>
+        )}
         <div class="account-actions">
+          {!session.passkeyRecoverable && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() =>
+                run("recoverable", async () => {
+                  await createRecoverablePasskeyBackup();
+                  return readAccountSession();
+                })}
+            >
+              {busy === "recoverable" ? "Creating…" : "Create account-recovery passkey"}
+            </button>
+          )}
           <button
             type="button"
             disabled={disabled}
@@ -142,10 +175,10 @@ export default function AccountGate() {
               onClick={() =>
                 run("protect", async () => {
                   setUnguarded(!(await createBackupPasskey()));
-                  return readSession();
+                  return readAccountSession();
                 })}
             >
-              {busy === "protect" ? "Setting up…" : "Protect phrase with a passkey"}
+              {busy === "protect" ? "Setting up…" : "Add local phrase-reveal guard"}
             </button>
           )}
           <button
@@ -175,7 +208,8 @@ export default function AccountGate() {
       <p>
         You are working on a private, on-device account — no sign-in, nothing sent anywhere. Back it
         up to sync across your devices and recover it if this one is lost. Your existing data comes
-        along. You will create a passkey first, so revealing your recovery phrase asks for it.
+        along. A recoverable passkey is the quick return path; the recovery phrase remains the
+        portable bearer-secret fallback.
       </p>
       <div class="account-actions">
         <button
@@ -183,7 +217,13 @@ export default function AccountGate() {
           disabled={disabled}
           onClick={() =>
             run("enable", async () => {
-              setUnguarded(!(await createBackupPasskey()));
+              try {
+                await createRecoverablePasskeyBackup();
+                setUnguarded(false);
+              } catch (cause) {
+                if (!isRecoverablePasskeyError(cause) || cause.code !== "unsupported") throw cause;
+                setUnguarded(true);
+              }
               setPhrase(await revealRecoveryPhrase());
               return await enableSyncBackup();
             })}
@@ -193,15 +233,42 @@ export default function AccountGate() {
         <button
           type="button"
           class="account-secondary"
-          disabled={disabled}
+          disabled={disabled || !confirmReplacement}
+          onClick={() => {
+            setRestoring(true);
+            run("passkey-restore", () =>
+              restoreFromPasskey({ confirmLocalReplacement: confirmReplacement }).then((next) => {
+                setConfirmReplacement(false);
+                return next;
+              }));
+          }}
+        >
+          {busy === "passkey-restore" ? "Restoring…" : "Use passkey"}
+        </button>
+        <button
+          type="button"
+          class="account-secondary"
+          disabled={disabled || !confirmReplacement}
           onClick={() => {
             setError(null);
-            setRestoring((value) => !value);
+            setRestoring((value) =>
+              !value
+            );
           }}
         >
           {restoring ? "Cancel" : "Restore from recovery phrase"}
         </button>
       </div>
+      <label class="account-note">
+        <input
+          type="checkbox"
+          checked={confirmReplacement}
+          disabled={disabled}
+          onChange={(event) => setConfirmReplacement(event.currentTarget.checked)}
+        />{" "}
+        I understand restore replaces this device's current local account and unsynced data may be
+        lost.
+      </label>
       {phraseBlock}
       {restoring && (
         <div class="account-field">
@@ -225,9 +292,12 @@ export default function AccountGate() {
               run(
                 "restore",
                 () =>
-                  restoreFromRecoveryPhrase(phraseInput).then((next) => {
+                  restoreFromRecoveryPhrase(phraseInput, {
+                    confirmLocalReplacement: confirmReplacement,
+                  }).then((next) => {
                     setRestoring(false);
                     setPhraseInput("");
+                    setConfirmReplacement(false);
                     return next;
                   }),
               )}

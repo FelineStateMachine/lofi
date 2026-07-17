@@ -29,10 +29,25 @@ export interface VirtualAuthenticatorOptions {
   readonly automaticPresenceSimulation?: boolean;
 }
 
+/** Serializable CDP credential used to copy one virtual passkey between browser profiles. */
+export interface VirtualAuthenticatorCredential {
+  readonly credentialId: string;
+  readonly isResidentCredential: boolean;
+  readonly rpId?: string;
+  readonly privateKey: string;
+  readonly userHandle?: string;
+  readonly signCount: number;
+  readonly largeBlob?: string;
+}
+
 /** A handle to an installed virtual authenticator; call {@link dispose} to remove it. */
 export interface VirtualAuthenticatorHandle {
   /** The CDP-assigned id of the virtual authenticator. */
   readonly authenticatorId: string;
+  /** Return credentials from this virtual authenticator. Treat private keys as test secrets. */
+  credentials(): Promise<VirtualAuthenticatorCredential[]>;
+  /** Install a previously exported virtual credential in this test profile. */
+  addCredential(credential: VirtualAuthenticatorCredential): Promise<void>;
   /** Remove the virtual authenticator and detach the CDP session. Idempotent. */
   dispose(): Promise<void>;
 }
@@ -47,7 +62,7 @@ export async function withVirtualAuthenticator(
   options: VirtualAuthenticatorOptions = {},
 ): Promise<VirtualAuthenticatorHandle> {
   const session = await page.context().newCDPSession(page);
-  await session.send("WebAuthn.enable");
+  await session.send("WebAuthn.enable", { enableUI: true });
   const { authenticatorId } = await session.send("WebAuthn.addVirtualAuthenticator", {
     options: {
       protocol: options.protocol ?? "ctap2",
@@ -62,6 +77,15 @@ export async function withVirtualAuthenticator(
   let disposed = false;
   return {
     authenticatorId,
+    async credentials(): Promise<VirtualAuthenticatorCredential[]> {
+      const result = await session.send("WebAuthn.getCredentials", { authenticatorId }) as {
+        credentials: VirtualAuthenticatorCredential[];
+      };
+      return result.credentials;
+    },
+    async addCredential(credential: VirtualAuthenticatorCredential): Promise<void> {
+      await session.send("WebAuthn.addCredential", { authenticatorId, credential });
+    },
     async dispose(): Promise<void> {
       if (disposed) return;
       disposed = true;

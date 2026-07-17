@@ -5,6 +5,7 @@ import {
   createSerializedResourceState,
   getResource,
   recreateResource,
+  replaceResource,
   shutdownResource,
 } from "./resource-lifecycle.ts";
 import { assert, assertCount } from "./test-assert.ts";
@@ -38,6 +39,34 @@ test("concurrent recreation is single-flight and shutdown is idempotent", async 
     shutdownResource(state, destroy),
   ]);
   assertCount(destroyed, 2, "concurrent shutdown must destroy the replacement once");
+});
+
+test("principal replacement prepares, destroys, then creates behind one serialized gate", async () => {
+  const state = createSerializedResourceState<{ id: number }>();
+  const events: string[] = [];
+  await getResource(state, () => Promise.resolve({ id: 1 }));
+
+  const replaced = await replaceResource(
+    state,
+    () => {
+      events.push("secret-saved");
+      return Promise.resolve();
+    },
+    () => {
+      events.push("client-created");
+      return Promise.resolve({ id: 2 });
+    },
+    (value) => {
+      events.push(`client-${value.id}-logged-out`);
+      return Promise.resolve();
+    },
+  );
+
+  assert(replaced.id === 2, "replacement did not become active");
+  assert(
+    events.join(",") === "secret-saved,client-1-logged-out,client-created",
+    `principal replacement ordering changed: ${events.join(",")}`,
+  );
 });
 
 test("HMR disposal before dependency resolution never attaches an obsolete adapter", async () => {

@@ -1,5 +1,7 @@
+/// <reference path="./env.d.ts" />
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
 // Package-owned Jazz runtime.
+import { getLofiApp } from "./app.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { appId, databaseConfig, syncing } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
@@ -14,6 +16,7 @@ import {
   createSerializedResourceState,
   getResource,
   recreateResource,
+  replaceResource,
   type SerializedResourceState,
   shutdownResource,
 } from "./resource-lifecycle.ts";
@@ -35,9 +38,13 @@ type RuntimeSlot = {
   client: SerializedResourceState<Db>;
   diagnostics: RuntimeDiagnostics;
   diagnosticListeners: Set<() => void>;
+  principal: string | null;
+  serverConfigured: boolean;
 };
 
 const slotName = "__LOFI_ALPHA53_RUNTIME__";
+const migrateLocalRowsKey = `lofi:migrate-local-rows:${appId}`;
+const managedRuntimeKey = `lofi:managed-runtime:${appId}`;
 const browserGlobal = globalThis as typeof globalThis & { [slotName]?: RuntimeSlot };
 
 function slot(): RuntimeSlot {
@@ -45,6 +52,8 @@ function slot(): RuntimeSlot {
     client: createSerializedResourceState<Db>(),
     diagnostics: createDiagnostics(),
     diagnosticListeners: new Set(),
+    principal: null,
+    serverConfigured: false,
   };
   return browserGlobal[slotName];
 }
@@ -63,11 +72,74 @@ async function resolveAccountSecret(): Promise<string> {
   return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
 }
 
+async function accountNamespace(secret: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return [...new Uint8Array(digest).slice(0, 8)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+type RuntimeTable = {
+  _table: string;
+  _schema: Record<string, { columns?: Array<{ name?: string }> }>;
+  where(input: Record<string, unknown>): unknown;
+};
+
+function runtimeTables(): RuntimeTable[] {
+  return Object.values(getLofiApp().schema as Record<string, unknown>).filter((value) =>
+    value && typeof value === "object" && "_table" in value && "where" in value
+  ) as RuntimeTable[];
+}
+
+async function awaitLocalReady(db: Db): Promise<void> {
+  const firstTable = runtimeTables()[0];
+  if (firstTable) await db.all(firstTable.where({}) as never, { tier: "local" });
+}
+
+async function migrateLocalRows(db: Db, secret: string, namespace: string): Promise<void> {
+  if (typeof localStorage === "undefined" || localStorage.getItem(migrateLocalRowsKey) !== "1") {
+    return;
+  }
+  const local = await createDb(databaseConfig(secret, namespace, "local"));
+  await awaitLocalReady(local);
+  for (const table of runtimeTables()) {
+    const rows = await local.all(table.where({}) as never, { tier: "local" }) as Array<
+      Record<string, unknown> & { id: string }
+    >;
+    const columns = table._schema[table._table]?.columns ?? [];
+    for (const row of rows) {
+      const values: Record<string, unknown> = {};
+      for (const column of columns) {
+        if (column.name && column.name in row) values[column.name] = row[column.name];
+      }
+      await db.insert(table as never, values as never, { id: row.id }).wait({ tier: "global" });
+    }
+  }
+  localStorage.removeItem(migrateLocalRowsKey);
+  // Keep the read-only source connection until navigation. In alpha.53,
+  // shutting down either browser Db can retire the shared broker used by its
+  // sibling; the page lifecycle releases both ports safely.
+}
+
 async function createClient(state: RuntimeSlot): Promise<Db> {
   try {
     assertDurableBrowser();
     const secret = await resolveAccountSecret();
-    const db = await createDb(databaseConfig(secret));
+    const namespace = await accountNamespace(secret);
+    const managedNamespace = typeof localStorage !== "undefined" &&
+      localStorage.getItem(managedRuntimeKey) === "1";
+    const connect = syncing();
+    const db = await createDb(
+      databaseConfig(secret, namespace, managedNamespace || connect ? "managed" : "local", connect),
+    );
+    // Browser `createDb()` returns before its persistent worker bridge has
+    // necessarily attached. A local-tier query is the public readiness barrier;
+    // without it, an immediate post-replacement mutation can see no attainable
+    // durability tier and be rejected even though OPFS is configured.
+    await awaitLocalReady(db);
+    if (syncing()) await migrateLocalRows(db, secret, namespace);
+    state.principal = db.getAuthState().session?.user_id ?? null;
+    state.serverConfigured = connect;
     state.diagnostics.storageState = "persistent-driver-open";
     state.diagnostics.clientsCreated += 1;
     state.diagnostics.activeClients += 1;
@@ -80,6 +152,15 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
 }
 
 async function destroyClient(state: RuntimeSlot, db: Db): Promise<void> {
+  await db.shutdown();
+  state.diagnostics.activeClients -= 1;
+  notifyDiagnostics(state);
+}
+
+async function replaceClient(state: RuntimeSlot, db: Db): Promise<void> {
+  // The secret store was updated before this point. Shut down the old worker and
+  // client without `logout()`, which would clear local account state that must
+  // carry forward into the restored/sync-enabled runtime.
   await db.shutdown();
   state.diagnostics.activeClients -= 1;
   notifyDiagnostics(state);
@@ -131,6 +212,16 @@ export function getRuntimeDiagnostics(): RuntimeDiagnostics {
   return { ...slot().diagnostics };
 }
 
+/** The stable Jazz principal currently opened by the package runtime. */
+export function getRuntimePrincipal(): string | null {
+  return slot().principal;
+}
+
+/** Whether the active Jazz client was created with a managed transport to reconnect. */
+export function runtimeCanReconnect(): boolean {
+  return slot().serverConfigured;
+}
+
 export function subscribeRuntimeDiagnostics(listener: () => void): () => void {
   const listeners = slot().diagnosticListeners;
   listeners.add(listener);
@@ -151,6 +242,48 @@ export function recreateRuntime(): Promise<LofiRuntime> {
       state.client,
       () => createClient(state),
       (current) => destroyClient(state, current),
+    );
+    return await adapter.get(() => Promise.resolve(db), (current) => attachRuntime(state, current));
+  })();
+  const tracked = operation.finally(() => {
+    if (recreationPromise === tracked) recreationPromise = null;
+  });
+  recreationPromise = tracked;
+  return tracked;
+}
+
+/**
+ * Fully tears down a browser persistent worker and reloads the document. Jazz
+ * alpha.53 cannot attach a second OPFS worker reliably in the same document
+ * after shutdown; navigation is the supported clean-runtime boundary.
+ */
+export async function reloadBrowserRuntime(): Promise<never> {
+  await shutdownRuntime();
+  globalThis.location.reload();
+  return await new Promise<never>(() => {});
+}
+
+/**
+ * Replaces the local-first secret and every runtime object tied to the old
+ * principal. Consumers and the old Jazz client close before the secret is
+ * replaced; a fresh runtime then opens on the restored principal.
+ */
+export function replaceRuntimePrincipal(secret: string): Promise<LofiRuntime> {
+  if (recreationPromise) return recreationPromise;
+  const state = slot();
+  const operation = (async () => {
+    if (typeof window !== "undefined" && typeof SharedWorker !== "undefined") {
+      await shutdownRuntime();
+      await BrowserAuthSecretStore.saveSecret(secret, { appId });
+      globalThis.location.reload();
+      return await new Promise<LofiRuntime>(() => {});
+    }
+    await adapter.release((runtime) => runtime.shutdown());
+    const db = await replaceResource(
+      state.client,
+      () => BrowserAuthSecretStore.saveSecret(secret, { appId }),
+      () => createClient(state),
+      (current) => replaceClient(state, current),
     );
     return await adapter.get(() => Promise.resolve(db), (current) => attachRuntime(state, current));
   })();

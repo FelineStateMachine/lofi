@@ -49,6 +49,40 @@ export function recreateResource<T>(
     state.value = null;
     state.promise = null;
     if (previous) await destroy(previous);
+    // Browser SharedWorker port shutdown completes on a later task even after
+    // the Db shutdown promise resolves. Yield once before opening the replacement
+    // so the new persistent client does not attach to the retiring broker.
+    if (previous) await new Promise((resolve) => setTimeout(resolve, 50));
+    const value = await create();
+    state.value = value;
+    state.promise = Promise.resolve(value);
+    return value;
+  });
+  const tracked = recreation.finally(() => {
+    if (state.recreation === tracked) state.recreation = null;
+  });
+  state.recreation = tracked;
+  return tracked;
+}
+
+/**
+ * Replaces a serialized resource after an async preparation step. Callers are
+ * held behind the recreation promise while preparation and replacement run.
+ */
+export function replaceResource<T>(
+  state: SerializedResourceState<T>,
+  prepare: () => Promise<void>,
+  create: () => Promise<T>,
+  destroy: (value: T) => Promise<void>,
+): Promise<T> {
+  if (state.recreation) return state.recreation;
+  const recreation = enqueue(state, async () => {
+    await prepare();
+    const previous = state.value;
+    state.value = null;
+    state.promise = null;
+    if (previous) await destroy(previous);
+    if (previous) await new Promise((resolve) => setTimeout(resolve, 50));
     const value = await create();
     state.value = value;
     state.promise = Promise.resolve(value);

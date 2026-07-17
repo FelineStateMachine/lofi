@@ -1,7 +1,8 @@
 # Testing a lofi app
 
 The generated template separates fast deterministic tests from opt-in browser scenarios that need a
-running app, Chromium, and—for convergence—managed sync.
+running app, Chromium, and—for convergence—managed sync. Framework release checks also exercise
+recoverable accounts and access policies; generated applications reuse those package-owned seams.
 
 ```mermaid
 flowchart TB
@@ -100,6 +101,25 @@ sleeps; readiness helpers retry observable conditions until their timeout.
 Browser fixtures can save artifacts under `test-results/`. Snapshot callbacks should contain counts,
 booleans, state names, or sanitized identifiers—not task text, environment values, recovery phrases,
 or other user data.
+
+## Framework recovery and permission evidence
+
+The framework repository's `deno task check` includes the access-security suite. It uses Jazz's
+permission-test app for owner, recipient, unrelated-user, revoke, fixed-role, membership, removal,
+and self-leave rejection cases, plus a real local Jazz server for offline grant/revoke and
+membership reconciliation.
+
+`deno task test:golden` extends the existing generated-app runner with a two-profile journey. A
+Chromium virtual authenticator creates and exports a resident credential, a fresh browser process
+imports it, and the real WebAuthn assertion restores the same Jazz principal and synced rows. The
+runner pins the exported credential as the assertion's allow-list because headless Chromium cannot
+show its resident-credential account chooser. It also proves recovery-phrase fallback when the
+credentials API is unavailable and proves that stopped sync retains the managed local replica
+through a production offline reload.
+
+This is automated virtual-authenticator evidence, not physical iOS or Android evidence. It does not
+prove passkey-provider portability, mobile installed-PWA lifecycle behavior, or transport
+convergence without the local Jazz server used by the journey.
 
 ## Physical-device checks
 

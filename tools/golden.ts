@@ -3,17 +3,22 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
+import { deploy, startLocalJazzServer } from "jazz-tools/testing";
 import { LOFI_VERSION } from "../package/version.ts";
 import { waitForReady } from "../package/testing/readiness.ts";
 import { redactDiagnosticText } from "../package/testing/safety.ts";
 import { sanitizeTraceArchive } from "../package/testing/trace.ts";
+import {
+  type VirtualAuthenticatorCredential,
+  withVirtualAuthenticator,
+} from "../package/testing/webauthn.ts";
 
 type PackageSource = "local" | "registry";
 type StageLog = { command?: string; stdout: string; stderr: string };
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsRoot = join(repositoryRoot, "test-results", "golden");
-const privateValues = ["golden-online-task", "golden-offline-task"];
+const privateValues = ["golden-online-task", "golden-offline-task", "golden-synced-task"];
 const logs = new Map<string, StageLog>();
 const timings = new Map<string, number>();
 let activeStage = "setup";
@@ -132,10 +137,12 @@ class ManagedProcess {
     readonly name: string,
     args: readonly string[],
     readonly cwd: string,
+    environment: Readonly<Record<string, string>> = {},
   ) {
     this.child = new Deno.Command(Deno.execPath(), {
       args: [...args],
       cwd,
+      env: { ...environment },
       stdout: "piped",
       stderr: "piped",
     }).spawn();
@@ -206,6 +213,23 @@ class ManagedProcess {
       logs.set(this.name, this.output);
     }
   }
+}
+
+async function configureGoldenSync(projectRoot: string) {
+  const server = await startLocalJazzServer({ allowLocalFirstAuth: true });
+  const cacheBuster = `?golden=${Date.now()}`;
+  const [{ app }, { default: permissions }] = await Promise.all([
+    import(`${pathToFileURL(join(projectRoot, "src", "schema.ts")).href}${cacheBuster}`),
+    import(`${pathToFileURL(join(projectRoot, "src", "permissions.ts")).href}${cacheBuster}`),
+  ]);
+  await deploy({
+    appId: server.appId,
+    serverUrl: server.url,
+    adminSecret: server.adminSecret,
+    schema: app,
+    permissions,
+  });
+  return server;
 }
 
 function allocatePort(): number {
@@ -341,7 +365,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 11, `expected 11 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 12, `expected 12 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -495,6 +519,33 @@ const taskAppReady = () => {
   return status !== null && /item\(s\)/.test(status.textContent ?? "");
 };
 
+async function selectVirtualCredential(page: Page, credentialId: string): Promise<void> {
+  await page.evaluate((encodedId) => {
+    const normalized = encodedId.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const bytes = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+    const credentials = navigator.credentials;
+    const original = credentials.get.bind(credentials);
+    Object.defineProperty(credentials, "preventSilentAccess", {
+      configurable: true,
+      value: () => Promise.resolve(),
+    });
+    Object.defineProperty(credentials, "get", {
+      configurable: true,
+      value: (options?: CredentialRequestOptions) => {
+        if (!options?.publicKey) return original(options);
+        return original({
+          ...options,
+          publicKey: {
+            ...options.publicKey,
+            allowCredentials: [{ id: bytes, type: "public-key", transports: ["internal"] }],
+          },
+        });
+      },
+    });
+  }, credentialId);
+}
+
 async function main() {
   const { source, version } = parseArgs(Deno.args);
   await Deno.remove(artifactsRoot, { recursive: true }).catch((error) => {
@@ -502,13 +553,19 @@ async function main() {
   });
   const temporaryRoot = await Deno.makeTempDir({ prefix: "lofi-golden-" });
   const port = allocatePort();
-  const origin = `http://127.0.0.1:${port}/`;
+  // `localhost` is a valid WebAuthn RP-ID; an IP address is not portable across
+  // authenticators even though Chromium treats it as a secure context.
+  const origin = `http://localhost:${port}/`;
   let projectRoot: string | undefined;
   let dev: ManagedProcess | undefined;
   let preview: ManagedProcess | undefined;
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
   let page: Page | undefined;
+  let syncServer: Awaited<ReturnType<typeof startLocalJazzServer>> | undefined;
+  let recoveryCredential: VirtualAuthenticatorCredential | undefined;
+  let recoveryPhrase = "";
+  let restoredIdentity = "";
   const browserDiagnostics: string[] = [];
   try {
     projectRoot = await stage("create", () => generateProject(source, version, temporaryRoot));
@@ -526,15 +583,26 @@ async function main() {
         runCommand("test", Deno.execPath(), ["task", "test"], projectRoot!).then(() => undefined),
     );
 
-    dev = new ManagedProcess("dev", [
-      "task",
+    syncServer = await stage("managed sync", () => configureGoldenSync(projectRoot!));
+    const syncEnvironment = {
+      JAZZ_APP_ID: syncServer.appId,
+      JAZZ_SERVER_URL: syncServer.url,
+    };
+
+    dev = new ManagedProcess(
       "dev",
-      "--",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-    ], projectRoot);
+      [
+        "task",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(port),
+      ],
+      projectRoot,
+      syncEnvironment,
+    );
     await stage(
       "development readiness",
       async () => {
@@ -546,6 +614,7 @@ async function main() {
     context = await browser.newContext();
     await context.tracing.start({ screenshots: false, snapshots: false, sources: false });
     page = await context.newPage();
+    const profileAAuthenticator = await withVirtualAuthenticator(page);
     page.on(
       "console",
       (message) => browserDiagnostics.push(`console ${message.type()}: ${message.text()}`),
@@ -581,13 +650,155 @@ async function main() {
       );
       assert(worker === "development-disabled", `development worker state was ${worker}`);
     });
+    await stage("passkey backup", async () => {
+      await page!.getByRole("button", { name: "Back up & enable sync" }).click();
+      await page!.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
+        state: "visible",
+        timeout: 30_000,
+      });
+      await page!.getByRole("button", { name: "Show recovery phrase" }).click();
+      await page!.locator(".account-words").waitFor({ state: "visible" });
+      recoveryPhrase = (await page!.locator(".account-words li").allTextContents()).join(" ");
+      assert(recoveryPhrase.split(" ").length === 24, "backup did not reveal a 24-word phrase");
+      privateValues.push(recoveryPhrase);
+      restoredIdentity = (await page!.locator("[data-sharing-identity]").textContent())?.trim() ??
+        "";
+      assert(restoredIdentity.startsWith("lofi1:"), "profile A did not expose a sharing identity");
+      const credentials = await profileAAuthenticator.credentials();
+      assert(
+        credentials.length === 1,
+        `expected one recoverable passkey, received ${credentials.length}`,
+      );
+      recoveryCredential = credentials[0];
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task store after sync runtime recreation",
+        timeoutMs: 30_000,
+      });
+      await page!.fill("#new-task", privateValues[2]);
+      await page!.press("#new-task", "Enter");
+      await page!.locator(".task", { hasText: privateValues[2] }).waitFor({ state: "visible" });
+    });
+    await profileAAuthenticator.dispose();
+
+    await stage("two-profile passkey restore", async () => {
+      const profileBBrowser = await chromium.launch({ headless: true });
+      const profileB = await profileBBrowser.newContext();
+      const profileBPage = await profileB.newPage();
+      const profileBAuthenticator = await withVirtualAuthenticator(profileBPage);
+      try {
+        await profileBPage.goto(origin, { waitUntil: "domcontentloaded" });
+        await waitForReady(profileBPage, taskAppReady, undefined, {
+          description: "fresh profile B local account",
+          timeoutMs: 30_000,
+        });
+        await profileBAuthenticator.addCredential(recoveryCredential!);
+        assert(
+          (await profileBAuthenticator.credentials()).length === 1,
+          "profile B virtual authenticator did not retain the recovery credential",
+        );
+        await selectVirtualCredential(profileBPage, recoveryCredential!.credentialId);
+        await profileBPage.getByRole("checkbox", { name: /I understand restore replaces/ }).check();
+        await profileBPage.getByRole("button", { name: "Use passkey" }).click();
+        try {
+          await profileBPage.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
+            state: "visible",
+            timeout: 5_000,
+          });
+        } catch (cause) {
+          const accountText = await profileBPage.locator(".account").innerText().catch(() => "");
+          const elected = await profileBPage.evaluate(() =>
+            Object.entries(localStorage).some(([key, value]) =>
+              key.startsWith("lofi:sync-elected:") && value === "1"
+            )
+          );
+          throw new Error(
+            `profile B did not complete passkey restore (sync elected: ${elected}): ${accountText}`,
+            { cause },
+          );
+        }
+        const identityB = (await profileBPage.locator("[data-sharing-identity]").textContent())
+          ?.trim() ?? "";
+        assert(
+          identityB === restoredIdentity,
+          "passkey restore opened a different session.user_id",
+        );
+        await waitForReady(profileBPage, taskAppReady, undefined, {
+          description: "profile B restored task store",
+          timeoutMs: 30_000,
+        });
+        await profileBPage.locator(".task", { hasText: privateValues[2] }).waitFor({
+          state: "visible",
+          timeout: 30_000,
+        });
+        await profileBPage.locator(".task", { hasText: privateValues[0] }).waitFor({
+          state: "visible",
+          timeout: 30_000,
+        });
+      } finally {
+        await profileBAuthenticator.dispose().catch(() => undefined);
+        await profileB.close();
+        await profileBBrowser.close();
+      }
+    });
+
+    await stage("phrase fallback after unavailable passkey", async () => {
+      const profileCBrowser = await chromium.launch({ headless: true });
+      const profileC = await profileCBrowser.newContext();
+      await profileC.addInitScript(() => {
+        Object.defineProperty(navigator, "credentials", { configurable: true, value: undefined });
+      });
+      const profileCPage = await profileC.newPage();
+      try {
+        await profileCPage.goto(origin, { waitUntil: "domcontentloaded" });
+        await waitForReady(profileCPage, taskAppReady, undefined, {
+          description: "fresh profile C local account",
+          timeoutMs: 30_000,
+        });
+        await profileCPage.getByRole("checkbox", { name: /I understand restore replaces/ }).check();
+        await profileCPage.getByRole("button", { name: "Use passkey" }).click();
+        await profileCPage.locator("#recovery-input").waitFor({
+          state: "visible",
+          timeout: 10_000,
+        });
+        await profileCPage.fill("#recovery-input", recoveryPhrase);
+        await profileCPage.getByRole("button", { name: "Restore account" }).click();
+        await profileCPage.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
+          state: "visible",
+          timeout: 30_000,
+        });
+        const identityC = (await profileCPage.locator("[data-sharing-identity]").textContent())
+          ?.trim() ?? "";
+        assert(
+          identityC === restoredIdentity,
+          "phrase fallback opened a different session.user_id",
+        );
+      } finally {
+        await profileC.close();
+        await profileCBrowser.close();
+      }
+    });
+    await stage("return to local-only", async () => {
+      await page!.getByRole("button", { name: "Stop syncing" }).click();
+      await page!.getByRole("heading", { name: "Back up & sync" }).waitFor({ state: "visible" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task store after returning local-only",
+        timeoutMs: 30_000,
+      });
+      await page!.locator(".task", { hasText: privateValues[2] }).waitFor({ state: "visible" });
+    });
     await stage("development shutdown", () => dev!.stop());
     dev = undefined;
 
     await stage(
       "build",
       () =>
-        runCommand("build", Deno.execPath(), ["task", "build"], projectRoot!).then(() => undefined),
+        runCommand(
+          "build",
+          Deno.execPath(),
+          ["task", "build"],
+          projectRoot!,
+          syncEnvironment,
+        ).then(() => undefined),
     );
     await stage("production output", () => assertProductionOutput(projectRoot!));
     preview = new ManagedProcess(
@@ -629,7 +840,7 @@ async function main() {
       await waitForReady(page!, taskAppReady, undefined, {
         description: "offline cold page ready",
       });
-      await page!.locator(".task", { hasText: privateValues[0] }).waitFor({ state: "visible" });
+      await page!.locator(".task", { hasText: privateValues[2] }).waitFor({ state: "visible" });
       await page!.fill("#new-task", privateValues[1]);
       await page!.press("#new-task", "Enter");
       await page!.locator(".task", { hasText: privateValues[1] }).waitFor({ state: "visible" });
@@ -645,7 +856,7 @@ async function main() {
           );
           const taskStatus = document.querySelector('[role="status"]')?.textContent ?? "";
           return /item\(s\)/.test(taskStatus) &&
-            syncLabel?.nextElementSibling?.textContent?.trim() === "local-only";
+            syncLabel?.nextElementSibling?.textContent?.trim() === "available — not yet backed up";
         },
         undefined,
         { description: "public local-only durability and sync state" },
@@ -663,7 +874,10 @@ async function main() {
       });
       assert(state.worker === "ready", `production service worker ended in ${state.worker}`);
       assert(/item\(s\)/.test(state.status), "public retained-row state is missing");
-      assert(state.sync === "local-only", `unexpected public sync state ${state.sync}`);
+      assert(
+        state.sync === "available — not yet backed up",
+        `unexpected public sync state ${state.sync}`,
+      );
     });
     await context.tracing.stop();
     await stage("preview shutdown", () => preview!.stop());
@@ -686,6 +900,7 @@ async function main() {
     await Promise.allSettled([dev?.stop(), preview?.stop()]);
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    await syncServer?.stop().catch(() => undefined);
     await Deno.remove(temporaryRoot, { recursive: true }).catch(() => undefined);
   }
 }

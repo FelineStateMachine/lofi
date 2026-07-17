@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 360" role="img" aria-labelledby="title">
+  <title id="title">lofi titlemark for dark backgrounds</title>
+  <defs>
+    <mask id="lofi-title-dark-cutout">
+      <rect width="512" height="512" fill="white" />
+      <path
+        d="M183 184v146h124M183 330 91 455"
+        fill="none"
+        stroke="black"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="38"
+      />
+    </mask>
+  </defs>
+  <g transform="translate(8 20) scale(.625)">
+    <path
+      d="M415 56C253 58 112 112 67 224c-32 80-21 173 24 231l47-49c57 29 135 21 197-20 52-34 80-93 80-160Z"
+      fill="#d5f26a"
+      mask="url(#lofi-title-dark-cutout)"
+    />
+  </g>
+  <g fill="#d5f26a">
+    <rect x="375" y="58" width="54" height="242" rx="12" />
+    <path
+      d="M658 210a108 92 0 1 1-216 0 108 92 0 0 1 216 0Zm-55 0a53 46 0 1 0-106 0 53 46 0 0 0 106 0Z"
+      fill-rule="evenodd"
+    />
+  </g>
+  <g fill="none" stroke="#f3faf6" stroke-linecap="round" stroke-linejoin="round" stroke-width="54">
+    <path d="M765 300V146c0-62 33-89 95-89" />
+    <path d="M728 155h126" />
+  </g>
+  <g fill="#f3faf6">
+    <rect x="925" y="137" width="54" height="163" rx="12" />
+    <circle cx="952" cy="80" r="29" />
+  </g>
+</svg>

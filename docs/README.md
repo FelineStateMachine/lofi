@@ -38,6 +38,9 @@ The root [README](../README.md) provides the shortest product overview and comma
 - [Configuration](reference/configuration.md)
 - [Generated project layout](reference/project-layout.md)
 - [Identity and recovery model](auth-identity.md)
+- [Account and access API](reference/access.md)
+- [Shared example](examples/shared.md)
+- [Group example](examples/group.md)
 - [Advanced device-auth primitive](auth.md)
 
 ## The author boundary

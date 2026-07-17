@@ -2,7 +2,7 @@
 
 Status: **framework contributor contract with retained M1/M2 history**\
 Scope: **product promises, M1 feasibility, and M2 DevX graduation**\
-Last reviewed: **2026-07-15**
+Last reviewed: **2026-07-17**
 
 > Application developers should start with the [developer documentation](README.md). Milestone,
 > issue, and evidence language below is retained for framework contributors and should not be read
@@ -41,10 +41,19 @@ deno task dev
 
 The JSR surface is one package, `@nzip/lofi`, with one version and publish operation. Its supported
 public surface includes the configured browser runtime, Preact integration, Astro integration,
-generator, command subpaths, and `./testing`. Framework implementations remain package-owned.
+generator, command subpaths, `./access`, and `./testing`. Framework implementations remain
+package-owned.
 
 From there the developer makes a retained local write, reloads it, works offline, runs checks,
 builds, previews, and opens the same stable secure origin on a physical device.
+
+The pull-request release gate runs that journey against a generated checkout, including managed sync
+opt-in, local-row migration, recoverable-passkey restore in a fresh browser profile, stable
+principal equality, synced-row download, recovery-phrase fallback, and return to an offline managed
+replica. The same `deno task check` invocation includes Jazz permission-harness coverage for
+private, direct-shared, and fixed-role group policies. Browser failure evidence remains sanitized
+and is retained only when the gate fails. Virtual-authenticator results are not physical-device or
+cross-provider portability claims.
 
 ### M1 graduation journey
 

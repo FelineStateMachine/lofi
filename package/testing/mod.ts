@@ -30,6 +30,7 @@ export {
 export { ReadinessError, type ReadinessOptions, waitForReady } from "./readiness.ts";
 export type { ValueFreeState } from "./safety.ts";
 export {
+  type VirtualAuthenticatorCredential,
   type VirtualAuthenticatorHandle,
   type VirtualAuthenticatorOptions,
   withVirtualAuthenticator,

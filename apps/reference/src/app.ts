@@ -10,7 +10,7 @@ export const app = defineLofiApp({
   // Identity is local-first: first boot opens a private, on-device account with
   // no sign-in. When a managed Jazz app is configured (JAZZ_APP_ID / JAZZ_SERVER_URL —
   // see `deno task jazz:provision`), the AccountGate island lets the user elect to
-  // back up and sync it, and recover it from a phrase. See the framework's
+  // back up and sync it, and recover it from a passkey or phrase. See the framework's
   // `docs/sync-and-recovery.md` guide.
   //
   // Hostnames you have committed to keeping stable, for the optional device-credential
@@ -18,6 +18,9 @@ export const app = defineLofiApp({
   // binds to its origin; left empty, the served origin is trusted. Pin your permanent
   // hostname(s) here before relying on a credential across a host change.
   credentialOrigins: [] as readonly string[],
+  // Pin this to the canonical production hostname before users create recoverable
+  // passkeys. Omit it in local development to use the current hostname.
+  // passkey: { rpId: "app.example.com" },
   sync: { adapter: "jazz" as const },
   // Source/home link shown in the starter footer. Point it at your own repo.
   repositoryUrl: "https://github.com/FelineStateMachine/lofi",

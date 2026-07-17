@@ -1,4 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#18231f" />
-  <path d="M19 18v28h27v-8H28V18z" fill="#d5f26a" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">lofi leaf mark</title>
+  <rect width="512" height="512" rx="112" fill="#18231f" />
+  <path
+    d="M415 56C253 58 112 112 67 224c-32 80-21 173 24 231l47-49c57 29 135 21 197-20 52-34 80-93 80-160Z"
+    fill="#d5f26a"
+  />
+  <path
+    d="M164 184h38v127h105v38H164ZM168 319l30 22-92 125-30-22Z"
+    fill="#18231f"
+  />
 </svg>

@@ -93,3 +93,21 @@ server.
 
 The phrase restores account authority, not unsynced device storage. Data returns only if it reached
 managed sync before the original device was lost or cleared.
+
+## Passkey restore was cancelled or cannot find an account
+
+- **Cancelled:** retry the user-verification prompt, or continue with the recovery phrase.
+- **No recoverable passkey:** confirm the passkey exists in the active provider. A legacy
+  phrase-reveal guard is not an account backup.
+- **Different app hostname / RP-ID:** open the canonical production hostname used during backup.
+- **Verification failed:** unlock the platform/password-manager authenticator and retry.
+- **Unsupported browser/provider:** use the recovery phrase. Provider availability is not portable
+  across every iOS, Android, browser, and password-manager combination.
+
+The package maps these states without printing credential IDs, account secrets, or phrases.
+
+## Sharing says managed sync is required
+
+Private resources work local-only. Direct shares and groups require both a configured Jazz server
+and the current account's explicit sync election. Back up and enable sync in `AccountGate`, then
+retry. A configured deployment alone does not opt the current account into sync.

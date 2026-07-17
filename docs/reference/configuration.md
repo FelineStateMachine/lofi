@@ -11,11 +11,16 @@
 | `schema`            | Typed application schema exported by `src/schema.ts`                 |
 | `storage`           | Durable storage policy; generated projects use `"durable"`           |
 | `credentialOrigins` | Stable hostnames allowed for optional WebAuthn/device-credential use |
+| `passkey.rpId`      | Canonical production hostname for recoverable account passkeys       |
 | `sync.adapter`      | Generated sync adapter selection                                     |
 | `repositoryUrl`     | Source/home link displayed by the starter                            |
 
 Choose `databaseName` and stable credential origins before shipping. Changing them later can change
 which local database or WebAuthn relying party the browser opens.
+
+Omitting `passkey.rpId` uses `location.hostname`. That is useful in local development, but each
+preview hostname becomes a separate passkey namespace. Pin the stable production RP-ID before
+offering passkey backup to real users.
 
 ## Environment configuration
 

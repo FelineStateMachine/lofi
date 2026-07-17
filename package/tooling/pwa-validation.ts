@@ -29,6 +29,11 @@ const imageTypes = new Map([
   ["image/svg+xml", new Set([".svg"])],
   ["image/webp", new Set([".webp"])],
 ]);
+const protocolPlaceholderValue = "web+lofi:placeholder";
+
+function protocolHandlerUrl(value: string, manifestUrl: URL): URL {
+  return new URL(value.replace("%s", encodeURIComponent(protocolPlaceholderValue)), manifestUrl);
+}
 
 function issue(detail: string, remediation: string): PwaValidationIssue {
   return { detail, remediation };
@@ -554,6 +559,66 @@ async function parseAndValidateManifest(
       }
     }
 
+    if (manifest.protocol_handlers !== undefined) {
+      if (!Array.isArray(manifest.protocol_handlers) || manifest.protocol_handlers.length === 0) {
+        issues.push(
+          issue(`${manifestFile}: protocol_handlers must be a non-empty array`, remediation),
+        );
+      } else {
+        const protocols = new Set<string>();
+        for (const [index, raw] of manifest.protocol_handlers.entries()) {
+          const label = `${manifestFile}: protocol_handlers[${index}]`;
+          if (!isObject(raw)) {
+            issues.push(issue(`${label} must be an object`, remediation));
+            continue;
+          }
+          const unknown = Object.keys(raw).filter((member) =>
+            !["protocol", "url"].includes(member)
+          );
+          if (unknown.length > 0) {
+            issues.push(issue(`${label} contains unsupported members`, remediation));
+          }
+          if (!nonEmptyString(raw.protocol) || !/^web\+[a-z]+$/.test(raw.protocol)) {
+            issues.push(
+              issue(`${label}.protocol must be a custom lowercase web+ scheme`, remediation),
+            );
+          } else if (protocols.has(raw.protocol)) {
+            issues.push(issue(`${label}.protocol must not repeat`, remediation));
+          } else {
+            protocols.add(raw.protocol);
+          }
+          if (!nonEmptyString(raw.url)) {
+            issues.push(issue(`${label}.url must be a non-empty URL template`, remediation));
+            continue;
+          }
+          if ((raw.url.match(/%s/g) ?? []).length !== 1) {
+            issues.push(issue(`${label}.url must contain exactly one %s placeholder`, remediation));
+            continue;
+          }
+          try {
+            const url = protocolHandlerUrl(raw.url, manifestUrl);
+            if (!withinScope(url, scope)) {
+              issues.push(issue(`${label}.url must stay inside manifest scope`, remediation));
+            }
+            if (url.hash) {
+              issues.push(issue(`${label}.url must not contain a fragment`, remediation));
+            }
+            const values = [...url.searchParams.values()];
+            if (values.length !== 1 || values[0] !== protocolPlaceholderValue) {
+              issues.push(
+                issue(
+                  `${label}.url must put %s as the complete value of one query parameter`,
+                  remediation,
+                ),
+              );
+            }
+          } catch {
+            issues.push(issue(`${label}.url is not a valid URL template`, remediation));
+          }
+        }
+      }
+    }
+
     if (manifest.share_target !== undefined) {
       const label = `${manifestFile}: share_target`;
       const target = manifest.share_target;
@@ -817,6 +882,25 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
         }
       } catch {
         // Source validation already reports malformed action URLs.
+      }
+    }
+  }
+  if (Array.isArray(result.manifest?.protocol_handlers)) {
+    const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
+    for (const [index, raw] of result.manifest.protocol_handlers.entries()) {
+      if (!isObject(raw) || !nonEmptyString(raw.url) || !raw.url.includes("%s")) continue;
+      try {
+        const route = emittedRoutePath(protocolHandlerUrl(raw.url, manifestUrl), basePath);
+        if (!route || !htmlFiles.includes(route)) {
+          issues.push(
+            issue(
+              `dist/${manifestFile}: protocol_handlers[${index}].url has no emitted offline route`,
+              remediation,
+            ),
+          );
+        }
+      } catch {
+        // Source validation already reports malformed handler URL templates.
       }
     }
   }

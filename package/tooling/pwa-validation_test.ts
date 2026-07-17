@@ -236,6 +236,38 @@ Deno.test("source PWA validation checks opt-in file handlers", async () => {
   }
 });
 
+Deno.test("source PWA validation checks opt-in protocol handlers", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.protocol_handlers = [{
+      protocol: "mailto",
+      url: "../outside/%s?again=%s#fragment",
+      extra: true,
+    }, {
+      protocol: "web+lofi",
+      url: "./open/?url=prefix-%s",
+    }, {
+      protocol: "web+lofi",
+      url: "./open/?url=%s",
+    }];
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project, "/field-notes/");
+    assert(hasIssue(issues, "custom lowercase web+"), "privileged protocol was accepted");
+    assert(hasIssue(issues, "exactly one %s"), "duplicate placeholder was accepted");
+    assert(hasIssue(issues, "complete value"), "prefixed placeholder was accepted");
+    assert(hasIssue(issues, "must not repeat"), "duplicate protocol was accepted");
+    assert(hasIssue(issues, "contains unsupported members"), "unknown protocol member passed");
+
+    manifest.protocol_handlers = [{ protocol: "web+lofi", url: "./open/?url=%s" }];
+    await writeManifest(project, manifest);
+    const valid = await sourcePwaIssues(project, "/field-notes/");
+    assert(valid.length === 0, `valid protocol handler was rejected: ${JSON.stringify(valid)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("source PWA validation permits replacement branding and optional members", async () => {
   const { root, project } = await makeProject();
   try {
@@ -342,6 +374,7 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
       action: "./import/",
       accept: { "application/json": [".json"] },
     }];
+    manifest.protocol_handlers = [{ protocol: "web+lofi", url: "./open/?url=%s" }];
     await Deno.writeTextFile(
       join(dist, "manifest.webmanifest"),
       `${JSON.stringify(manifest, null, 2)}\n`,
@@ -358,6 +391,10 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
     assert(
       hasIssue(issues, "file_handlers[0].action has no emitted offline route"),
       "missing file-handler route passed",
+    );
+    assert(
+      hasIssue(issues, "protocol_handlers[0].url has no emitted offline route"),
+      "missing protocol-handler route passed",
     );
   } finally {
     await Deno.remove(root, { recursive: true });

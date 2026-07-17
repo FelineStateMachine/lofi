@@ -7,7 +7,9 @@
  * @module
  */
 
+import { relative } from "node:path";
 import { runDenoStatus } from "../tooling/process.ts";
+import { prepareLofiAstroConfig } from "../astro/mod.ts";
 import { validatedCommandEnvironment } from "./shared.ts";
 
 const environment = await validatedCommandEnvironment();
@@ -30,8 +32,9 @@ console.log("PWA:         development service worker disabled");
 console.log("Device:      stable HTTPS URL not configured; device preview graduates in M3");
 
 const forwarded = Deno.args[0] === "--" ? Deno.args.slice(1) : Deno.args;
+const astroConfig = relative(Deno.cwd(), await prepareLofiAstroConfig());
 const status = await runDenoStatus(
-  ["run", "-A", "npm:astro@7.0.9", "dev", ...forwarded],
+  ["run", "-A", "npm:astro@7.0.9", "dev", "--config", astroConfig, ...forwarded],
   environment,
 );
 if (status.forwardedSignal) {

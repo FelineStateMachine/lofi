@@ -8,8 +8,9 @@
  * @module
  */
 
-import { extname, join } from "node:path";
+import { extname, join, relative } from "node:path";
 import { LOFI_VERSION } from "../version.ts";
+import { prepareLofiAstroConfig } from "../astro/mod.ts";
 import { loadEnvironment, serverEnvironmentNames } from "../tooling/environment.ts";
 import { precacheUrls, scanSecrets, sourceFingerprint, walkFiles } from "../tooling/project.ts";
 import { runDeno } from "../tooling/process.ts";
@@ -20,9 +21,23 @@ environment.LOFI_SKIP_JAZZ_MANAGED = "1";
 environment.JAZZ_ADMIN_SECRET = "";
 environment.BACKEND_SECRET = "";
 const sourceHash = (await sourceFingerprint()).slice(0, 12);
+const astroConfig = relative(Deno.cwd(), await prepareLofiAstroConfig());
+
+async function readPackageAsset(path: string): Promise<string> {
+  const url = new URL(path, import.meta.url);
+  if (url.protocol === "file:") return await Deno.readTextFile(url);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`failed to read package asset ${path}: HTTP ${response.status}`);
+  }
+  return await response.text();
+}
 
 exitOnFailure(
-  await runDeno(["run", "-A", "npm:astro@7.0.9", "build"], environment),
+  await runDeno(
+    ["run", "-A", "npm:astro@7.0.9", "build", "--config", astroConfig],
+    environment,
+  ),
   "production build",
 );
 
@@ -33,7 +48,7 @@ await Deno.writeTextFile(
   }\n`,
 );
 const serviceWorkerPath = "dist/sw.js";
-const serviceWorker = await Deno.readTextFile(serviceWorkerPath);
+const serviceWorker = await readPackageAsset("../runtime/sw.js");
 await Deno.writeTextFile(
   serviceWorkerPath,
   serviceWorker.replace("__LOFI_BUILD_REVISION__", sourceHash),

@@ -3,6 +3,7 @@ import { extname, join, relative, resolve } from "node:path";
 const ignoredDirectories = new Set([
   ".astro",
   ".git",
+  ".lofi",
   ".playwright-cli",
   ".vite",
   "coverage",
@@ -25,15 +26,12 @@ export async function projectChecks(root = Deno.cwd()): Promise<ProjectCheck[]> 
   // example is replaced.
   const required = [
     "deno.json",
-    "astro.config.ts",
     "src/schema.ts",
     "src/permissions.ts",
     "src/app.ts",
     "src/pages/index.astro",
-    "src/_lofi/boot.ts",
-    "src/_lofi/runtime.ts",
+    "src/layouts/Shell.astro",
     "public/manifest.webmanifest",
-    "public/sw.js",
   ];
   const missing: string[] = [];
   for (const path of required) {

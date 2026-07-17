@@ -3,8 +3,8 @@
 Status: **primitive validated in reference source; `./auth` subpath deferred to a later milestone**\
 Scope: **device-local WebAuthn + PRF at-rest key derivation**
 
-> **Advanced/internal seam.** Generated applications do not expose this as a supported package
-> subpath, and normal product work should not edit `src/_lofi/auth.ts`. Use this document only when
+> **Advanced runtime seam.** Generated applications consume this through the supported root package
+> export, and normal product work should not reimplement it. Use this document only when
 > deliberately evaluating the optional device-credential primitive. Account sync and recovery are
 > documented separately in [Sync and recovery](sync-and-recovery.md).
 
@@ -14,7 +14,7 @@ against — so this module does exactly three things: enroll a device passkey, a
 and derive a credential-bound key to encrypt data **at rest**. The generated session runtime handles
 accounts, recovery phrases, and optional multi-device sync separately.
 
-The runtime lives at `apps/reference/src/_lofi/auth.ts`.
+The runtime lives at `package/runtime/auth.ts` and is exposed through `@nzip/lofi`.
 
 ## What it guarantees
 
@@ -43,7 +43,7 @@ import {
   encryptAtRest,
   enrollDeviceCredential,
   getAuthCapability,
-} from "./_lofi/auth.ts";
+} from "@nzip/lofi";
 
 // 1. Feature-detect before offering enrollment.
 const capability = await getAuthCapability();
@@ -68,7 +68,7 @@ console.log(credential.id, blob.iv.length, blob.ciphertext.length);
 
 ## Testing
 
-- **Unit** (`src/_lofi/auth_test.ts`): origin classification, enroll/authenticate, PRF result
+- **Unit** (`package/runtime/auth_test.ts`): origin classification, enroll/authenticate, PRF result
   handling, error mapping, and the HKDF -> AES-GCM round-trip run without a browser by injecting a
   fake `CredentialsContainer` and an explicit `rpId`.
 - **Browser** (`tests/auth_e2e_test.ts` + `@nzip/lofi/testing`'s `withVirtualAuthenticator`): a CDP

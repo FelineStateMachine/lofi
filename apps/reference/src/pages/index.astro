@@ -1,9 +1,9 @@
 ---
 import AccountGate from "../islands/AccountGate";
 import TaskList from "../islands/TaskList";
-import DeviceStatus from "../_lofi/DeviceStatus";
-import Shell from "../_lofi/Shell.astro";
-import { referenceApp } from "../app.ts";
+import { DeviceStatus } from "@nzip/lofi/preact";
+import Shell from "../layouts/Shell.astro";
+import { app } from "../app.ts";
 import "../styles/global.css";
 ---
 
@@ -20,6 +20,6 @@ import "../styles/global.css";
   <TaskList client:load />
   <DeviceStatus client:load />
   <footer>
-    <a href={referenceApp.repositoryUrl} rel="noreferrer">lofi on GitHub →</a>
+    <a href={app.repositoryUrl} rel="noreferrer">lofi on GitHub →</a>
   </footer>
 </Shell>

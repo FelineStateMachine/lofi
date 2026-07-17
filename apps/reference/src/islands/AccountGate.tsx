@@ -10,14 +10,14 @@ import {
   revealRecoveryPhrase,
   type Session,
   stopSyncBackup,
-} from "../_lofi/session.ts";
+} from "@nzip/lofi";
 
 /**
  * Author-owned account example. lofi is local-first: the app already opened on a
  * device-local account with no sign-in. This island offers the *opt-in* upgrade —
  * back up and sync the account, and recover it elsewhere — using only the
- * primitives in `src/_lofi/session.ts`. Delete it if your app is local-only, or
- * restyle it freely; nothing under `src/_lofi/` needs to change.
+ * public `@nzip/lofi` session primitives. Delete it if your app is local-only,
+ * or restyle it freely; framework implementation remains package-owned.
  *
  * It renders only when a managed Jazz app is configured (`JAZZ_APP_ID` /
  * `JAZZ_SERVER_URL`, e.g. via `deno task jazz:provision`), because a recovery

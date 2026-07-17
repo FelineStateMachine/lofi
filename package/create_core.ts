@@ -21,6 +21,7 @@ const generatedGitignore = `.env
 node_modules/
 .astro/
 .vite/
+.lofi/
 dist/
 coverage/
 playwright-report/
@@ -61,7 +62,7 @@ on-device account with no sign-in. To enable managed sync and account backup, ru
 
 With a Jazz app configured, the \`AccountGate\` island lets a user back up and sync their local account
 and recover it from a 24-word recovery phrase. The account they already have carries over — electing
-to sync never changes its identity. See the framework side in \`src/_lofi/session.ts\`.
+to sync never changes its identity. The framework implementation is provided by \`@nzip/lofi\`.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
@@ -88,10 +89,13 @@ Point them at any other static host by editing those two tasks.
 // — npm imports, tasks (including schema/migration/deploy), fmt, lint — is copied
 // verbatim, so the template is the single source of truth for project config.
 const lofiImportTargets: Record<string, { subpath: string; localPath: string }> = {
+  "@nzip/lofi": { subpath: "", localPath: "runtime/mod.ts" },
+  "@nzip/lofi/astro": { subpath: "astro", localPath: "astro/mod.ts" },
   "@nzip/lofi/build": { subpath: "build", localPath: "commands/build.ts" },
   "@nzip/lofi/dev": { subpath: "dev", localPath: "commands/dev.ts" },
   "@nzip/lofi/doctor": { subpath: "doctor", localPath: "commands/doctor.ts" },
   "@nzip/lofi/preview": { subpath: "preview", localPath: "commands/preview.ts" },
+  "@nzip/lofi/preact": { subpath: "preact", localPath: "preact/mod.ts" },
   "@nzip/lofi/provision": { subpath: "provision", localPath: "commands/provision.ts" },
   "@nzip/lofi/test": { subpath: "test", localPath: "commands/run_tests.ts" },
   "@nzip/lofi/testing": { subpath: "testing", localPath: "testing/mod.ts" },
@@ -110,7 +114,11 @@ async function rewritePortableDenoConfig(root: string, packagePrefix: string): P
     if (typeof imports[key] !== "string") {
       throw new Error(`starter deno.json is missing the ${key} import`);
     }
-    imports[key] = isFileOverride ? `${packagePrefix}${localPath}` : `${packagePrefix}${subpath}`;
+    imports[key] = isFileOverride
+      ? `${packagePrefix}${localPath}`
+      : subpath
+      ? `${packagePrefix}${subpath}`
+      : packagePrefix.slice(0, -1);
   }
   // The reference app links the local @nzip/lofi package for its dev loop; a
   // generated project resolves the pinned JSR version directly.
@@ -179,17 +187,6 @@ async function writeTemplate(destination: string): Promise<void> {
   }
 }
 
-async function rewritePortableAstroConfig(root: string): Promise<void> {
-  const path = join(root, "astro.config.ts");
-  const source = await Deno.readTextFile(path);
-  const portable = source.replace(
-    'const workspaceRoot = fileURLToPath(new URL("../../", import.meta.url));',
-    'const workspaceRoot = fileURLToPath(new URL("./", import.meta.url));',
-  );
-  if (portable === source) throw new Error("starter Astro workspace-root marker was not found");
-  await Deno.writeTextFile(path, portable);
-}
-
 export async function createProject(options: CreateProjectOptions): Promise<CreateProjectResult> {
   const segments = validateName(options.name);
   const cwd = resolve(options.cwd);
@@ -217,7 +214,6 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   });
   try {
     await writeTemplate(staging);
-    await rewritePortableAstroConfig(staging);
     await rewritePortableDenoConfig(staging, options.packagePrefix ?? LOFI_PACKAGE_PREFIX);
     await Deno.writeTextFile(join(staging, ".gitignore"), generatedGitignore);
     await Deno.writeTextFile(join(staging, ".env.example"), generatedEnvironment);

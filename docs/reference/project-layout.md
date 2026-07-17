@@ -3,9 +3,9 @@
 ```mermaid
 flowchart TB
     Root["my-app/"]
-    Root --> Config["Project config<br/>deno.json · astro.config.ts · tsconfig.json"]
+    Root --> Config["Project config<br/>deno.json · tsconfig.json"]
     Root --> Env[".env.example"]
-    Root --> Public["public/<br/>favicon · manifest · service worker"]
+    Root --> Public["public/<br/>favicon · manifest"]
     Root --> Src["src/"]
     Root --> Tests["tests/"]
 
@@ -15,7 +15,8 @@ flowchart TB
     Src --> Pages["pages/"]
     Src --> Islands["islands/"]
     Src --> Styles["styles/"]
-    Src --> Runtime["_lofi/<br/>generated runtime"]
+    Src --> Layouts["layouts/"]
+    Root --> Runtime["@nzip/lofi<br/>versioned runtime"]
 ```
 
 ## Author-owned files
@@ -27,12 +28,13 @@ flowchart TB
 - `public/` contains install and static shell assets.
 - `tests/` contains application tests and worked local-first browser examples.
 
-## Generated runtime files
+## Versioned framework runtime
 
-`src/_lofi/` owns durable storage, the Jazz client, account sessions, recovery, lifecycle handling,
-PWA capability gates, diagnostics, and table stores. Do not edit these files during normal product
-work.
+`@nzip/lofi` owns durable storage, the Jazz client, account sessions, recovery, lifecycle handling,
+PWA capability gates, diagnostics, and table stores. These modules are installed once through the
+pinned package version instead of copied into application source.
 
-The generated domain hook imports selected `_lofi` runtime seams. Follow that pattern when binding a
+The generated domain hook imports selected public package seams. Follow that pattern when binding a
 new table, but keep vendor setup, storage selection, transports, service-worker logic, and
-capability branching out of product components.
+capability branching out of product components. `deno task dev` and `build` materialize ignored
+Astro integration files under `.lofi/`; `build` emits the service worker into `dist/`.

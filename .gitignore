@@ -5,6 +5,7 @@
 node_modules/
 .astro/
 .vite/
+.lofi/
 dist/
 coverage/
 playwright-report/

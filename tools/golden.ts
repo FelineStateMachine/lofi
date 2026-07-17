@@ -293,7 +293,13 @@ async function generateProject(
   if (source === "registry") await waitForRegistryVersion(version);
   const projectName = "golden-app";
   const args = source === "registry"
-    ? ["run", "-A", `jsr:@nzip/lofi@${version}/create`, projectName]
+    ? [
+      "run",
+      "-A",
+      "--minimum-dependency-age=0",
+      `jsr:@nzip/lofi@${version}/create`,
+      projectName,
+    ]
     : ["run", "-A", join(repositoryRoot, "package", "create.ts"), projectName];
   const environment: Record<string, string> = source === "local"
     ? {
@@ -330,6 +336,27 @@ async function generateProject(
     "generator overwrote a non-empty project",
   );
   await Deno.remove(marker);
+  if (source === "registry") {
+    const config = JSON.parse(await Deno.readTextFile(join(projectRoot, "deno.json"))) as {
+      imports: Record<string, string>;
+    };
+    const packageEntrypoints = [
+      ...new Set(
+        Object.entries(config.imports)
+          .filter(([name]) =>
+            name === "@nzip/lofi" || name.startsWith("@nzip/lofi/") &&
+              !name.endsWith("/")
+          )
+          .map(([, target]) => target),
+      ),
+    ];
+    await runCommand(
+      "registry-cache",
+      Deno.execPath(),
+      ["cache", "--minimum-dependency-age=0", ...packageEntrypoints],
+      projectRoot,
+    );
+  }
   return projectRoot;
 }
 

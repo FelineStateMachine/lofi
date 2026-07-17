@@ -99,9 +99,9 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       );
     }
     const config = JSON.parse(await Deno.readTextFile(join(result.destination, "deno.json")));
-    assertEquals(config.imports["@nzip/lofi"], "jsr:@nzip/lofi@0.3.0");
-    assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.3.0/");
-    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.3.0/testing");
+    assertEquals(config.imports["@nzip/lofi"], "jsr:@nzip/lofi@0.3.1");
+    assertEquals(config.imports["@nzip/lofi/"], "jsr:@nzip/lofi@0.3.1/");
+    assertEquals(config.imports["@nzip/lofi/testing"], "jsr:@nzip/lofi@0.3.1/testing");
     const lofiSpecifiers = Object.entries(config.imports)
       .filter(([name]) => name.startsWith("@nzip/lofi/"))
       .map(([, specifier]) => String(specifier));
@@ -110,7 +110,7 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       `expected one package prefix, access, two integrations, six commands, and testing, received ${lofiSpecifiers.length}`,
     );
     assert(
-      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.3.0/")),
+      lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.3.1/")),
       "generated lofi commands do not resolve through one exact package version",
     );
     const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -155,6 +155,19 @@ Deno.test("package manifest and generated version stay coupled", () => {
   assertEquals(packageManifest.exports["./astro"], "./package/astro/mod.ts");
   assertEquals(packageManifest.exports["./preact"], "./package/preact/mod.ts");
   assertEquals(packageManifest.exports["./testing"], "./package/testing/mod.ts");
+});
+
+Deno.test("reference template uses portable explicit package paths", async () => {
+  const config = JSON.parse(
+    await Deno.readTextFile(new URL("../apps/reference/deno.json", import.meta.url)),
+  );
+  assert(!("links" in config), "reference template must not publish a Deno links override");
+  const lofiImports = Object.entries(config.imports as Record<string, string>)
+    .filter(([name]) => name === "@nzip/lofi" || name.startsWith("@nzip/lofi/"));
+  assert(
+    lofiImports.every(([, target]) => target.startsWith("../../package/")),
+    "reference template must resolve lofi through explicit local package paths",
+  );
 });
 
 Deno.test("createProject refuses a non-empty destination without changing it", async () => {

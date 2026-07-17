@@ -98,9 +98,9 @@ Point them at any other static host by editing those two tasks.
 `;
 }
 
-// The `@nzip/lofi/*` import keys the template carries as local repo paths; a
-// generated project resolves the same keys through the published package (or a
-// file: override in clean-room tests). Everything else in the template deno.json
+// The `@nzip/lofi/*` import keys the template carries as explicit local repo
+// paths; a generated project resolves the same keys through the published
+// package (or a file: override in clean-room tests). Everything else in the template deno.json
 // — npm imports, tasks (including schema/migration/deploy), fmt, lint — is copied
 // verbatim, so the template is the single source of truth for project config.
 const lofiImportTargets: Record<string, { subpath: string; localPath: string }> = {
@@ -136,8 +136,8 @@ async function rewritePortableDenoConfig(root: string, packagePrefix: string): P
       ? `${packagePrefix}${subpath}`
       : packagePrefix.slice(0, -1);
   }
-  // The reference app links the local @nzip/lofi package for its dev loop; a
-  // generated project resolves the pinned JSR version directly.
+  // Never copy a Deno `links` override into a generated project. The reference
+  // app uses explicit relative imports for its local package development loop.
   delete config.links;
   await Deno.writeTextFile(path, `${JSON.stringify(config, null, 2)}\n`);
 }

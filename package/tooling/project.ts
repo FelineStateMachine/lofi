@@ -1,4 +1,5 @@
 import { extname, join, relative, resolve } from "node:path";
+import { expectedPrecacheUrls, sourcePwaIssues } from "./pwa-validation.ts";
 
 const ignoredDirectories = new Set([
   ".astro",
@@ -19,7 +20,10 @@ export type ProjectCheck = {
   remediation?: string;
 };
 
-export async function projectChecks(root = Deno.cwd()): Promise<ProjectCheck[]> {
+export async function projectChecks(
+  root = Deno.cwd(),
+  deploymentBase = "/",
+): Promise<ProjectCheck[]> {
   // The generic local-first scaffold every lofi project carries, independent of
   // the app's domain. Islands, schema tables, and stores are author content and
   // are intentionally not required here — a project stays valid after the starter
@@ -42,14 +46,30 @@ export async function projectChecks(root = Deno.cwd()): Promise<ProjectCheck[]> 
       else throw error;
     }
   }
-  return missing.length === 0
-    ? [{ name: "Project", status: "ok", detail: "generated layout complete" }]
-    : [{
+  if (missing.length > 0) {
+    return [{
       name: "Project",
       status: "blocker",
       detail: `missing ${missing.join(", ")}`,
       remediation: "restore the generated files or create a fresh project and move author files",
     }];
+  }
+  const pwaIssues = await sourcePwaIssues(root, deploymentBase);
+  return [
+    { name: "Project", status: "ok", detail: "generated layout complete" },
+    ...(pwaIssues.length === 0
+      ? [{
+        name: "PWA source",
+        status: "ok" as const,
+        detail: "manifest and assets are installable",
+      }]
+      : pwaIssues.map((pwaIssue) => ({
+        name: "PWA source",
+        status: "blocker" as const,
+        detail: pwaIssue.detail,
+        remediation: pwaIssue.remediation,
+      }))),
+  ];
 }
 
 export async function walkFiles(
@@ -123,18 +143,8 @@ export async function sourceFingerprint(root = Deno.cwd()): Promise<string> {
   return Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-const precacheExcludedPaths = new Set([
-  "lofi-build.json",
-  "lofi-precache.json",
-  "sw.js",
-]);
-
 export function precacheUrls(paths: readonly string[]): string[] {
-  return paths
-    .map((path) => path.replaceAll("\\", "/"))
-    .filter((path) => !precacheExcludedPaths.has(path))
-    .map((path) => path === "index.html" ? "./" : `./${path}`)
-    .sort();
+  return expectedPrecacheUrls(paths);
 }
 
 function contains(haystack: Uint8Array, needle: Uint8Array): boolean {

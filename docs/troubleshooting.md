@@ -9,6 +9,19 @@ deno task doctor
 The report names the blocked capability or configuration and gives a remediation without printing
 environment values.
 
+## Doctor or build reports a PWA source blocker
+
+Start with the first named file and action. The checks validate `public/manifest.webmanifest` as
+JSON; require stable identity, names, same-origin launch scope, display mode, colors, and complete
+icon roles; and inspect the dimensions and MIME types of local icons, shortcuts, and optional
+screenshots. Asset filenames and branding are replaceable, and unknown optional manifest members
+remain allowed.
+
+If source checks pass but build reports `dist/`, do not hand-edit the output. Fix the author-owned
+manifest, shell link, route, or asset, then rerun `deno task build`. The production check
+deliberately treats HTML manifest links, the worker revision and scope, `lofi-build.json`, and
+`lofi-precache.json` as one artifact so a partial or stale build cannot pass.
+
 ## The app says configuration is incomplete
 
 Managed sync requires both public values:

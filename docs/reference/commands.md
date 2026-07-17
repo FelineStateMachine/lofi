@@ -2,20 +2,20 @@
 
 Run these from a generated project as `deno task <name>`.
 
-| Task                | Purpose                                                           |
-| ------------------- | ----------------------------------------------------------------- |
-| `dev`               | Validate configuration and run the Astro development server       |
-| `doctor`            | Print a secret-free project and environment readiness report      |
-| `test`              | Run the deterministic generated-project test suite                |
-| `build`             | Build the static PWA, fingerprint it, and scan for leaked secrets |
-| `preview`           | Serve an existing production build locally                        |
-| `jazz:provision`    | Create a managed Jazz app and write its configuration to `.env`   |
-| `schema:validate`   | Validate the Jazz schema and permission declarations              |
-| `schema:deploy`     | Publish the schema, migrations, and permissions                   |
-| `migrations:create` | Create a migration under `src/migrations/`                        |
-| `migrations:push`   | Push migrations using the managed Jazz configuration              |
-| `deploy:create`     | Build and create a static Deno Deploy application                 |
-| `deploy`            | Build and deploy a new production version to the configured app   |
+| Task                | Purpose                                                             |
+| ------------------- | ------------------------------------------------------------------- |
+| `dev`               | Validate configuration and run the Astro development server         |
+| `doctor`            | Validate source PWA metadata and print secret-free readiness        |
+| `test`              | Run the deterministic generated-project test suite                  |
+| `build`             | Build and validate the static PWA, fingerprint it, and scan secrets |
+| `preview`           | Serve an existing production build locally                          |
+| `jazz:provision`    | Create a managed Jazz app and write its configuration to `.env`     |
+| `schema:validate`   | Validate the Jazz schema and permission declarations                |
+| `schema:deploy`     | Publish the schema, migrations, and permissions                     |
+| `migrations:create` | Create a migration under `src/migrations/`                          |
+| `migrations:push`   | Push migrations using the managed Jazz configuration                |
+| `deploy:create`     | Build and create a static Deno Deploy application                   |
+| `deploy`            | Build and deploy a new production version to the configured app     |
 
 ## Arguments
 

@@ -53,7 +53,7 @@ export async function doctorReport(
       detail: `${denoVersion} is older than the supported 2.9 line`,
       remediation: "upgrade Deno, then rerun `deno task doctor`",
     },
-    ...projectDiagnostics(await projectChecks(root)),
+    ...projectDiagnostics(await projectChecks(root, validation.basePath)),
   ];
 
   if (validation.ok) {

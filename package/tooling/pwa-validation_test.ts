@@ -1,0 +1,254 @@
+import { join } from "node:path";
+import { createProject } from "../create_core.ts";
+import {
+  expectedPrecacheUrls,
+  productionContentType,
+  productionPwaIssues,
+  sourcePwaIssues,
+} from "./pwa-validation.ts";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+async function makeProject(): Promise<{ root: string; project: string }> {
+  const root = await Deno.makeTempDir({ dir: ".", prefix: ".lofi-pwa-validation-test-" });
+  const result = await createProject({ cwd: root, name: "app" });
+  return { root, project: result.destination };
+}
+
+async function readManifest(project: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await Deno.readTextFile(join(project, "public", "manifest.webmanifest")));
+}
+
+async function writeManifest(project: string, manifest: Record<string, unknown>): Promise<void> {
+  await Deno.writeTextFile(
+    join(project, "public", "manifest.webmanifest"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+}
+
+function hasIssue(issues: readonly { detail: string }[], text: string): boolean {
+  return issues.some((entry) => entry.detail.includes(text));
+}
+
+Deno.test("source PWA validation accepts the generated root and subpath contracts", async () => {
+  const { root, project } = await makeProject();
+  try {
+    assert((await sourcePwaIssues(project)).length === 0, "root manifest was rejected");
+    assert(
+      (await sourcePwaIssues(project, "/field-notes/")).length === 0,
+      "subpath manifest was rejected",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("source PWA validation names malformed identity and scope failures", async () => {
+  const { root, project } = await makeProject();
+  const path = join(project, "public", "manifest.webmanifest");
+  try {
+    await Deno.writeTextFile(path, "{\n");
+    const malformed = await sourcePwaIssues(project);
+    assert(
+      hasIssue(malformed, "public/manifest.webmanifest: malformed JSON"),
+      "JSON failure was vague",
+    );
+
+    const manifest = await readManifest(join(import.meta.dirname!, "../../apps/reference"));
+    delete manifest.id;
+    manifest.start_url = "../outside";
+    manifest.scope = "./";
+    await writeManifest(project, manifest);
+    const invalid = await sourcePwaIssues(project, "/field-notes/");
+    assert(hasIssue(invalid, "id must be a non-empty string"), "missing id was accepted");
+    assert(hasIssue(invalid, "start_url must stay inside scope"), "escaped start_url was accepted");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("build preflight rejects a malformed manifest before Astro runs", async () => {
+  const root = await Deno.makeTempDir({ dir: ".", prefix: ".lofi-pwa-build-test-" });
+  try {
+    const result = await createProject({
+      cwd: root,
+      name: "app",
+      packagePrefix: new URL("../", import.meta.url).href,
+    });
+    await Deno.writeTextFile(join(result.destination, "public", "manifest.webmanifest"), "{\n");
+    const command = await new Deno.Command(Deno.execPath(), {
+      args: ["task", "build"],
+      cwd: result.destination,
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    const output = `${new TextDecoder().decode(command.stdout)}\n${
+      new TextDecoder().decode(command.stderr)
+    }`;
+    assert(!command.success, "build accepted a malformed manifest");
+    assert(
+      output.includes("public/manifest.webmanifest: malformed JSON"),
+      "build failure was vague",
+    );
+    assert(
+      !output.includes("Building static entrypoints"),
+      "build reached Astro after failed preflight",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("source PWA validation detects missing and incorrectly sized icons", async () => {
+  const { root, project } = await makeProject();
+  try {
+    await Deno.copyFile(
+      join(project, "public", "apple-touch-icon.png"),
+      join(project, "public", "icon-192.png"),
+    );
+    await Deno.remove(join(project, "public", "icon-monochrome.svg"));
+    const issues = await sourcePwaIssues(project);
+    assert(hasIssue(issues, "icon-192.png (180x180)"), "incorrect raster dimensions were accepted");
+    assert(hasIssue(issues, "missing asset icon-monochrome.svg"), "missing icon was accepted");
+    assert(hasIssue(issues, "scalable monochrome image"), "missing icon role was not reported");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("source PWA validation checks optional shortcuts and screenshots", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    manifest.shortcuts = [{ name: "Escape", url: "../outside" }];
+    manifest.screenshots = [{
+      src: "./missing-shot.png",
+      sizes: "1200x800",
+      type: "image/png",
+    }];
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project, "/field-notes/");
+    assert(hasIssue(issues, "shortcuts[0].url must stay inside"), "escaped shortcut was accepted");
+    assert(hasIssue(issues, "missing asset missing-shot.png"), "missing screenshot was accepted");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("source PWA validation permits replacement branding and optional members", async () => {
+  const { root, project } = await makeProject();
+  try {
+    for (
+      const [before, after] of [
+        ["icon-192.png", "acme-192.png"],
+        ["icon-512.png", "acme-512.png"],
+        ["icon-maskable-512.png", "acme-maskable.png"],
+        ["icon-monochrome.svg", "acme-symbol.svg"],
+      ]
+    ) {
+      await Deno.rename(join(project, "public", before), join(project, "public", after));
+    }
+    const manifest = await readManifest(project);
+    manifest.name = "Acme Field Notes";
+    manifest.categories = ["productivity"];
+    manifest.acme_optional_member = { enabled: true };
+    const icons = manifest.icons as Array<Record<string, unknown>>;
+    for (const icon of icons) {
+      icon.src = String(icon.src)
+        .replace("icon-192.png", "acme-192.png")
+        .replace("icon-512.png", "acme-512.png")
+        .replace("icon-maskable-512.png", "acme-maskable.png")
+        .replace("icon-monochrome.svg", "acme-symbol.svg");
+    }
+    const monochrome = icons.find((icon) => icon.purpose === "monochrome");
+    assert(monochrome, "starter fixture lost its monochrome icon");
+    const shortcuts = manifest.shortcuts as Array<{ icons: Array<Record<string, unknown>> }>;
+    shortcuts[0].icons[0].src = "./acme-192.png";
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project);
+    assert(issues.length === 0, `replacement branding was rejected: ${JSON.stringify(issues)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function makeProductionFixture(): Promise<string> {
+  const root = await Deno.makeTempDir({ dir: ".", prefix: ".lofi-pwa-production-test-" });
+  const dist = join(root, "dist");
+  await Deno.mkdir(join(dist, "settings"), { recursive: true });
+  const publicRoot = join(import.meta.dirname!, "../../apps/reference/public");
+  const files: string[] = [];
+  for await (const entry of Deno.readDir(publicRoot)) {
+    if (!entry.isFile) continue;
+    await Deno.copyFile(join(publicRoot, entry.name), join(dist, entry.name));
+    files.push(entry.name);
+  }
+  const html =
+    `<!doctype html><link rel="manifest" href="/field-notes/manifest.webmanifest"><link rel="apple-touch-icon" href="/field-notes/apple-touch-icon.png">`;
+  await Deno.writeTextFile(join(dist, "index.html"), html);
+  await Deno.writeTextFile(join(dist, "settings", "index.html"), html);
+  await Deno.writeTextFile(
+    join(dist, "lofi-build.json"),
+    `${JSON.stringify({ sourceHash: "fixture-hash", basePath: "/field-notes/" })}\n`,
+  );
+  await Deno.writeTextFile(
+    join(dist, "sw.js"),
+    `const revision = "fixture-hash"; new URL("./lofi-precache.json", self.registration.scope);\n`,
+  );
+  files.push("index.html", "settings/index.html", "lofi-build.json", "sw.js");
+  await Deno.writeTextFile(
+    join(dist, "lofi-precache.json"),
+    `${JSON.stringify(expectedPrecacheUrls(files))}\n`,
+  );
+  return root;
+}
+
+Deno.test("production PWA validation accepts one base-aware artifact set", async () => {
+  const root = await makeProductionFixture();
+  try {
+    const issues = await productionPwaIssues(root, "/field-notes/");
+    assert(issues.length === 0, `valid production fixture was rejected: ${JSON.stringify(issues)}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("production PWA validation catches nested links, precache drift, and worker drift", async () => {
+  const root = await makeProductionFixture();
+  try {
+    const dist = join(root, "dist");
+    await Deno.writeTextFile(
+      join(dist, "settings", "index.html"),
+      `<!doctype html><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/field-notes/apple-touch-icon.png">`,
+    );
+    await Deno.writeTextFile(join(dist, "lofi-precache.json"), `["./"]\n`);
+    await Deno.writeTextFile(
+      join(dist, "sw.js"),
+      `new URL("./lofi-precache.json", self.registration.scope);\n`,
+    );
+    const issues = await productionPwaIssues(root, "/field-notes/");
+    assert(hasIssue(issues, "settings/index.html: must link"), "nested manifest link drift passed");
+    assert(hasIssue(issues, "entries do not match"), "precache drift passed");
+    assert(hasIssue(issues, "build revision does not match"), "worker revision drift passed");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("production preview maps install-critical content types", () => {
+  assert(
+    productionContentType("manifest.webmanifest") === "application/manifest+json",
+    "manifest MIME drifted",
+  );
+  assert(
+    productionContentType("sw.js") === "text/javascript; charset=utf-8",
+    "worker MIME drifted",
+  );
+  assert(
+    productionContentType("lofi-precache.json") === "application/json; charset=utf-8",
+    "precache MIME drifted",
+  );
+  assert(productionContentType("icon.webp") === "image/webp", "WebP MIME drifted");
+});

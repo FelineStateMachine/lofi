@@ -1,10 +1,18 @@
+import { normalizeDeploymentBase } from "./base-path.ts";
+
 export const clientEnvironmentNames = ["JAZZ_APP_ID", "JAZZ_SERVER_URL"] as const;
 export const serverEnvironmentNames = ["JAZZ_ADMIN_SECRET", "BACKEND_SECRET"] as const;
-export const environmentNames = [...clientEnvironmentNames, ...serverEnvironmentNames] as const;
+export const deploymentEnvironmentNames = ["LOFI_BASE_PATH"] as const;
+export const environmentNames = [
+  ...clientEnvironmentNames,
+  ...serverEnvironmentNames,
+  ...deploymentEnvironmentNames,
+] as const;
 
 interface EnvironmentResultBase {
   presentClientNames: string[];
   presentServerNames: string[];
+  basePath: string;
   warnings: string[];
 }
 
@@ -39,6 +47,13 @@ export function validateEnvironment(
   const presentServerNames = serverEnvironmentNames.filter((name) => isPresent(env, name));
   const errors: string[] = [];
   const warnings: string[] = [];
+  let basePath = "/";
+
+  try {
+    basePath = normalizeDeploymentBase(env.LOFI_BASE_PATH);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
 
   if (
     presentClientNames.length > 0 && presentClientNames.length !== clientEnvironmentNames.length
@@ -69,6 +84,7 @@ export function validateEnvironment(
   const base: EnvironmentResultBase = {
     presentClientNames: [...presentClientNames],
     presentServerNames: [...presentServerNames],
+    basePath,
     warnings,
   };
   if (errors.length > 0) return { ...base, ok: false, mode: "invalid", errors };
@@ -161,6 +177,7 @@ export function childEnvironment(
     environment.JAZZ_APP_ID = "";
     environment.JAZZ_SERVER_URL = "";
   }
+  environment.LOFI_BASE_PATH = validation.basePath;
   environment.JAZZ_ADMIN_SECRET = "";
   environment.BACKEND_SECRET = "";
   return environment;

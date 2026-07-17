@@ -44,7 +44,12 @@ exitOnFailure(
 await Deno.writeTextFile(
   "dist/lofi-build.json",
   `${
-    JSON.stringify({ lofiVersion: LOFI_VERSION, sourceHash, builtAt: new Date().toISOString() })
+    JSON.stringify({
+      lofiVersion: LOFI_VERSION,
+      sourceHash,
+      basePath: environment.LOFI_BASE_PATH,
+      builtAt: new Date().toISOString(),
+    })
   }\n`,
 );
 const serviceWorkerPath = "dist/sw.js";

@@ -70,6 +70,9 @@ export type PwaControllerDependencies = {
   readonly serviceWorker?: () => ServiceWorkerContainer | undefined;
   readonly installEnvironment?: () => InstallEnvironment;
   readonly production?: () => boolean;
+  /** Absolute URL of the configured deployment base, independent of the current route. */
+  readonly deploymentBaseUrl?: () => string;
+  /** @deprecated Supply deploymentBaseUrl when injecting browser location in tests. */
   readonly documentBaseURI?: () => string;
   readonly reload?: () => void;
   readonly exposeState?: (state: PwaState) => void;
@@ -83,6 +86,18 @@ export type PwaController = {
   applyUpdate(): boolean;
   initialize(): void;
 };
+
+/** Resolves the worker URL and scope from one configured application base. */
+export function resolvePwaResources(deploymentBaseUrl: string): {
+  workerUrl: URL;
+  scope: string;
+} {
+  const base = new URL(deploymentBaseUrl);
+  if (!base.pathname.endsWith("/")) base.pathname += "/";
+  base.search = "";
+  base.hash = "";
+  return { workerUrl: new URL("sw.js", base), scope: base.pathname };
+}
 
 export function classifyInstallExperience(environment: InstallEnvironment): PwaInstallState {
   if (environment.displayModeStandalone || environment.navigatorStandalone) return "installed";
@@ -204,10 +219,16 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
       if (dependencies.reload) dependencies.reload();
       else location.reload();
     });
-    const workerUrl = new URL("./sw.js", dependencies.documentBaseURI?.() ?? document.baseURI);
+    const deploymentBaseUrl = dependencies.deploymentBaseUrl?.() ?? (() => {
+      const locationOrigin = dependencies.documentBaseURI
+        ? new URL(dependencies.documentBaseURI()).origin
+        : document.location.origin;
+      return new URL(import.meta.env.BASE_URL, locationOrigin).href;
+    })();
+    const { workerUrl, scope } = resolvePwaResources(deploymentBaseUrl);
     void (async () => {
       const registration = await container.register(workerUrl, {
-        scope: new URL("./", dependencies.documentBaseURI?.() ?? document.baseURI).pathname,
+        scope,
       });
       watchForUpdate(registration, container);
       if (registration.waiting && container.controller) return;

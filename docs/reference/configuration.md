@@ -26,6 +26,7 @@ offering passkey backup to real users.
 
 | Name                | Classification | Behavior                                  |
 | ------------------- | -------------- | ----------------------------------------- |
+| `LOFI_BASE_PATH`    | Public build   | Mount path; defaults to `/`               |
 | `JAZZ_APP_ID`       | Client-visible | Selects the managed Jazz application      |
 | `JAZZ_SERVER_URL`   | Client-visible | Selects its sync endpoint                 |
 | `JAZZ_ADMIN_SECRET` | Server-only    | Used by schema and administrative tooling |

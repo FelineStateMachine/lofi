@@ -80,3 +80,36 @@ Deno.test("doctor blocks unsupported Deno and incomplete generated layouts", asy
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test("doctor normalizes a deployment base and blocks an unsafe one", async () => {
+  const cwd = await makeTestRoot();
+  try {
+    const project = await createProject({ cwd, name: "starter" });
+    const valid = await doctorReport({
+      root: project.destination,
+      environment: { LOFI_BASE_PATH: "/field-notes" },
+      denoVersion: "2.9.0",
+    });
+    assert(!valid.blocked, "valid non-root deployment base should pass doctor");
+    assert(valid.validation.basePath === "/field-notes/", "deployment base was not normalized");
+    assert(
+      valid.diagnostics.some((item) =>
+        item.name === "PWA" && item.detail.includes("/field-notes/")
+      ),
+      "doctor did not report the deployment base",
+    );
+
+    const invalid = await doctorReport({
+      root: project.destination,
+      environment: { LOFI_BASE_PATH: "https://example.com/field-notes" },
+      denoVersion: "2.9.0",
+    });
+    assert(invalid.blocked, "origin-like deployment base should block doctor");
+    assert(
+      invalid.diagnostics.some((item) => item.detail.includes("LOFI_BASE_PATH")),
+      "doctor did not name the invalid deployment base",
+    );
+  } finally {
+    await Deno.remove(cwd, { recursive: true });
+  }
+});

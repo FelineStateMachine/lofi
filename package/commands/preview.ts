@@ -8,6 +8,7 @@
  */
 
 import { extname, join, normalize } from "node:path";
+import { normalizeDeploymentBase, pathWithinDeploymentBase } from "../tooling/base-path.ts";
 
 const portFlag = Deno.args.findIndex((argument) => argument === "--port");
 const port = portFlag >= 0 ? Number(Deno.args[portFlag + 1]) : 4321;
@@ -16,7 +17,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   Deno.exit(2);
 }
 
-let identity: { lofiVersion?: string; sourceHash?: string };
+let identity: { lofiVersion?: string; sourceHash?: string; basePath?: string };
 try {
   identity = JSON.parse(await Deno.readTextFile("dist/lofi-build.json"));
 } catch {
@@ -27,6 +28,7 @@ if (!identity.sourceHash) {
   console.error("error: production build identity is invalid; run `deno task build` again");
   Deno.exit(1);
 }
+const basePath = normalizeDeploymentBase(identity.basePath);
 
 const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -40,12 +42,17 @@ const contentTypes: Record<string, string> = {
 };
 
 console.log(
-  `lofi preview: http://127.0.0.1:${port}/ (build ${identity.sourceHash}, @nzip/lofi ${identity.lofiVersion})`,
+  `lofi preview: http://127.0.0.1:${port}${basePath} (build ${identity.sourceHash}, @nzip/lofi ${identity.lofiVersion})`,
 );
 Deno.serve({ hostname: "127.0.0.1", port }, async (request) => {
   const url = new URL(request.url);
-  let pathname = decodeURIComponent(url.pathname);
-  if (pathname.endsWith("/")) pathname += "index.html";
+  if (basePath !== "/" && url.pathname === basePath.slice(0, -1)) {
+    return Response.redirect(new URL(basePath, url.origin), 308);
+  }
+  const scopedPath = pathWithinDeploymentBase(url.pathname, basePath);
+  if (scopedPath === null) return new Response("Not found", { status: 404 });
+  let pathname = decodeURIComponent(scopedPath);
+  if (pathname === "" || pathname.endsWith("/")) pathname += "index.html";
   const relative = normalize(pathname).replace(/^[/\\]+/, "");
   if (relative.startsWith("..")) return new Response("Not found", { status: 404 });
   const path = join("dist", relative);

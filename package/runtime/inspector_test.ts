@@ -11,7 +11,12 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const snapshot: InspectorSnapshot = {
   identity: { state: "device-local key active", backup: "recovery phrase" },
-  storage: { driver: "persistent open", persistence: "granted", fallback: "none" },
+  storage: {
+    driver: "persistent open",
+    persistence: "granted",
+    fallback: "none",
+    startupFailure: "broker-incompatible",
+  },
   sync: {
     mode: "managed configured",
     transport: "live detail unavailable",
@@ -44,6 +49,10 @@ test("inspector rows retain truthful unavailable and pending states", () => {
   assert(rows.Transport === "live detail unavailable", "transport precision was fabricated");
   assert(rows["Pending lofi local"] === "1", "local pending work was omitted");
   assert(rows["Pending lofi global"] === "2", "global pending work was omitted");
+  assert(
+    rows["Storage startup"] === "broker-incompatible",
+    "startup failure classification was omitted",
+  );
   assert(rows["Multi-tab role"] === "unavailable", "multi-tab role was fabricated");
   assert(!JSON.stringify(rows).includes("secret"), "inspector rows exposed a secret-shaped field");
 });

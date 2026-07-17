@@ -52,6 +52,20 @@ of silently switching to memory-only data.
 - Treat clearing site data as destructive unless the account has synced and the recovery phrase is
   safe.
 
+## Another tab is running an incompatible app version
+
+Lofi stops persistent runtime startup when another tab for the same app is using an incompatible
+browser broker configuration. This is reported as `broker-incompatible` in runtime diagnostics in
+both local and managed mode.
+
+1. Close every other tab or installed-app window for this app.
+2. Return to the tab showing the recovery notice.
+3. Select **Reload app** once.
+
+The package does not take over the existing broker, fall back to memory, or automatically enter a
+reload loop. Do not clear site data for this condition: closing the incompatible tabs and explicitly
+reloading creates the clean document boundary the persistent driver requires.
+
 ## A task disappeared after changing app configuration
 
 Check whether `databaseName` or the managed `JAZZ_APP_ID` changed. Both participate in the durable

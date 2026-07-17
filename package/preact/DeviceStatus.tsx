@@ -6,8 +6,13 @@ import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "../runtime/ui-mutation.ts";
 import { getPwaState, type PwaState, subscribePwaState } from "../runtime/pwa.ts";
 import { PwaActions } from "./PwaActions.tsx";
-import { runtimeRecreatedEvent } from "../runtime/runtime.ts";
+import {
+  getRuntimeDiagnostics,
+  runtimeRecreatedEvent,
+  subscribeRuntimeDiagnostics,
+} from "../runtime/runtime.ts";
 import { readSession, type Session } from "../runtime/session.ts";
+import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
 
 /**
  * The Device gate: every subsystem's live status, grouped by the system it
@@ -33,8 +38,13 @@ export default function DeviceStatus(): VNode {
   const { report, requestPersistence } = useDeviceCapabilities();
   const [pwa, setPwa] = useState<PwaState>(getPwaState());
   const [session, setSession] = useState<Session | null>(null);
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState(getRuntimeDiagnostics());
 
   useEffect(() => subscribePwaState(setPwa), []);
+  useEffect(
+    () => subscribeRuntimeDiagnostics(() => setRuntimeDiagnostics(getRuntimeDiagnostics())),
+    [],
+  );
   useEffect(() => {
     const refresh = () => setSession(readSession());
     refresh();
@@ -80,7 +90,13 @@ export default function DeviceStatus(): VNode {
           <Row label="Web Locks" value={available(report.webLocks)} />
           <Row label="MessageChannel" value={available(report.messageChannel)} />
           <Row label="Storage persistence" value={report.persistentPermission} />
+          <Row
+            label="Runtime startup"
+            value={runtimeDiagnostics.startupFailure?.code ??
+              (runtimeDiagnostics.storageState === "persistent-driver-open" ? "ready" : "opening")}
+          />
         </dl>
+        <RuntimeRecovery failure={runtimeDiagnostics.startupFailure} />
         <button type="button" onClick={() => void settleUiMutation(requestPersistence())}>
           Request storage persistence
         </button>

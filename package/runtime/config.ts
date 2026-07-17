@@ -1,6 +1,6 @@
 // Package-owned environment and adapter configuration.
 
-import type { DbConfig } from "jazz-tools";
+import type { DbConfig, IncompatibleBrowserBrokerConfigurationHandler } from "jazz-tools";
 import { getLofiApp } from "./app.ts";
 
 declare const __LOFI_JAZZ_APP_ID__: string;
@@ -54,6 +54,8 @@ export function databaseConfig(
   accountNamespace: string,
   mode: "local" | "managed" = syncing() ? "managed" : "local",
   connect = mode === "managed" && syncing(),
+  onIncompatibleBrowserBrokerConfiguration: IncompatibleBrowserBrokerConfigurationHandler =
+    () => {},
 ): DbConfig {
   const app = getLofiApp();
   return {
@@ -66,5 +68,6 @@ export function databaseConfig(
       type: "persistent",
       dbName: `${app.databaseName}-${appId}-${accountNamespace}-${mode}`,
     },
+    onIncompatibleBrowserBrokerConfiguration,
   };
 }

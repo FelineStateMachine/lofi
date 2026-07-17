@@ -108,6 +108,18 @@ h1 {
   margin: 0 0 0.15rem;
 }
 
+.runtime-recovery {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--accent, currentColor);
+  border-radius: 0.75rem;
+}
+
+.runtime-recovery h4,
+.runtime-recovery p {
+  margin-top: 0;
+}
+
 .device-hook {
   color: #9bc9b1;
   font-size: 0.8rem;

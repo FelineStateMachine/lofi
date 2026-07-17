@@ -28,14 +28,12 @@ export type PwaState = {
   };
 };
 
-type InstallPromptEvent = Event & {
+export type InstallPromptEvent = Event & {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-type NavigatorWithStandalone = Navigator & { standalone?: boolean };
-
-type InstallEnvironment = {
+export type InstallEnvironment = {
   displayModeStandalone: boolean;
   navigatorStandalone: boolean;
   platform: string;
@@ -44,37 +42,37 @@ type InstallEnvironment = {
 
 type LofiPwaGlobal = typeof globalThis & { __LOFI_PWA_STATE__?: PwaState };
 
-const subscribers = new Set<(state: PwaState) => void>();
-let deferredInstallPrompt: InstallPromptEvent | undefined;
-let waitingWorker: ServiceWorker | undefined;
-let reloadForUpdate = false;
-let initialized = false;
-
-let state: PwaState = {
-  worker: "registering",
-  install: "unavailable",
+const actionableFailureMessages: Record<PwaFailureCode, string> = {
+  registration:
+    "Offline support could not start. Reload on a stable connection; if it continues, clear this site's storage and retry.",
+  installation:
+    "The offline update could not install. Reconnect, keep this tab open, and reload to try again.",
+  precache:
+    "Required offline files were not saved. Reconnect, reload, and wait for offline support before disconnecting.",
+  "runtime-cache":
+    "A recently opened file was not saved for offline use. Reconnect and open it again before going offline.",
 };
 
-function publish(next: PwaState) {
-  state = next;
-  if (typeof document !== "undefined") {
-    (globalThis as LofiPwaGlobal).__LOFI_PWA_STATE__ = state;
-  }
-  for (const subscriber of subscribers) subscriber(state);
+export function pwaFailureMessage(code: PwaFailureCode): string {
+  return actionableFailureMessages[code];
 }
 
-function update(patch: Partial<PwaState>) {
-  publish({ ...state, ...patch });
+export interface PwaControllerDependencies {
+  readonly eventTarget?: () => EventTarget;
+  readonly serviceWorker?: () => ServiceWorkerContainer | undefined;
+  readonly installEnvironment?: () => InstallEnvironment;
+  readonly production?: () => boolean;
+  readonly documentBaseURI?: () => string;
+  readonly reload?: () => void;
+  readonly exposeState?: (state: PwaState) => void;
 }
 
-export function getPwaState(): PwaState {
-  return state;
-}
-
-export function subscribePwaState(subscriber: (state: PwaState) => void): () => void {
-  subscribers.add(subscriber);
-  subscriber(state);
-  return () => subscribers.delete(subscriber);
+export interface PwaController {
+  getState(): PwaState;
+  subscribe(subscriber: (state: PwaState) => void): () => void;
+  requestInstall(): Promise<PwaInstallState>;
+  applyUpdate(): boolean;
+  initialize(): void;
 }
 
 export function classifyInstallExperience(environment: InstallEnvironment): PwaInstallState {
@@ -82,35 +80,6 @@ export function classifyInstallExperience(environment: InstallEnvironment): PwaI
   const iosLike = /^(iPhone|iPad|iPod)$/.test(environment.platform) ||
     (environment.platform === "MacIntel" && environment.maxTouchPoints > 1);
   return iosLike ? "manual-ios" : "unavailable";
-}
-
-function currentInstallExperience(): PwaInstallState {
-  const standalone = navigator as NavigatorWithStandalone;
-  return classifyInstallExperience({
-    displayModeStandalone: matchMedia("(display-mode: standalone)").matches,
-    navigatorStandalone: standalone.standalone === true,
-    platform: navigator.platform,
-    maxTouchPoints: navigator.maxTouchPoints,
-  });
-}
-
-export async function requestPwaInstall(): Promise<PwaInstallState> {
-  const prompt = deferredInstallPrompt;
-  if (!prompt) return state.install;
-  deferredInstallPrompt = undefined;
-  update({ install: "prompting" });
-  await prompt.prompt();
-  const choice = await prompt.userChoice;
-  const outcome = choice.outcome === "accepted" ? "accepted" : "dismissed";
-  update({ install: outcome });
-  return outcome;
-}
-
-export function applyPwaUpdate(): boolean {
-  if (!waitingWorker) return false;
-  reloadForUpdate = true;
-  waitingWorker.postMessage({ type: "LOFI_SKIP_WAITING" });
-  return true;
 }
 
 export function waitForActivation(worker: ServiceWorker): Promise<void> {
@@ -132,101 +101,174 @@ export function waitForActivation(worker: ServiceWorker): Promise<void> {
   });
 }
 
-function watchForUpdate(registration: ServiceWorkerRegistration) {
-  const exposeWaitingWorker = (worker: ServiceWorker) => {
-    waitingWorker = worker;
-    update({ worker: "update-available" });
+export function createPwaController(dependencies: PwaControllerDependencies = {}): PwaController {
+  const subscribers = new Set<(state: PwaState) => void>();
+  let deferredInstallPrompt: InstallPromptEvent | undefined;
+  let waitingWorker: ServiceWorker | undefined;
+  let reloadForUpdate = false;
+  let initialized = false;
+  let state: PwaState = { worker: "registering", install: "unavailable" };
+
+  const publish = (next: PwaState) => {
+    state = next;
+    dependencies.exposeState?.(state);
+    for (const subscriber of subscribers) subscriber(state);
+  };
+  const update = (patch: Partial<PwaState>) => publish({ ...state, ...patch });
+  const fail = (code: PwaFailureCode) => {
+    update({ worker: "failed", failure: { code, message: pwaFailureMessage(code) } });
+  };
+  const target = () => dependencies.eventTarget?.() ?? globalThis;
+  const serviceWorker = () =>
+    dependencies.serviceWorker?.() ??
+      (typeof navigator !== "undefined" && "serviceWorker" in navigator
+        ? navigator.serviceWorker
+        : undefined);
+  const installEnvironment = () =>
+    dependencies.installEnvironment?.() ?? {
+      displayModeStandalone: matchMedia("(display-mode: standalone)").matches,
+      navigatorStandalone: (navigator as Navigator & { standalone?: boolean }).standalone === true,
+      platform: navigator.platform,
+      maxTouchPoints: navigator.maxTouchPoints,
+    };
+
+  const watchForUpdate = (
+    registration: ServiceWorkerRegistration,
+    container: ServiceWorkerContainer,
+  ) => {
+    const exposeWaitingWorker = (worker: ServiceWorker) => {
+      waitingWorker = worker;
+      update({ worker: "update-available", failure: undefined });
+    };
+
+    if (registration.waiting && container.controller) exposeWaitingWorker(registration.waiting);
+    registration.addEventListener("updatefound", () => {
+      const worker = registration.installing;
+      if (!worker) return;
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "installed" && container.controller) {
+          exposeWaitingWorker(registration.waiting ?? worker);
+        } else if (worker.state === "redundant") {
+          fail("installation");
+        }
+      });
+    });
   };
 
-  if (registration.waiting && navigator.serviceWorker.controller) {
-    exposeWaitingWorker(registration.waiting);
-  }
-  registration.addEventListener("updatefound", () => {
-    const worker = registration.installing;
-    if (!worker) return;
-    worker.addEventListener("statechange", () => {
-      if (worker.state === "installed" && navigator.serviceWorker.controller) {
-        exposeWaitingWorker(registration.waiting ?? worker);
-      }
-      if (worker.state === "redundant") {
-        update({
-          worker: "failed",
-          failure: { code: "installation", message: "service worker installation failed" },
-        });
-      }
+  const watchInstallExperience = () => {
+    update({ install: classifyInstallExperience(installEnvironment()) });
+    target().addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event as InstallPromptEvent;
+      update({ install: "available" });
     });
-  });
+    target().addEventListener("appinstalled", () => {
+      deferredInstallPrompt = undefined;
+      update({ install: "installed" });
+    });
+  };
+
+  const initialize = () => {
+    if (initialized) return;
+    initialized = true;
+    watchInstallExperience();
+    if (!(dependencies.production?.() ?? import.meta.env.PROD)) {
+      update({ worker: "development-disabled" });
+      return;
+    }
+    const container = serviceWorker();
+    if (!container) {
+      update({ worker: "unsupported" });
+      return;
+    }
+    update({ worker: "registering" });
+    container.addEventListener("message", (event) => {
+      const message = (event as MessageEvent).data as { type?: string; code?: PwaFailureCode };
+      if (
+        message?.type === "LOFI_PWA_FAILURE" &&
+        (message.code === "precache" || message.code === "runtime-cache")
+      ) fail(message.code);
+    });
+    container.addEventListener("controllerchange", () => {
+      if (!reloadForUpdate) return;
+      if (dependencies.reload) dependencies.reload();
+      else location.reload();
+    });
+    const workerUrl = new URL("./sw.js", dependencies.documentBaseURI?.() ?? document.baseURI);
+    void (async () => {
+      const registration = await container.register(workerUrl, {
+        scope: new URL("./", dependencies.documentBaseURI?.() ?? document.baseURI).pathname,
+      });
+      watchForUpdate(registration, container);
+      if (registration.waiting && container.controller) return;
+      const worker = registration.installing ?? registration.active ?? registration.waiting;
+      if (!worker) throw new Error("service worker registration has no worker");
+      try {
+        await waitForActivation(worker);
+      } catch {
+        fail("installation");
+        return;
+      }
+      update({ worker: "ready", failure: undefined });
+    })().catch(() => fail("registration"));
+  };
+
+  return {
+    getState: () => state,
+    subscribe(subscriber) {
+      subscribers.add(subscriber);
+      subscriber(state);
+      return () => subscribers.delete(subscriber);
+    },
+    async requestInstall() {
+      const prompt = deferredInstallPrompt;
+      if (!prompt) return state.install;
+      deferredInstallPrompt = undefined;
+      update({ install: "prompting" });
+      try {
+        await prompt.prompt();
+        const choice = await prompt.userChoice;
+        const outcome = choice.outcome === "accepted" ? "accepted" : "dismissed";
+        update({ install: outcome });
+        return outcome;
+      } catch {
+        update({ install: "unavailable" });
+        fail("installation");
+        return "unavailable";
+      }
+    },
+    applyUpdate() {
+      if (!waitingWorker) return false;
+      reloadForUpdate = true;
+      waitingWorker.postMessage({ type: "LOFI_SKIP_WAITING" });
+      return true;
+    },
+    initialize,
+  };
 }
 
-function watchInstallExperience() {
-  update({ install: currentInstallExperience() });
-  globalThis.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event as InstallPromptEvent;
-    update({ install: "available" });
-  });
-  globalThis.addEventListener("appinstalled", () => {
-    deferredInstallPrompt = undefined;
-    update({ install: "installed" });
-  });
+export const pwaController: PwaController = createPwaController({
+  exposeState(next) {
+    if (typeof document !== "undefined") (globalThis as LofiPwaGlobal).__LOFI_PWA_STATE__ = next;
+  },
+});
+
+export function getPwaState(): PwaState {
+  return pwaController.getState();
 }
 
-function watchWorkerMessages() {
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    const message = event.data as {
-      type?: string;
-      code?: PwaFailureCode;
-      message?: string;
-    };
-    if (
-      message?.type !== "LOFI_PWA_FAILURE" ||
-      !["precache", "runtime-cache"].includes(message.code ?? "")
-    ) return;
-    update({
-      worker: "failed",
-      failure: {
-        code: message.code as PwaFailureCode,
-        message: message.message || "service worker cache operation failed",
-      },
-    });
-  });
+export function subscribePwaState(subscriber: (state: PwaState) => void): () => void {
+  return pwaController.subscribe(subscriber);
+}
+
+export function requestPwaInstall(): Promise<PwaInstallState> {
+  return pwaController.requestInstall();
+}
+
+export function applyPwaUpdate(): boolean {
+  return pwaController.applyUpdate();
 }
 
 export function registerProductionServiceWorker(): void {
-  if (initialized || typeof document === "undefined") return;
-  initialized = true;
-  watchInstallExperience();
-  if (!import.meta.env.PROD) {
-    update({ worker: "development-disabled" });
-    return;
-  }
-  if (!("serviceWorker" in navigator)) {
-    update({ worker: "unsupported" });
-    return;
-  }
-  update({ worker: "registering" });
-  watchWorkerMessages();
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloadForUpdate) location.reload();
-  });
-  const workerUrl = new URL("./sw.js", document.baseURI);
-  void (async () => {
-    const registration = await navigator.serviceWorker.register(workerUrl, {
-      scope: new URL("./", document.baseURI).pathname,
-    });
-    watchForUpdate(registration);
-    if (registration.waiting && navigator.serviceWorker.controller) return;
-    const worker = registration.installing ?? registration.active ?? registration.waiting;
-    if (!worker) throw new Error("service worker registration has no worker");
-    await waitForActivation(worker);
-    update({ worker: "ready", failure: undefined });
-  })().catch((error) => {
-    update({
-      worker: "failed",
-      failure: {
-        code: "registration",
-        message: error instanceof Error ? error.message : "service worker registration failed",
-      },
-    });
-  });
+  pwaController.initialize();
 }

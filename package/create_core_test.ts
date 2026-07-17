@@ -113,6 +113,21 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.2.0/")),
       "generated lofi commands do not resolve through one exact package version",
     );
+    const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+    for (
+      const icon of [
+        "apple-touch-icon.png",
+        "icon-192.png",
+        "icon-512.png",
+        "icon-maskable-512.png",
+      ]
+    ) {
+      const bytes = await Deno.readFile(join(result.destination, "public", icon));
+      assert(
+        pngSignature.every((byte, index) => bytes[index] === byte),
+        `generated ${icon} was not copied as binary PNG data`,
+      );
+    }
   } finally {
     await Deno.remove(cwd, { recursive: true });
   }

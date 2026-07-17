@@ -24,6 +24,9 @@ Application work imports supported package APIs and does not carry framework imp
 `public/manifest.webmanifest`, `public/favicon.svg`, `src/layouts/`, and `src/env.d.ts` remain
 application-owned integration and branding surfaces.
 
+The [exact generated-project map](../../docs/reference/project-layout.md) lists every generated
+source-controlled path and separates it from regenerated `.lofi/` tooling and `dist/` output.
+
 Browser journeys import readiness, offline, two-client, and sanitized failure-artifact helpers from
 `@nzip/lofi/testing`. `tests/convergence_e2e_test.ts` is a worked example: two clients add a task
 offline and converge after reconnecting. The normal `deno task test` skips it (and never launches

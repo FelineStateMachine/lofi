@@ -8,6 +8,10 @@ export const STARTER_FILES: readonly string[] = [
   "deno.json",
   "tsconfig.json",
   "public/favicon.svg",
+  "public/apple-touch-icon.png",
+  "public/icon-192.png",
+  "public/icon-512.png",
+  "public/icon-maskable-512.png",
   "public/manifest.webmanifest",
   "src/app.ts",
   "src/env.d.ts",
@@ -30,12 +34,12 @@ export const STARTER_FILES: readonly string[] = [
  * Works both from a source checkout (a `file:` URL read from disk) and from the
  * published package (an `https:` JSR URL fetched over the network).
  */
-export async function readStarterFile(relativePath: string): Promise<string> {
+export async function readStarterFile(relativePath: string): Promise<Uint8Array> {
   const url = import.meta.resolve(`../apps/reference/${relativePath}`);
-  if (url.startsWith("file:")) return await Deno.readTextFile(new URL(url));
+  if (url.startsWith("file:")) return await Deno.readFile(new URL(url));
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to read starter file ${relativePath}: HTTP ${response.status}`);
   }
-  return await response.text();
+  return new Uint8Array(await response.arrayBuffer());
 }

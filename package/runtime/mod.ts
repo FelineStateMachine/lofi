@@ -31,8 +31,16 @@ export {
 } from "./device-capabilities.ts";
 export {
   applyPwaUpdate,
+  createPwaController,
   getPwaState,
+  type InstallPromptEvent,
+  type PwaController,
+  pwaController,
+  type PwaFailureCode,
+  pwaFailureMessage,
+  type PwaInstallState,
   type PwaState,
+  type PwaWorkerState,
   requestPwaInstall,
   subscribePwaState,
 } from "./pwa.ts";

@@ -5,6 +5,7 @@ import { serverUrl } from "../runtime/config.ts";
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "../runtime/ui-mutation.ts";
 import { getPwaState, type PwaState, subscribePwaState } from "../runtime/pwa.ts";
+import { PwaActions } from "./PwaActions.tsx";
 import { runtimeRecreatedEvent } from "../runtime/runtime.ts";
 import { readSession, type Session } from "../runtime/session.ts";
 
@@ -128,7 +129,7 @@ export default function DeviceStatus(): JSX.Element {
           <Row label="Install" value={pwa.install} />
           <Row label="Service worker" value={pwa.worker} />
         </dl>
-        {pwa.failure && <p class="account-error">{pwa.failure.code}: {pwa.failure.message}</p>}
+        <PwaActions title="Install & updates" />
       </div>
     </section>
   );

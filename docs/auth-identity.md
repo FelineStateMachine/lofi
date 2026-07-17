@@ -19,8 +19,9 @@ multi-device account is one opt-in click — not a wall the user hits before the
 2. **Backed up & syncing (elected).** When a managed Jazz app is configured, the user elects to back
    up and sync. Replication turns on, the existing local data pushes up under the _same_ identity,
    and a recovery phrase becomes available.
-3. **Recovered (on another device).** Entering the recovery phrase reconstructs the exact account
-   secret, so the account — and the data that synced up — comes back down.
+3. **Recovered (in a fresh browser).** A recoverable passkey or the recovery phrase reconstructs the
+   exact account secret. The old runtime is shut down, the new principal is opened with sync, and
+   data that reached the sync provider flows back down.
 
 The **AccountGate** island (`src/islands/AccountGate.tsx`) drives states 2 and 3. It renders only
 when a Jazz app is configured, because a recovery phrase only matters once there is somewhere to
@@ -49,47 +50,57 @@ The same 32-byte secret encodes as a 24-word recovery phrase (`RecoveryPhrase.fr
 recovery phrase = words( account secret )      # the phrase *is* the account
 ```
 
-- **Back up** → create a passkey, then reveal the phrase once and write it down. It is the exact
-  same account, offline and portable.
-- **Recover** → type the phrase on any device → the same secret → the same account → its synced data
-  flows back down, decrypted (Jazz E2E-encrypts synced data keyed on the account).
+- **Back up** → create a recoverable passkey and reveal the phrase once. Both represent the exact
+  same account secret.
+- **Recover with a passkey** → the browser/provider releases the resident credential's secret after
+  user verification → the same account opens.
+- **Recover with the phrase** → type the words on a compatible device → the same account opens. The
+  phrase is the portable bearer-secret fallback and does not depend on a passkey provider.
 
 Restoring replaces whatever account the device currently holds, so the UI confirms before discarding
 a local-only account's un-backed-up data.
 
-### Passkey confirmation on reveal
+### Two passkey credentials with different jobs
 
-Backing up enrols a passkey (`enrollDeviceCredential`), and revealing the phrase afterwards runs a
-user-verifying passkey ceremony (`confirmPhraseAccess`) — so the recovery phrase, a bearer secret,
-is not handed out without confirming the person is present. Stated honestly: this is a
-**confirmation**, not encryption. The account secret still lives in device storage so the app can
-open instantly; the passkey does not encrypt it. A device where WebAuthn is unavailable can still
-back up, and the UI says the reveal was unconfirmed. (For real at-rest encryption of the secret, the
-PRF primitive exported by `@nzip/lofi` is available — see below.)
+`createRecoverablePasskeyBackup` uses Jazz's passkey-backup implementation to place the 32-byte
+account secret in a resident, user-verifying platform credential. `restoreFromPasskey` can recover
+the account from that credential. Availability follows the configured RP-ID and the browser,
+operating system, and passkey provider; lofi does not promise universal cross-provider or
+cross-platform portability.
+
+The older `createBackupPasskey` API is different: it enrolls a credential that only confirms a later
+`confirmPhraseAccess` ceremony on the same browser. It does not contain a recoverable account
+backup. The reference UI labels it a **local phrase-reveal guard** so the two credentials cannot be
+confused.
 
 ### Boot flow
 
 - **First boot** → local-only account opens immediately. No gate.
-- **Back up & sync** (a click) → create a passkey → reveal the recovery phrase to save → turn on
-  sync → the runtime recreates and the account replicates.
+- **Back up & sync** → create a recoverable passkey when supported → reveal the recovery phrase to
+  save → turn on sync → the runtime recreates and the account replicates.
 - **Return boots** → the same cached secret opens the same account, synced or not.
-- **A new device** → restore from the recovery phrase → the account and its synced data appear.
+- **A fresh browser** → explicitly confirm replacement → restore from passkey or phrase → the old
+  subscriptions, stores, workers, cached clients, and Jazz client shut down → the restored account
+  starts and synced rows can arrive.
 - **Stop syncing** → detaches the network and returns to local-only; the account and data are
   untouched, and electing again resumes against the same account.
 
-The framework side is exported by `@nzip/lofi` (`readSession`, `createBackupPasskey`,
-`confirmPhraseAccess`, `revealRecoveryPhrase`, `enableSyncBackup`, `stopSyncBackup`,
-`restoreFromRecoveryPhrase`); the gate is the author-owned example you can restyle or replace.
+The framework side is exported by `@nzip/lofi` (`readAccountSession`,
+`createRecoverablePasskeyBackup`, `restoreFromPasskey`, `revealRecoveryPhrase`, `enableSyncBackup`,
+`stopSyncBackup`, `restoreFromRecoveryPhrase`). The gate is the author-owned example you can restyle
+or replace.
 
 ## Custody and recovery — stated plainly
 
-- **No recovery service.** lofi never holds recoverable account material. Recovery is the recovery
-  phrase, held by the user. Sync replicates data to the managed Jazz app under an account only the
-  key can open.
-- **Lose every copy of the phrase _and_ the device → lose the account.** That is the honest cost of
-  no-central-custody.
-- **This is not a server-assisted account-backup ceremony.** The account is a local-first secret the
-  user backs up themselves; nothing on the server can reconstruct it.
+- **lofi does not run a recovery service.** The user holds the phrase; a recoverable passkey is held
+  by the browser/platform provider. The Jazz sync service cannot reconstruct the account secret.
+- **Provider sync has boundaries.** A passkey may sync inside one provider ecosystem, but RP-ID,
+  account, browser, operating-system, and provider rules decide availability. Keep the phrase.
+- **Lose every secret-bearing device, recoverable passkey, and phrase → lose the account.** Synced
+  ciphertext alone does not restore identity authority.
+
+The exact pinned dependency audit and trust assumptions are retained in
+[the passkey decision record](decisions/passkey-backup-alpha53.md).
 
 ## Provisioning sync
 

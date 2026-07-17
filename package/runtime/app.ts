@@ -5,6 +5,12 @@ export type LofiAppConfig<Schema = unknown> = {
   schema: Schema;
   storage: "durable";
   credentialOrigins?: readonly string[];
+  /**
+   * Recoverable passkeys are scoped to this relying-party ID. Pin the canonical
+   * production hostname before users create backups. When omitted, the current
+   * hostname is used, which is convenient locally but preview-host specific.
+   */
+  passkey?: { rpId?: string };
   sync: { adapter: "jazz" };
   repositoryUrl?: string;
 };

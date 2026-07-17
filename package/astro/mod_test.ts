@@ -17,6 +17,8 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
       if (!source.includes(expected)) throw new Error(`generated config omitted ${expected}`);
     }
     await Deno.stat(`${root}/.lofi/package/preact/DeviceStatus.tsx`);
+    await Deno.stat(`${root}/.lofi/package/runtime/passkey-recovery.ts`);
+    await Deno.stat(`${root}/.lofi/package/access/mod.ts`);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

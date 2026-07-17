@@ -47,24 +47,34 @@ export {
 export {
   getRuntime,
   getRuntimeDiagnostics,
+  getRuntimePrincipal,
   type LofiRuntime,
   recreateRuntime,
+  reloadBrowserRuntime,
   runtimeRecreatedEvent,
   shutdownRuntime,
   subscribeRuntimeDiagnostics,
 } from "./runtime.ts";
 export {
+  type AccountReplacementOptions,
   confirmPhraseAccess,
   createBackupPasskey,
+  createRecoverablePasskeyBackup,
   enableSyncBackup,
+  isAccountReplacementError,
   isAuthError,
+  isRecoverablePasskeyError,
   isRecoveryError,
+  type PasskeyBackupReceipt,
+  readAccountSession,
   readSession,
+  restoreFromPasskey,
   restoreFromRecoveryPhrase,
   revealRecoveryPhrase,
   type Session,
   stopSyncBackup,
 } from "./session.ts";
+export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";
 export {
   type TableHandle,
   type TableRow,

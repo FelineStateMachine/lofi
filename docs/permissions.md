@@ -51,11 +51,70 @@ Treat a permission change like a data migration:
 Managed sync configuration is required to publish schema and permission changes. Local-only mode is
 still useful for UI work, but it does not prove a cloud permission policy was deployed correctly.
 
-## Collaboration is not implied
+## Choose one narrow access template
 
-The starter demonstrates private, creator-owned data. It does not generate sharing, invitations,
-roles, revocation, or organization membership. Those features require a deliberate Jazz policy and
-product flow; do not infer them from the presence of sync.
+The starter remains private by default. When a resource has a concrete collaboration model,
+`@nzip/lofi/access` compiles three narrow templates through Jazz's own policy builder:
+
+| Template        | Who can read                     | Who can mutate                                      | Sync     |
+| --------------- | -------------------------------- | --------------------------------------------------- | -------- |
+| `privateAccess` | Row creator                      | Row creator                                         | Optional |
+| `sharedAccess`  | Creator plus explicit recipients | Creator; recipients with editable grants may update | Required |
+| `groupAccess`   | Group members                    | Determined by the fixed group role                  | Required |
+
+The schema remains raw Jazz:
+
+```ts
+import { schema as s } from "jazz-tools";
+import { groupMembershipTable, sharedGrantTable } from "@nzip/lofi/access";
+
+const schema = {
+  notes: s.table({ title: s.string() }),
+  noteGrants: sharedGrantTable("notes"),
+  workspaces: s.table({ name: s.string() }),
+  workspaceMembers: groupMembershipTable("workspaces"),
+  documents: s.table({ workspaceId: s.ref("workspaces"), title: s.string() }),
+};
+export const app = s.defineApp(schema);
+```
+
+Then compose policies:
+
+```ts
+export default defineAccessPolicies(app, [
+  sharedAccess({ resource: app.notes, grants: app.noteGrants }),
+  groupAccess({
+    groups: app.workspaces,
+    members: app.workspaceMembers,
+    resources: app.documents,
+    groupId: "workspaceId",
+  }),
+]);
+```
+
+This is not a general schema facade. Use `s.table()`, `s.defineApp()`, and `s.definePermissions()`
+directly whenever the templates do not fit. `defineAccessPolicies` also accepts a final raw-policy
+callback for a small extension without hiding Jazz.
+
+## Fixed group roles
+
+| Role          | Read | Create | Edit own | Edit any | Manage members |
+| ------------- | ---- | ------ | -------- | -------- | -------------- |
+| `reader`      | yes  | no     | no       | no       | no             |
+| `contributor` | yes  | yes    | yes      | no       | no             |
+| `writer`      | yes  | yes    | yes      | yes      | no             |
+| `admin`       | yes  | yes    | yes      | yes      | yes            |
+
+The helper stores the role label plus fixed capability bits because the pinned Jazz alpha rejects
+role-string comparisons inside relationship policies. Only the four role names are accepted by the
+typed operations; custom roles belong in a raw Jazz policy.
+
+Direct shares and group membership use a non-secret `lofi1:<app-id>:<jazz-user-id>` sharing
+identity. It is safe to copy for this purpose but is not a directory, invitation, or sign-in token.
+The package deliberately does not discover users or deliver invitations.
+
+See the focused [Shared](examples/shared.md) and [Group](examples/group.md) examples and the
+[access API reference](reference/access.md).
 
 When adding collaboration, test at least:
 

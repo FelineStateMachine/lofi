@@ -39,10 +39,10 @@ or remove both to return to local-only mode.
 stateDiagram-v2
     [*] --> LocalOnly: First boot
     state "Local-only<br/>Private on-device account<br/>Durable local data" as LocalOnly
-    LocalOnly --> Syncing: User opts in and saves phrase
+    LocalOnly --> Syncing: User creates recoverable passkey and saves phrase
     state "Syncing<br/>Same account identity<br/>Local and global durability" as Syncing
     Syncing --> LocalOnly: Stop syncing
-    Syncing --> Recovered: Enter phrase on another device
+    Syncing --> Recovered: Use passkey or enter phrase
     state "Recovered<br/>Same identity restored<br/>Synced data downloads" as Recovered
     Recovered --> Syncing
 ```
@@ -52,6 +52,12 @@ secret.
 
 ## Recovery guarantees and limits
 
+- The recoverable passkey stores the same account secret inside a resident, user-verifying
+  credential. Restoring it replaces the Jazz client and confirms the same `session.user_id`.
+- Passkey availability is provider- and RP-ID-dependent. Pin `passkey.rpId` to the canonical
+  production hostname. A passkey created for a preview hostname cannot move to another RP-ID.
+- iCloud Keychain, Google Password Manager, and third-party managers have different platform
+  boundaries. lofi does not promise universal iOS/Android/browser/provider portability.
 - The recovery phrase is the account authority. Anyone with all the words can act as that account.
 - lofi does not retain material that can reconstruct the account for the user.
 - Losing both the device and every copy of the phrase loses the account.
@@ -59,6 +65,8 @@ secret.
   only in storage on a lost device.
 - Restoring replaces the current device account, so the generated UI confirms before abandoning an
   unsynced local identity.
+- Older lofi guard-only credentials protect phrase reveal on one device; they do not contain the
+  Jazz secret and are not recoverable account backups.
 
 Read [Identity and recovery model](auth-identity.md) for the detailed state machine and custody
 model.

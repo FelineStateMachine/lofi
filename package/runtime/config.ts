@@ -49,14 +49,22 @@ export function syncing(): boolean {
   return syncAvailable && syncElected();
 }
 
-export function databaseConfig(secret: string): DbConfig {
+export function databaseConfig(
+  secret: string,
+  accountNamespace: string,
+  mode: "local" | "managed" = syncing() ? "managed" : "local",
+  connect = mode === "managed" && syncing(),
+): DbConfig {
   const app = getLofiApp();
   return {
     appId,
     // The same local-first secret opens the same account whether or not a server
     // is attached, so electing to sync later preserves all existing data.
-    ...(syncing() && serverUrl ? { serverUrl } : {}),
+    ...(connect && serverUrl ? { serverUrl } : {}),
     secret,
-    driver: { type: "persistent", dbName: `${app.databaseName}-${appId}` },
+    driver: {
+      type: "persistent",
+      dbName: `${app.databaseName}-${appId}-${accountNamespace}-${mode}`,
+    },
   };
 }

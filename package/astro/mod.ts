@@ -19,6 +19,7 @@ const runtimeFiles = [
   "inspector.ts",
   "lifecycle.ts",
   "mod.ts",
+  "passkey-recovery.ts",
   "probe.ts",
   "pwa.ts",
   "recovery.ts",
@@ -27,6 +28,15 @@ const runtimeFiles = [
   "session.ts",
   "table-store.ts",
   "ui-mutation.ts",
+] as const;
+
+const accessFiles = [
+  "errors.ts",
+  "identity.ts",
+  "mod.ts",
+  "operations.ts",
+  "policies.ts",
+  "schema.ts",
 ] as const;
 
 const preactFiles = [
@@ -48,6 +58,7 @@ async function readPackageFile(path: string): Promise<string> {
 
 function renderConfig(projectRoot: string): string {
   const runtimeEntry = join(projectRoot, ".lofi", "package", "runtime", "mod.ts");
+  const accessEntry = join(projectRoot, ".lofi", "package", "access", "mod.ts");
   const preactEntry = join(projectRoot, ".lofi", "package", "preact", "mod.ts");
   return `import preact from "@astrojs/preact";
 import { defineConfig } from "astro/config";
@@ -86,6 +97,7 @@ export default defineConfig({
     resolve: {
       alias: [
         { find: "@nzip/lofi/preact", replacement: ${JSON.stringify(preactEntry)} },
+        { find: "@nzip/lofi/access", replacement: ${JSON.stringify(accessEntry)} },
         { find: "@nzip/lofi", replacement: ${JSON.stringify(runtimeEntry)} },
       ],
       noExternal: ["@astrojs/preact"],
@@ -108,6 +120,7 @@ export async function prepareLofiAstroConfig(options: LofiAstroOptions = {}): Pr
   const path = join(toolingDir, "astro.config.ts");
   const packageDir = join(toolingDir, "package");
   await Deno.mkdir(join(packageDir, "runtime"), { recursive: true });
+  await Deno.mkdir(join(packageDir, "access"), { recursive: true });
   await Deno.mkdir(join(packageDir, "preact"), { recursive: true });
   for (const file of runtimeFiles) {
     await Deno.writeTextFile(
@@ -119,6 +132,12 @@ export async function prepareLofiAstroConfig(options: LofiAstroOptions = {}): Pr
     await Deno.writeTextFile(
       join(packageDir, "preact", file),
       await readPackageFile(`../preact/${file}`),
+    );
+  }
+  for (const file of accessFiles) {
+    await Deno.writeTextFile(
+      join(packageDir, "access", file),
+      await readPackageFile(`../access/${file}`),
     );
   }
   const configSource = renderConfig(projectRoot);

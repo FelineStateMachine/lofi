@@ -82,6 +82,12 @@ export {
   type RuntimeStartupFailureCode,
 } from "./startup-recovery.ts";
 export {
+  acquireTableMutations,
+  type TableMutationLease,
+  type TableMutationSnapshot,
+  type TableMutationStore,
+} from "./table-mutations.ts";
+export {
   AccountReplacementError,
   type AccountReplacementOptions,
   confirmPhraseAccess,

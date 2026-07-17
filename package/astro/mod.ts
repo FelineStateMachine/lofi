@@ -38,6 +38,7 @@ const runtimeFiles = [
   "runtime.ts",
   "session.ts",
   "startup-recovery.ts",
+  "table-mutations.ts",
   "table-store.ts",
   "ui-mutation.ts",
 ] as const;
@@ -53,6 +54,7 @@ const accessFiles = [
 
 const preactFiles = [
   "DeviceStatus.tsx",
+  "live-data.ts",
   "mod.ts",
   "PwaActions.tsx",
   "RuntimeRecovery.tsx",

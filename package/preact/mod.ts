@@ -9,6 +9,13 @@
 export { default as DeviceStatus } from "./DeviceStatus.tsx";
 export { RuntimeRecovery, type RuntimeRecoveryProps } from "./RuntimeRecovery.tsx";
 export {
+  type LiveQuerySnapshot,
+  type TableMutations,
+  type TableMutationSnapshot,
+  useLiveQuery,
+  useTableMutations,
+} from "./live-data.ts";
+export {
   PwaActions,
   type PwaActionsProps,
   type PwaController,

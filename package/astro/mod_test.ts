@@ -20,6 +20,7 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
         ".lofi/package/recipes/related-app-discovery.ts",
         ".lofi/package/recipes/scope-extension.ts",
         ".lofi/package/recipes/web-share.ts",
+        ".lofi/package/recipes/window-controls-overlay.ts",
         "^jsr:@nzip\\/lofi@[^/]+",
         "^npm:preact@[^/]+",
         "^npm:jazz-tools@[^/]+",
@@ -43,6 +44,7 @@ Deno.test("prepareLofiAstroConfig materializes package-owned vendor integration"
     await Deno.stat(`${root}/.lofi/package/recipes/related-app-discovery.ts`);
     await Deno.stat(`${root}/.lofi/package/recipes/scope-extension.ts`);
     await Deno.stat(`${root}/.lofi/package/recipes/web-share.ts`);
+    await Deno.stat(`${root}/.lofi/package/recipes/window-controls-overlay.ts`);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

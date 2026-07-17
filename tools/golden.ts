@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 18, `expected 18 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 19, `expected 19 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -981,6 +981,54 @@ const verified = verifyWebAppOriginAssociation(association, expected);
   );
 }
 
+async function installWindowControlsOverlayRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.display_override = ["window-controls-overlay"];
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "desktop-titlebar.astro"),
+    `---
+import DesktopTitlebar from "../islands/DesktopTitlebar.tsx";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+---
+<Shell title="Desktop workspace">
+  <DesktopTitlebar client:load />
+</Shell>
+<style is:global>
+  .desktop-titlebar { min-block-size: 3rem; display: flex; align-items: center; gap: .75rem; border-block-end: 1px solid CanvasText; }
+  @media (display-mode: window-controls-overlay) {
+    .desktop-titlebar { position: fixed; left: env(titlebar-area-x, 0px); top: env(titlebar-area-y, 0px); width: env(titlebar-area-width, 100%); height: env(titlebar-area-height, 3rem); min-block-size: 0; app-region: drag; }
+    .desktop-titlebar :is(button, output) { app-region: no-drag; }
+  }
+  @media (forced-colors: active) { .desktop-titlebar { border-color: CanvasText; } }
+</style>
+`,
+  );
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "islands", "DesktopTitlebar.tsx"),
+    `import { useEffect, useState } from "preact/hooks";
+import { observeWindowControlsOverlay, type WindowControlsOverlayGeometry } from "@nzip/lofi/recipes/window-controls-overlay";
+export default function DesktopTitlebar() {
+  const [supported, setSupported] = useState<boolean>();
+  const [geometry, setGeometry] = useState<WindowControlsOverlayGeometry>();
+  useEffect(() => {
+    const observer = observeWindowControlsOverlay({ onGeometry: setGeometry });
+    setSupported(observer.supported);
+    return observer.dispose;
+  }, []);
+  return <header class="desktop-titlebar" data-desktop-titlebar>
+    <strong>Field Notes</strong>
+    <button type="button">Workspace menu</button>
+    <output data-overlay-support>{supported === undefined ? "checking" : supported ? "supported" : "unsupported"}</output>
+    {geometry && <output data-overlay-width>{geometry.titlebarArea.width}</output>}
+  </header>;
+}
+`,
+  );
+}
+
 async function main() {
   const { source, version } = parseArgs(Deno.args);
   await Deno.remove(artifactsRoot, { recursive: true }).catch((error) => {
@@ -1238,6 +1286,10 @@ async function main() {
     await stage(
       "install scope-extension recipe",
       () => installScopeExtensionRecipe(projectRoot!),
+    );
+    await stage(
+      "install window-controls-overlay recipe",
+      () => installWindowControlsOverlayRecipe(projectRoot!),
     );
 
     await stage(
@@ -1687,6 +1739,34 @@ async function main() {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(page!, taskAppReady, undefined, {
         description: "task app after scope-extension exercise",
+      });
+    });
+    await stage("window-controls-overlay recipe browser", async () => {
+      await page!.goto(`${origin}desktop-titlebar/`, { waitUntil: "domcontentloaded" });
+      const titlebar = page!.locator("[data-desktop-titlebar]");
+      await titlebar.waitFor({ state: "visible" });
+      await page!.getByRole("button", { name: "Workspace menu" }).focus();
+      assert(
+        await page!.getByRole("button", { name: "Workspace menu" }).evaluate((element) =>
+          element === document.activeElement
+        ),
+        "titlebar controls were not keyboard reachable",
+      );
+      const box = await titlebar.boundingBox();
+      assert(
+        Boolean(box && box.width > 0 && box.height > 0),
+        "standalone titlebar fallback collapsed",
+      );
+      await context!.setOffline(true);
+      try {
+        await page!.goto(`${origin}desktop-titlebar/`, { waitUntil: "domcontentloaded" });
+        await page!.locator("[data-desktop-titlebar]").waitFor({ state: "visible" });
+      } finally {
+        await context!.setOffline(false);
+      }
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after window-controls-overlay exercise",
       });
     });
     await stage("waiting worker update browser", async () => {

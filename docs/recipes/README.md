@@ -26,6 +26,8 @@ flowchart LR
   from exact verified-app matches without changing authentication or PWA installability.
 - [Cross-origin app-window scope](scope-extension.md) — keep product-owned secondary-origin paths
   inside an installed window after reciprocal deployment verification.
+- [Desktop window controls overlay](window-controls-overlay.md) — use noncritical titlebar space
+  without obscuring system controls, while preserving the standalone layout.
 
 ## Contract for every recipe
 

@@ -78,6 +78,14 @@ local-only mode. Start with the
 [permissions guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/permissions.md) and the
 [access API reference](https://github.com/FelineStateMachine/lofi/blob/main/docs/reference/access.md).
 
+## Optional installed-app recipes
+
+OS-facing capabilities remain absent until the product opts in. Start with the
+[installed-app recipe catalog](https://github.com/FelineStateMachine/lofi/blob/main/docs/recipes/README.md)
+for tested manifest patches, feature detection, input validation, offline behavior, and normal-web
+fallbacks. The first recipe covers inbound and outbound text/link sharing through the isolated
+\`@nzip/lofi/recipes/web-share\` entrypoint.
+
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
 
@@ -121,6 +129,10 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
   "@nzip/lofi/preview": { subpath: "preview", localPath: "commands/preview.ts" },
   "@nzip/lofi/preact": { subpath: "preact", localPath: "preact/mod.ts" },
   "@nzip/lofi/provision": { subpath: "provision", localPath: "commands/provision.ts" },
+  "@nzip/lofi/recipes/web-share": {
+    subpath: "recipes/web-share",
+    localPath: "recipes/web-share.ts",
+  },
   "@nzip/lofi/test": { subpath: "test", localPath: "commands/run_tests.ts" },
   "@nzip/lofi/testing": { subpath: "testing", localPath: "testing/mod.ts" },
 };

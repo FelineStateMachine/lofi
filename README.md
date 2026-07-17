@@ -131,6 +131,13 @@ Start with the [account and access API](docs/reference/access.md), then copy the
 compile ordinary Jazz policies, so unusual authorization models can still use raw Jazz schema and
 permission APIs.
 
+## Optional installed-app recipes
+
+OS-facing capabilities stay out of the starter until the product opts in. The
+[installed-app recipe catalog](docs/recipes/README.md) begins with a tested inbound/outbound Web
+Share flow, including an isolated `@nzip/lofi/recipes/web-share` entrypoint, manifest validation,
+untrusted-input parsing, and ordinary-web fallbacks.
+
 ## Testing local-first behavior
 
 `@nzip/lofi/testing` provides Playwright-backed helpers for behavior that is difficult to test with

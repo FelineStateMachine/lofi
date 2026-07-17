@@ -16,6 +16,8 @@ flowchart LR
 
 - [Inbound and outbound Web Share](web-share.md) — share text or links through the OS sheet and
   receive an untrusted draft through an optional installed-app share target.
+- [Launch handling and client reuse](launch-handler.md) — safely focus or navigate an existing
+  installed window while preserving ordinary launch behavior elsewhere.
 
 ## Contract for every recipe
 

@@ -392,7 +392,7 @@ async function assertGeneratedBoundary(
   const lofiImports = Object.entries(config.imports).filter(([name]) =>
     name === "@nzip/lofi" || name.startsWith("@nzip/lofi/")
   );
-  assert(lofiImports.length === 13, `expected 13 lofi imports, received ${lofiImports.length}`);
+  assert(lofiImports.length === 14, `expected 14 lofi imports, received ${lofiImports.length}`);
   const expected = source === "registry"
     ? `jsr:@nzip/lofi@${version}`
     : pathToFileURL(join(repositoryRoot, "package")).href;
@@ -423,6 +423,7 @@ async function assertProductionOutput(projectRoot: string) {
   for (
     const required of [
       "index.html",
+      "launch/index.html",
       "share/index.html",
       "manifest.webmanifest",
       "sw.js",
@@ -451,9 +452,14 @@ async function assertProductionOutput(projectRoot: string) {
       enctype: string;
       params: { title: string; text: string; url: string };
     };
+    launch_handler: { client_mode: string[] };
   };
   assert(manifest.share_target.action === "./share/", "share target action drifted");
   assert(manifest.share_target.method === "GET", "share target method drifted");
+  assert(
+    manifest.launch_handler.client_mode.join(",") === "focus-existing,auto",
+    "launch handler client mode drifted",
+  );
   const expected = new Map([
     [
       "icon-192.png",
@@ -688,6 +694,64 @@ export default function ShareReceiver() {
         Share this draft
       </button>
       {outcome && <output data-share-outcome>{outcome}</output>}
+    </section>
+  );
+}
+`,
+  );
+}
+
+async function installLaunchHandlerRecipe(projectRoot: string) {
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.launch_handler = { client_mode: ["focus-existing", "auto"] };
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "pages", "launch.astro"),
+    `---
+import LaunchReceiver from "../islands/LaunchReceiver.tsx";
+import Shell from "../layouts/Shell.astro";
+import "../styles/global.css";
+---
+
+<Shell title="Installed app launch">
+  <LaunchReceiver client:load />
+</Shell>
+`,
+  );
+  await Deno.writeTextFile(
+    join(projectRoot, "src", "islands", "LaunchReceiver.tsx"),
+    `import { useEffect, useState } from "preact/hooks";
+import {
+  installInstalledAppLaunchConsumer,
+  type InstalledAppLaunchIssue,
+} from "@nzip/lofi/recipes/launch-handler";
+
+export default function LaunchReceiver() {
+  const [supported, setSupported] = useState<boolean>();
+  const [target, setTarget] = useState("");
+  const [issue, setIssue] = useState<InstalledAppLaunchIssue>();
+  useEffect(() => {
+    const consumer = installInstalledAppLaunchConsumer({
+      scope: new URL(import.meta.env.BASE_URL, location.origin),
+      onLaunch: (next) => {
+        setIssue(undefined);
+        setTarget(next.url);
+      },
+      onRejected: (next) => {
+        setTarget("");
+        setIssue(next);
+      },
+    });
+    setSupported(consumer.supported);
+    return consumer.dispose;
+  }, []);
+  return (
+    <section class="island">
+      <h1>Installed app launch</h1>
+      <output data-launch-support>{supported === undefined ? "checking" : supported ? "supported" : "unsupported"}</output>
+      {target && <p data-launch-target>{target}</p>}
+      {issue && <p role="alert">The requested app destination is not valid.</p>}
     </section>
   );
 }
@@ -939,6 +1003,7 @@ async function main() {
     dev = undefined;
 
     await stage("install web-share recipe", () => installWebShareRecipe(projectRoot!));
+    await stage("install launch-handler recipe", () => installLaunchHandlerRecipe(projectRoot!));
 
     await stage(
       "build",
@@ -1119,6 +1184,77 @@ async function main() {
       await page!.goto(origin, { waitUntil: "domcontentloaded" });
       await waitForReady(page!, taskAppReady, undefined, {
         description: "task app after share recipe exercise",
+      });
+    });
+    await stage("launch-handler recipe browser", async () => {
+      const unsupportedPage = await context!.newPage();
+      try {
+        await unsupportedPage.addInitScript(() => {
+          Object.defineProperty(globalThis, "launchQueue", {
+            configurable: true,
+            value: undefined,
+          });
+        });
+        await unsupportedPage.goto(`${origin}launch/`, { waitUntil: "domcontentloaded" });
+        await unsupportedPage.locator("[data-launch-support]").waitFor({ state: "visible" });
+        assert(
+          await unsupportedPage.locator("[data-launch-support]").textContent() === "unsupported",
+          "missing launchQueue was not reported as unsupported",
+        );
+      } finally {
+        await unsupportedPage.close();
+      }
+
+      await page!.addInitScript(() => {
+        let consumer: (parameters: { targetURL?: string }) => void = () => {};
+        Object.defineProperty(globalThis, "launchQueue", {
+          configurable: true,
+          value: {
+            setConsumer(next: typeof consumer) {
+              consumer = next;
+            },
+          },
+        });
+        Object.defineProperty(globalThis, "__LOFI_DELIVER_LAUNCH__", {
+          configurable: true,
+          value: (targetURL: string) => consumer({ targetURL }),
+        });
+      });
+      await context!.setOffline(true);
+      try {
+        await page!.goto(`${origin}launch/`, { waitUntil: "domcontentloaded" });
+        await page!.locator("[data-launch-support]").waitFor({ state: "visible" });
+        assert(
+          await page!.locator("[data-launch-support]").textContent() === "supported",
+          "mock launchQueue was not consumed",
+        );
+        await page!.evaluate((targetURL) => {
+          const deliver = (globalThis as typeof globalThis & {
+            __LOFI_DELIVER_LAUNCH__?: (targetURL: string) => void;
+          }).__LOFI_DELIVER_LAUNCH__;
+          deliver?.(targetURL);
+        }, `${origin}launch/?item=1#selected`);
+        await page!.locator("[data-launch-target]").waitFor({ state: "visible" });
+        assert(
+          await page!.locator("[data-launch-target]").textContent() ===
+            `${origin}launch/?item=1#selected`,
+          "valid offline launch target was not normalized",
+        );
+        await page!.evaluate(() => {
+          const deliver = (globalThis as typeof globalThis & {
+            __LOFI_DELIVER_LAUNCH__?: (targetURL: string) => void;
+          }).__LOFI_DELIVER_LAUNCH__;
+          deliver?.("https://outside.invalid/private");
+        });
+        await page!.getByRole("alert").waitFor({ state: "visible" });
+        const rejected = await page!.locator("body").innerText();
+        assert(!rejected.includes("outside.invalid"), "rejected launch target leaked into the UI");
+      } finally {
+        await context!.setOffline(false);
+      }
+      await page!.goto(origin, { waitUntil: "domcontentloaded" });
+      await waitForReady(page!, taskAppReady, undefined, {
+        description: "task app after launch-handler exercise",
       });
     });
     await stage("waiting worker update browser", async () => {

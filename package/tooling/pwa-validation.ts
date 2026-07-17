@@ -17,6 +17,12 @@ type ImageResource = {
 const manifestFile = "manifest.webmanifest";
 const syntheticOrigin = "https://lofi.invalid";
 const displayModes = new Set(["browser", "fullscreen", "minimal-ui", "standalone"]);
+const launchClientModes = new Set([
+  "auto",
+  "focus-existing",
+  "navigate-existing",
+  "navigate-new",
+]);
 const imageTypes = new Map([
   ["image/jpeg", new Set([".jpeg", ".jpg"])],
   ["image/png", new Set([".png"])],
@@ -284,6 +290,41 @@ async function parseAndValidateManifest(
   for (const member of ["background_color", "theme_color"] as const) {
     if (!isLikelyCssColor(manifest[member])) {
       issues.push(issue(`${manifestFile}: ${member} must be a CSS color`, remediation));
+    }
+  }
+
+  if (manifest.launch_handler !== undefined) {
+    const label = `${manifestFile}: launch_handler`;
+    const handler = manifest.launch_handler;
+    if (!isObject(handler)) {
+      issues.push(issue(`${label} must be an object`, remediation));
+    } else {
+      const unknown = Object.keys(handler).filter((member) => member !== "client_mode");
+      if (unknown.length > 0) {
+        issues.push(issue(`${label} contains unsupported members`, remediation));
+      }
+      const modes = typeof handler.client_mode === "string"
+        ? [handler.client_mode]
+        : Array.isArray(handler.client_mode)
+        ? handler.client_mode
+        : undefined;
+      if (!modes || modes.length === 0) {
+        issues.push(
+          issue(`${label}.client_mode must be a mode or non-empty mode array`, remediation),
+        );
+      } else {
+        if (!modes.every((mode) => typeof mode === "string" && launchClientModes.has(mode))) {
+          issues.push(
+            issue(
+              `${label}.client_mode supports auto, focus-existing, navigate-existing, or navigate-new`,
+              remediation,
+            ),
+          );
+        }
+        if (new Set(modes).size !== modes.length) {
+          issues.push(issue(`${label}.client_mode must not repeat modes`, remediation));
+        }
+      }
     }
   }
 

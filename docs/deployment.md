@@ -86,7 +86,8 @@ Storefront metadata is optional and product-specific. Add lowercase `categories`
 truthfully describe the finished app. Add `iarc_rating_id` only after obtaining a real IARC
 certification code; never copy a placeholder rating. Experimental capabilities such as file,
 protocol, share-target, and launch handlers are deliberately absent from the starter and should be
-added only with matching product behavior and tests.
+added only with matching product behavior and tests. Use the
+[installed-app recipe catalog](recipes/README.md) for the supported opt-in patterns.
 
 ### Replace or remove install presentation
 

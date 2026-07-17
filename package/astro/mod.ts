@@ -61,7 +61,7 @@ const preactFiles = [
   "use-device-capabilities.ts",
 ] as const;
 
-const recipeFiles = ["web-share.ts"] as const;
+const recipeFiles = ["launch-handler.ts", "web-share.ts"] as const;
 
 async function readPackageFile(path: string): Promise<string> {
   const url = new URL(path, import.meta.url);
@@ -77,6 +77,13 @@ function renderConfig(projectRoot: string): string {
   const runtimeEntry = join(projectRoot, ".lofi", "package", "runtime", "mod.ts");
   const accessEntry = join(projectRoot, ".lofi", "package", "access", "mod.ts");
   const preactEntry = join(projectRoot, ".lofi", "package", "preact", "mod.ts");
+  const launchHandlerRecipe = join(
+    projectRoot,
+    ".lofi",
+    "package",
+    "recipes",
+    "launch-handler.ts",
+  );
   const webShareRecipe = join(projectRoot, ".lofi", "package", "recipes", "web-share.ts");
   return `import preact from "@astrojs/preact";
 import { defineConfig } from "astro/config";
@@ -117,6 +124,9 @@ export default defineConfig({
     },
     resolve: {
       alias: [
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/launch-handler$/, replacement: ${
+    JSON.stringify(launchHandlerRecipe)
+  } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/recipes\\/web-share$/, replacement: ${
     JSON.stringify(webShareRecipe)
   } },
@@ -130,6 +140,9 @@ export default defineConfig({
         { find: /^npm:jazz-tools@[^/]+\\/passkey-backup$/, replacement: "jazz-tools/passkey-backup" },
         { find: /^npm:jazz-tools@[^/]+\\/passphrase$/, replacement: "jazz-tools/passphrase" },
         { find: /^npm:jazz-tools@[^/]+$/, replacement: "jazz-tools" },
+        { find: "@nzip/lofi/recipes/launch-handler", replacement: ${
+    JSON.stringify(launchHandlerRecipe)
+  } },
         { find: "@nzip/lofi/recipes/web-share", replacement: ${JSON.stringify(webShareRecipe)} },
         { find: "@nzip/lofi/preact", replacement: ${JSON.stringify(preactEntry)} },
         { find: "@nzip/lofi/access", replacement: ${JSON.stringify(accessEntry)} },

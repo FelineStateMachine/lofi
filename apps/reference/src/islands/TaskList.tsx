@@ -40,7 +40,7 @@ export default function TaskList() {
       <p class="state" role="status">
         {status === "loading" && "Opening persistent storage…"}
         {status === "error" &&
-          `${failureKind === "startup" ? "Startup failed" : "Write failed"}: ${error}`}
+          `${failureKind === "read" ? "Read failed" : "Write failed"}: ${error}`}
         {status === "ready" && `${tasks.length} item(s) · ${
           durability === "global"
             ? "synced to your account"

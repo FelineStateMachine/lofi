@@ -36,6 +36,14 @@ class FakeRegistration extends EventTarget {
   installing: ServiceWorker | null = null;
   waiting: ServiceWorker | null = null;
   active: ServiceWorker | null = null;
+  updateCalls = 0;
+  updateImplementation: () => Promise<ServiceWorkerRegistration> = () =>
+    Promise.resolve(this as unknown as ServiceWorkerRegistration);
+
+  update(): Promise<ServiceWorkerRegistration> {
+    this.updateCalls += 1;
+    return this.updateImplementation();
+  }
 }
 
 class FakeContainer extends EventTarget {
@@ -64,18 +72,34 @@ function testController(options: {
   install?: PwaInstallState;
   reload?: () => void;
   deploymentBaseUrl?: string;
+  visibilityTarget?: EventTarget;
+  isVisible?: () => boolean;
+  now?: () => number;
+  setTimeout?: (callback: () => void, milliseconds: number) => unknown;
+  clearTimeout?: (handle: unknown) => void;
+  updateCheckIntervalMs?: number;
+  updateCheckTimeoutMs?: number;
 } = {}): PwaController {
   const environment = options.install === "manual-ios"
     ? { platform: "iPhone", maxTouchPoints: 5 }
     : { platform: "Linux x86_64", maxTouchPoints: 0 };
   return createPwaController({
     eventTarget: () => options.target ?? new EventTarget(),
+    visibilityTarget: () => options.visibilityTarget ?? new EventTarget(),
     serviceWorker: () => options.container as unknown as ServiceWorkerContainer,
     installEnvironment: () => ({
       displayModeStandalone: options.install === "installed",
       navigatorStandalone: false,
+      secureContext: options.install !== "unsupported",
+      serviceWorkerSupported: options.install !== "unsupported",
       ...environment,
     }),
+    isVisible: options.isVisible,
+    now: options.now,
+    setTimeout: options.setTimeout,
+    clearTimeout: options.clearTimeout,
+    updateCheckIntervalMs: options.updateCheckIntervalMs,
+    updateCheckTimeoutMs: options.updateCheckTimeoutMs,
     production: () => options.production ?? false,
     deploymentBaseUrl: () => options.deploymentBaseUrl ?? "http://127.0.0.1:4321/",
     reload: options.reload,
@@ -162,6 +186,8 @@ test("install experience recognizes standalone display modes", () => {
     navigatorStandalone: false,
     platform: "Linux armv8l",
     maxTouchPoints: 5,
+    secureContext: true,
+    serviceWorkerSupported: true,
   });
   if (state !== "installed") throw new Error(`expected installed, received ${state}`);
 });
@@ -172,15 +198,41 @@ test("install experience gives iOS manual guidance in every region", () => {
     navigatorStandalone: false,
     platform: "iPhone",
     maxTouchPoints: 5,
+    secureContext: true,
+    serviceWorkerSupported: true,
   });
   const ipadDesktopMode = classifyInstallExperience({
     displayModeStandalone: false,
     navigatorStandalone: false,
     platform: "MacIntel",
     maxTouchPoints: 5,
+    secureContext: true,
+    serviceWorkerSupported: true,
   });
   if (iphone !== "manual-ios" || ipadDesktopMode !== "manual-ios") {
     throw new Error(`expected iOS guidance, received ${iphone} and ${ipadDesktopMode}`);
+  }
+});
+
+test("install experience distinguishes manual browser fallback from unsupported contexts", () => {
+  const manual = classifyInstallExperience({
+    displayModeStandalone: false,
+    navigatorStandalone: false,
+    platform: "Linux x86_64",
+    maxTouchPoints: 0,
+    secureContext: true,
+    serviceWorkerSupported: true,
+  });
+  const unsupported = classifyInstallExperience({
+    displayModeStandalone: false,
+    navigatorStandalone: false,
+    platform: "Linux x86_64",
+    maxTouchPoints: 0,
+    secureContext: false,
+    serviceWorkerSupported: true,
+  });
+  if (manual !== "manual-browser" || unsupported !== "unsupported") {
+    throw new Error(`unexpected fallback states ${manual} and ${unsupported}`);
   }
 });
 
@@ -221,15 +273,120 @@ test("waiting-worker update activation posts skip-waiting and reloads on control
     production: true,
     reload: () => reloaded = true,
   });
-  const available = waitForState(controller, (state) => state.worker === "update-available");
+  const available = waitForState(controller, (state) => state.update === "ready");
   controller.initialize();
   await available;
+  if (await controller.checkForUpdate() || container.registration.updateCalls !== 0) {
+    throw new Error("foreground check replaced an actionable waiting update");
+  }
   if (!controller.applyUpdate()) throw new Error("update action was unavailable");
+  if (controller.getState().update !== "applying") {
+    throw new Error("update application state was not observable");
+  }
   if (JSON.stringify(waiting.messages) !== JSON.stringify([{ type: "LOFI_SKIP_WAITING" }])) {
     throw new Error("update action did not request activation");
   }
   container.dispatchEvent(new Event("controllerchange"));
   if (!reloaded) throw new Error("controller change did not reload after update action");
+  reloaded = false;
+  container.dispatchEvent(new Event("controllerchange"));
+  if (reloaded) throw new Error("one update action caused a reload loop");
+});
+
+test("foreground update checks are single-flight and rate-limited", async () => {
+  const target = new EventTarget();
+  const visibility = new EventTarget();
+  const container = new FakeContainer();
+  const active = new FakeServiceWorker("activated");
+  container.controller = asServiceWorker(active);
+  container.registration.active = asServiceWorker(active);
+  let currentTime = 0;
+  let resolveUpdate: ((registration: ServiceWorkerRegistration) => void) | undefined;
+  container.registration.updateImplementation = () =>
+    new Promise((resolve) => resolveUpdate = resolve);
+  const controller = testController({
+    target,
+    visibilityTarget: visibility,
+    isVisible: () => true,
+    container,
+    production: true,
+    now: () => currentTime,
+    updateCheckIntervalMs: 100,
+  });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  visibility.dispatchEvent(new Event("visibilitychange"));
+  target.dispatchEvent(new Event("online"));
+  await Promise.resolve();
+  if (container.registration.updateCalls !== 1 || controller.getState().update !== "checking") {
+    throw new Error("overlapping foreground signals did not share one update check");
+  }
+  const idle = waitForState(controller, (state) => state.update === "idle");
+  resolveUpdate?.(container.registration as unknown as ServiceWorkerRegistration);
+  await idle;
+  target.dispatchEvent(new Event("online"));
+  await Promise.resolve();
+  if (container.registration.updateCalls !== 1) {
+    throw new Error("update check ignored the rate limit");
+  }
+  currentTime = 100;
+  container.registration.updateImplementation = () =>
+    Promise.resolve(container.registration as unknown as ServiceWorkerRegistration);
+  target.dispatchEvent(new Event("online"));
+  await Promise.resolve();
+  await Promise.resolve();
+  if (Number(container.registration.updateCalls) !== 2) {
+    throw new Error("update check did not resume after the rate limit");
+  }
+});
+
+test("a bounded foreground update failure leaves the active worker ready", async () => {
+  const target = new EventTarget();
+  const container = new FakeContainer();
+  const active = new FakeServiceWorker("activated");
+  container.controller = asServiceWorker(active);
+  container.registration.active = asServiceWorker(active);
+  container.registration.updateImplementation = () => new Promise(() => undefined);
+  let expire: (() => void) | undefined;
+  const controller = testController({
+    target,
+    container,
+    production: true,
+    setTimeout: (callback) => {
+      expire = callback;
+      return 1;
+    },
+    clearTimeout: () => undefined,
+  });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  const failed = waitForState(controller, (state) => state.update === "failed");
+  target.dispatchEvent(new Event("online"));
+  await Promise.resolve();
+  expire?.();
+  const state = await failed;
+  if (state.worker !== "ready" || state.failure?.code !== "update-check") {
+    throw new Error("bounded update failure was reported as an active-worker failure");
+  }
+});
+
+test("an installing update becomes explicitly ready", async () => {
+  const container = new FakeContainer();
+  const active = new FakeServiceWorker("activated");
+  container.controller = asServiceWorker(active);
+  container.registration.active = asServiceWorker(active);
+  const controller = testController({ container, production: true });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  const installing = new FakeServiceWorker("installing");
+  container.registration.installing = asServiceWorker(installing);
+  container.registration.dispatchEvent(new Event("updatefound"));
+  if (controller.getState().update !== "installing") {
+    throw new Error("installing update state was hidden");
+  }
+  const ready = waitForState(controller, (state) => state.update === "ready");
+  installing.transition("installed");
+  await ready;
 });
 
 test("registration failure is classified without leaking the browser error", async () => {
@@ -278,6 +435,10 @@ for (const code of ["precache", "runtime-cache"] as const) {
     if (state.failure?.message.includes("private")) throw new Error(`${code} detail leaked`);
     if (!state.failure?.message.includes("Reconnect")) {
       throw new Error(`${code} failure is not actionable`);
+    }
+    const expectedWorker = code === "runtime-cache" ? "ready" : "failed";
+    if (state.worker !== expectedWorker) {
+      throw new Error(`${code} produced worker state ${state.worker}, expected ${expectedWorker}`);
     }
   });
 }

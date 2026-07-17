@@ -8,7 +8,7 @@ import {
 } from "../runtime/pwa.ts";
 
 export { pwaFailureMessage } from "../runtime/pwa.ts";
-export type { PwaController, PwaFailureCode, PwaState } from "../runtime/pwa.ts";
+export type { PwaController, PwaFailureCode, PwaState, PwaUpdateState } from "../runtime/pwa.ts";
 
 /** Subscribes a Preact component to an isolated or shared PWA controller. */
 export function usePwaState(controller: PwaController = pwaController): PwaState {
@@ -32,8 +32,9 @@ export function PwaActions({
 }: PwaActionsProps): VNode | null {
   const state = usePwaState(controller);
   const visible = state.install === "available" || state.install === "manual-ios" ||
+    state.install === "manual-browser" || state.install === "unsupported" ||
     state.install === "accepted" || state.install === "dismissed" ||
-    state.worker === "update-available" || Boolean(state.failure);
+    state.update !== "idle" || Boolean(state.failure);
   if (!visible) return null;
 
   return (
@@ -63,7 +64,18 @@ export function PwaActions({
           </ol>
         </div>
       )}
-      {state.worker === "update-available" && (
+      {state.install === "manual-browser" && (
+        <div class="pwa-browser-guidance">
+          <p>No in-page install button is available right now.</p>
+          <p>Look in its menu for Install app or Add to Home Screen, if offered.</p>
+        </div>
+      )}
+      {state.install === "unsupported" && (
+        <p>Installation is not supported in this browser or browsing context.</p>
+      )}
+      {state.update === "checking" && <p role="status">Checking for updates…</p>}
+      {state.update === "installing" && <p role="status">Installing update…</p>}
+      {state.update === "ready" && (
         <button
           type="button"
           onClick={() => controller.applyUpdate()}
@@ -71,6 +83,7 @@ export function PwaActions({
           Update app
         </button>
       )}
+      {state.update === "applying" && <p role="status">Applying update…</p>}
       {state.failure && (
         <p class="pwa-error" role="alert">{pwaFailureMessage(state.failure.code)}</p>
       )}

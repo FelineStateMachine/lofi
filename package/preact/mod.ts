@@ -22,6 +22,7 @@ export {
   type PwaFailureCode,
   pwaFailureMessage,
   type PwaState,
+  type PwaUpdateState,
   usePwaState,
 } from "./PwaActions.tsx";
 export {

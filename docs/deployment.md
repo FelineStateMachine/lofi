@@ -135,6 +135,24 @@ Navigation preload remains disabled: generated routes and their assets are preca
 parallel network request before the normal cache-first lookup would spend bandwidth on the expected
 offline-ready path. Jazz sync, OPFS storage, background sync, and push remain outside the worker.
 
+### Install and update lifecycle
+
+The optional `PwaActions` UI uses a browser prompt only while `beforeinstallprompt` is actually
+available. iOS receives its Share-menu steps. Other secure browsers with service-worker support get
+generic browser-menu guidance that says to use **Install app** or **Add to Home Screen** only if the
+browser offers it; an insecure or unsupported context is reported separately.
+
+When the app returns to the foreground, restores from the back-forward cache, or reconnects, Lofi
+asks the active service-worker registration to check for an update. Checks share one in-flight
+request, time out, and are rate-limited. Update state moves through `checking`, `installing`,
+`ready`, and `applying`; a waiting worker activates only after the user chooses **Update app**. Only
+that explicit action permits the following controller change to reload the page, so ordinary worker
+changes cannot create a reload loop.
+
+A runtime-cache write error is best-effort and leaves the active worker ready. Registration,
+required precache, and activation failures remain worker failures; update-check failures leave the
+current worker running and retry on a later foreground signal.
+
 Do not run a server-side Jazz credential in the static host or expose `JAZZ_ADMIN_SECRET` or
 `BACKEND_SECRET` as public environment variables.
 

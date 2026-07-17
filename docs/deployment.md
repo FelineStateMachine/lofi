@@ -88,6 +88,23 @@ Every prerendered route is included in the shell precache. While offline, a dire
 as `/field-notes/settings/` resolves its cached `settings/index.html`; if that route was not
 emitted, the worker falls back to the cached application root.
 
+### Offline cache policy
+
+The build's precache manifest contains required shell resources only. If any listed response cannot
+be fetched, service-worker installation fails and reports a precache error rather than exposing a
+worker that cannot cold-start the application. Product-specific optional resources do not belong in
+that manifest.
+
+Runtime caching is a separate, best-effort policy. It accepts only successful, public, same-origin
+responses inside the worker scope for fonts, images, scripts, styles, and workers. Navigation,
+cross-origin requests, partial responses, `private` or `no-store` responses, and `Vary: *` responses
+are not added. The cache retains at most 64 entries, moves refreshed URLs to the end, evicts the
+oldest inserted overflow, and removes previous build revisions during activation.
+
+Navigation preload remains disabled: generated routes and their assets are precached, so starting a
+parallel network request before the normal cache-first lookup would spend bandwidth on the expected
+offline-ready path. Jazz sync, OPFS storage, background sync, and push remain outside the worker.
+
 Do not run a server-side Jazz credential in the static host or expose `JAZZ_ADMIN_SECRET` or
 `BACKEND_SECRET` as public environment variables.
 

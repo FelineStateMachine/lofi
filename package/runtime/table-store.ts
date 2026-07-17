@@ -80,8 +80,9 @@ export class TableStore<T extends TableRow, Init> {
 
   /** Subscribes to snapshot changes and opens the vendor subscription on first use. */
   subscribe = (listener: Listener): () => void => {
-    this.#listeners.add(listener);
-    this.#diagnostics.activeConsumers = this.#listeners.size;
+    const subscriber = () => listener();
+    this.#listeners.add(subscriber);
+    this.#diagnostics.activeConsumers += 1;
     this.#diagnosticsChanged();
     if (this.#listeners.size === 1) this.#openVendorSubscription();
     this.#emit();
@@ -89,8 +90,8 @@ export class TableStore<T extends TableRow, Init> {
     return () => {
       if (!active) return;
       active = false;
-      this.#listeners.delete(listener);
-      this.#diagnostics.activeConsumers = this.#listeners.size;
+      this.#listeners.delete(subscriber);
+      this.#diagnostics.activeConsumers -= 1;
       this.#diagnosticsChanged();
       if (this.#listeners.size === 0) this.#closeVendorSubscription();
       else this.#emit();
@@ -121,8 +122,8 @@ export class TableStore<T extends TableRow, Init> {
 
   /** Releases vendor subscriptions and mutation listeners owned by this store. */
   close(): void {
+    this.#diagnostics.activeConsumers -= this.#listeners.size;
     this.#listeners.clear();
-    this.#diagnostics.activeConsumers = 0;
     this.#closeVendorSubscription();
     this.#stopMutationErrors();
     this.#diagnostics.activeMutationListeners -= 1;

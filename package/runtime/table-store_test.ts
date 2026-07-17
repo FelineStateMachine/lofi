@@ -142,6 +142,21 @@ test("two consumers share one table subscription and clean up idempotently", () 
   assertCount(counts.unsubscribeCalls, 1, "cleanup must remain externally diagnosable");
 });
 
+test("consumer diagnostics remain additive across distinct table stores", () => {
+  const counts = diagnostics();
+  const first = createTableStore<Row, RowInit>(fakeDb().value, table, counts);
+  const second = createTableStore<Row, RowInit>(fakeDb().value, table, counts);
+  const stopFirst = first.subscribe(() => undefined);
+  const stopSecond = second.subscribe(() => undefined);
+  assertCount(counts.activeConsumers, 2, "distinct stores overwrote the shared consumer count");
+  stopFirst();
+  assertCount(counts.activeConsumers, 1, "one store teardown erased another store's consumer");
+  stopSecond();
+  first.close();
+  second.close();
+  assertCount(counts.activeConsumers, 0, "distinct store cleanup leaked consumers");
+});
+
 test("every mutation exposes pending work and waits for local durability", async () => {
   const db = fakeDb();
   const counts = diagnostics();

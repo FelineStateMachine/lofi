@@ -261,6 +261,15 @@ export function getRuntimeDiagnostics(): RuntimeDiagnostics {
   return { ...slot().diagnostics };
 }
 
+/** Applies one package-internal diagnostics update and notifies active observers. */
+export function updateRuntimeDiagnostics(
+  update: (diagnostics: RuntimeDiagnostics) => void,
+): void {
+  const state = slot();
+  update(state.diagnostics);
+  notifyDiagnostics(state);
+}
+
 /** The stable Jazz principal currently opened by the package runtime. */
 export function getRuntimePrincipal(): string | null {
   return slot().principal;

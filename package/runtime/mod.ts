@@ -59,6 +59,12 @@ export {
 } from "./pwa.ts";
 export { type RuntimeDiagnostics } from "./diagnostics.ts";
 export {
+  acquireLiveQuery,
+  type LiveQueryLease,
+  type LiveQuerySnapshot,
+  type LiveQueryStore,
+} from "./live-query-store.ts";
+export {
   getRuntime,
   getRuntimeDiagnostics,
   getRuntimePrincipal,

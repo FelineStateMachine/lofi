@@ -38,9 +38,10 @@ deno task build
 deno task preview
 ```
 
-`doctor` checks the project layout and configuration without printing values. `test` runs the fast,
-deterministic suite. `build` creates the production PWA in `dist/`, and `preview` serves that exact
-output at `http://127.0.0.1:4321/` by default.
+`doctor` checks the project layout, configuration, manifest, and referenced install assets without
+printing values. `test` runs the fast, deterministic suite. `build` creates the production PWA in
+`dist/`, then verifies its base-aware HTML links, manifest, worker, build identity, and precache as
+one artifact. `preview` serves that exact output at `http://127.0.0.1:4321/` by default.
 
 ## Know which files to change
 

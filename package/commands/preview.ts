@@ -7,8 +7,9 @@
  * @module
  */
 
-import { extname, join, normalize } from "node:path";
+import { join, normalize } from "node:path";
 import { normalizeDeploymentBase, pathWithinDeploymentBase } from "../tooling/base-path.ts";
+import { productionContentType } from "../tooling/pwa-validation.ts";
 
 const portFlag = Deno.args.findIndex((argument) => argument === "--port");
 const port = portFlag >= 0 ? Number(Deno.args[portFlag + 1]) : 4321;
@@ -30,17 +31,6 @@ if (!identity.sourceHash) {
 }
 const basePath = normalizeDeploymentBase(identity.basePath);
 
-const contentTypes: Record<string, string> = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".wasm": "application/wasm",
-  ".webmanifest": "application/manifest+json",
-};
-
 console.log(
   `lofi preview: http://127.0.0.1:${port}${basePath} (build ${identity.sourceHash}, @nzip/lofi ${identity.lofiVersion})`,
 );
@@ -59,7 +49,7 @@ Deno.serve({ hostname: "127.0.0.1", port }, async (request) => {
   try {
     const body = await Deno.readFile(path);
     return new Response(request.method === "HEAD" ? null : body, {
-      headers: { "content-type": contentTypes[extname(path)] ?? "application/octet-stream" },
+      headers: { "content-type": productionContentType(path) },
     });
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) return new Response("Not found", { status: 404 });

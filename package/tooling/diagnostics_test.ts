@@ -113,3 +113,31 @@ Deno.test("doctor normalizes a deployment base and blocks an unsafe one", async 
     await Deno.remove(cwd, { recursive: true });
   }
 });
+
+Deno.test("doctor blocks malformed author-owned PWA metadata with one file-specific action", async () => {
+  const cwd = await makeTestRoot();
+  try {
+    const project = await createProject({ cwd, name: "starter" });
+    await Deno.writeTextFile(join(project.destination, "public", "manifest.webmanifest"), "{\n");
+    const report = await doctorReport({
+      root: project.destination,
+      environment: {},
+      denoVersion: "2.9.0",
+    });
+    assert(report.blocked, "malformed manifest did not block doctor");
+    const blocker = report.diagnostics.find((item) =>
+      item.name === "PWA source" && item.status === "blocker"
+    );
+    assert(blocker, "doctor did not emit a PWA source blocker");
+    assert(
+      blocker.detail.includes("public/manifest.webmanifest: malformed JSON"),
+      "doctor did not name the malformed manifest",
+    );
+    assert(
+      blocker.remediation?.includes("rerun `deno task doctor`"),
+      "doctor did not provide a direct PWA remediation",
+    );
+  } finally {
+    await Deno.remove(cwd, { recursive: true });
+  }
+});

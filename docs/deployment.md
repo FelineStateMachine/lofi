@@ -25,8 +25,10 @@ deno task preview
 ```
 
 `build` writes `dist/`, records a source fingerprint in `dist/lofi-build.json`, generates the
-precache list, and scans for server-secret values. `preview` refuses to start when the build
-identity is missing or invalid.
+precache list, and scans for server-secret values. Before Astro starts, the shared doctor preflight
+validates the author-owned manifest and referenced assets. After Astro finishes, build verifies the
+emitted HTML links, manifest, icons, nested routes, worker revision/scope, build identity, and exact
+precache set together. `preview` refuses to start when the build identity is missing or invalid.
 
 To use another preview port:
 

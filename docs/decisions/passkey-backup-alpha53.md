@@ -45,9 +45,12 @@ account backups.
   holding it can act as the account.
 - Restoring a different secret requires explicit confirmation while the current account is
   local-only, because unsynced local rows cannot be recovered from Jazz sync.
-- Principal replacement detaches lofi stores/subscriptions, saves the restored secret for the app
-  ID, calls Jazz `db.logout()` to stop workers and cached clients, recreates the runtime with sync
-  elected, and exposes the restored `session.user_id` for verification.
+- Principal replacement detaches lofi stores/subscriptions and shuts down the old Jazz client and
+  workers via `db.shutdown()` — deliberately not `logout()`, which would clear local account state
+  that must carry forward. It then saves the restored secret for the app ID, commits the sync
+  election and managed-namespace record only after that save succeeds (a failed replacement leaves
+  the previous local account bootable), reopens the runtime on the restored principal, and exposes
+  the restored `session.user_id` for verification.
 
 ## Evidence sources
 

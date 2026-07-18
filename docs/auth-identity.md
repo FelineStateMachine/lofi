@@ -37,9 +37,12 @@ local-only:  createDb({ appId, secret })                 → account X, on this 
 synced:      createDb({ appId, secret, serverUrl })      → account X, now replicated
 ```
 
-Electing to sync just recreates the runtime with `serverUrl` added. Because the secret (and thus the
-account id) is unchanged, every write made while local-only is already part of account X and syncs
-up. No migration, no copy, no new account.
+Electing to sync recreates the runtime with `serverUrl` added. Because the secret (and thus the
+account id) is unchanged, every write made while local-only still belongs to account X — no new
+account, and nothing for the user to re-enter. Internally, the election is one durable record: lofi
+opens the account's managed namespace, copies the rows written while local-only into it (waiting
+only for local durability, so the copy also completes offline), and replicates them up through
+normal sync once connected.
 
 ## The recovery phrase is the portable backup
 
@@ -77,7 +80,8 @@ confused.
 
 - **First boot** → local-only account opens immediately. No gate.
 - **Back up & sync** → create a recoverable passkey when supported → reveal the recovery phrase to
-  save → turn on sync → the runtime recreates and the account replicates.
+  save → the user confirms the phrase is saved → sync turns on and the runtime recreates (a page
+  reload), and the account replicates. Sync is never enabled while the phrase is still unread.
 - **Return boots** → the same cached secret opens the same account, synced or not.
 - **A fresh browser** → explicitly confirm replacement → restore from passkey or phrase → the old
   subscriptions, stores, workers, cached clients, and Jazz client shut down → the restored account

@@ -115,7 +115,7 @@
 }
 .landing .np-chip {
   position: absolute;
-  top: -0.9rem;
+  top: -1.4rem;
   font-family: var(--f-mono);
   font-size: 0.58rem;
   color: var(--forest);

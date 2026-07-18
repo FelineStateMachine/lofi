@@ -78,6 +78,17 @@ sequenceDiagram
 Both browser contexts use one test identity. Without `LOFI_E2E_BASE_URL`, the example skips so the
 default suite remains fast.
 
+Two more opt-in browser gates ship with the starter:
+
+- `tests/backup_migration_e2e_test.ts` — the account journey in one real browser: rows written
+  local-only must survive electing backup and sync (the runtime copies them into the managed
+  namespace during the reload, settling at local durability, so the sync server does not need to be
+  reachable), and the phrase-reveal guard must accept only its enrolled passkey — after the
+  authenticator loses its credentials, the reveal fails closed. Serve on `localhost` (a passkey
+  RP-ID cannot bind to a bare IP).
+- `tests/auth_e2e_test.ts` — the device-credential enroll → authenticate round-trip on a stable
+  origin listed in `credentialOrigins`.
+
 If Chromium is missing:
 
 ```sh
@@ -126,3 +137,15 @@ convergence without the local Jazz server used by the journey.
 Browser automation does not prove installed-PWA storage and lifecycle behavior on iOS or Android.
 Before shipping, use a stable HTTPS origin and exercise installation, termination, device restart,
 offline cold start, foreground recovery, and account recovery on every supported mobile surface.
+
+The WebAuthn PRF extension is the one credential path no virtual authenticator models, so PRF is
+feature-detected in the runtime and must be validated on real hardware. The manual pass, per
+supported platform/passkey-provider pair:
+
+1. `getAuthCapability()` reports `prf: "available"` (or `"not-reported"` with a working derive).
+2. Enroll a device credential on the pinned production RP-ID and derive a PRF secret twice with the
+   same salt — both ceremonies must yield the same 32 bytes.
+3. Encrypt with the derived at-rest key, restart the browser/app, derive again, and decrypt.
+4. Confirm a different salt yields a different secret and cannot decrypt the first blob.
+5. On providers that sync passkeys, repeat the derive on a second device of the same ecosystem and
+   record whether PRF results roam — do not assume they do.

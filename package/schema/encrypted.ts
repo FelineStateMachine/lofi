@@ -1,9 +1,8 @@
 /**
  * Encrypted columns: field values are sealed on the client before they enter
- * Jazz, so the sync store holds ciphertext it cannot read. This is the
- * account-private half of field encryption (#126): the key derives from the
- * account secret, every device holding the account decrypts, and nobody else
- * — including the store operator — can. The store still sees structure
+ * Jazz, so the sync store holds ciphertext it cannot read. The key derives
+ * from the account secret, every device holding the account decrypts, and
+ * nobody else — including the store operator — can. The store still sees structure
  * (tables, row identities, writers, timestamps, sizes); it stops seeing
  * content.
  *
@@ -24,7 +23,8 @@
  *   cannot read.
  * - Reading with the wrong account key (a shared row from another account)
  *   throws {@link EncryptedColumnError}. Encrypted columns belong in
- *   account-private tables until shared-field keys land (#126 Part 2).
+ *   account-private tables; fields shared across accounts need a shared key,
+ *   which this module does not provide.
  *
  * @module
  */

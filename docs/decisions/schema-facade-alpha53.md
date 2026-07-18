@@ -124,4 +124,5 @@ test wedges the FFI driver last.
   internal until our own testing is complete and a report is explicitly decided.
 - Merge the g-set table back into the main conformance app when the cross-table hang is gone.
 - Revisit the curation list on each alpha bump; `defineSliceableApp` joins the surface when a use
-  case and tests exist.
+  case and tests exist. — Done: it joined with conformance coverage as the base of nested app
+  namespaces; see [nested-namespaces-alpha53](nested-namespaces-alpha53.md).

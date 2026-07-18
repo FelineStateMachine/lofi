@@ -64,6 +64,7 @@ export const accessFiles = [
 /** Schema facade modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
 export const schemaFiles = [
   "mod.ts",
+  "nested.ts",
 ] as const;
 
 /** Preact modules vendored into `.lofi/`; kept in lockstep by the manifest test. */

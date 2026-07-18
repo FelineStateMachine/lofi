@@ -98,9 +98,11 @@
 .landing .np-device.is-on {
   opacity: 1;
 }
+/* An SVG outline, not U+25AF — mobile fonts substitute that codepoint
+   inconsistently (missing-glyph boxes or emoji fallbacks). */
 .landing .np-device-glyph {
-  font-size: 4rem;
-  line-height: 1;
+  width: 2rem;
+  height: 3.25rem;
   color: var(--mint);
 }
 .landing .np-device-label,

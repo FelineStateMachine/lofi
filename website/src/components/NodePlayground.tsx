@@ -89,7 +89,18 @@ export default function NodePlayground(): ReactNode {
     >
       <div className="np-scene" aria-hidden="true">
         <div className={`np-device ${stage === "enrolled" ? "is-on" : ""}`}>
-          <span className="np-device-glyph">▯</span>
+          <svg className="np-device-glyph" viewBox="0 0 32 52">
+            <rect
+              x="2.5"
+              y="2.5"
+              width="27"
+              height="47"
+              rx="5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+            />
+          </svg>
           <span className="np-device-label">phone</span>
           {stage === "enrolled" && (
             <span className={`np-chip ${revoked ? "np-chip--dead" : ""}`}>

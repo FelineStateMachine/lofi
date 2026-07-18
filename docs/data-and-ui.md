@@ -31,9 +31,13 @@ const schema = {
   }),
 };
 
-type AppSchema = s.Schema<typeof schema>;
-export const app: s.App<AppSchema> = s.defineApp(schema);
+export const app = s.defineApp(schema);
 ```
+
+`src/schema.ts` and `src/permissions.ts` are the two deliberate raw-Jazz surfaces in author source.
+UI islands stay on public package seams: derive row types with `RowOf` from `@nzip/lofi`
+(`type Record = RowOf<typeof app.schema.records>`) instead of importing the vendor module, and the
+generated author-boundary test enforces exactly that split.
 
 Every table needs a policy in `src/permissions.ts`. Permissions determine which rows enter a live
 query and which mutations succeed; realtime access is not a separate permission mode. See

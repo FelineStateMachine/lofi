@@ -1,5 +1,5 @@
 import { useCallback } from "preact/hooks";
-import { schema as s } from "jazz-tools";
+import type { RowOf } from "@nzip/lofi";
 import { useLiveQuery, useTableMutations } from "@nzip/lofi/preact";
 import { app } from "../app.ts";
 
@@ -11,8 +11,8 @@ import { app } from "../app.ts";
  */
 const tasksTable = app.schema.tasks;
 
-/** Row and insert types come straight from the declared schema. */
-export type Task = s.RowOf<typeof tasksTable>;
+/** The row type comes straight from the declared schema. */
+export type Task = RowOf<typeof tasksTable>;
 
 export function useTasks() {
   const query = useLiveQuery(() => tasksTable.orderBy("createdAt", "desc"), []);

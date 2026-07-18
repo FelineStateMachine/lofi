@@ -2,18 +2,27 @@ const test = (globalThis as unknown as {
   Deno: { test(name: string, body: () => void | Promise<void>): void };
 }).Deno.test;
 
+// Every author UI file is scanned with the full rule set — no exceptions, so
+// a violation cannot hide in a file the loop forgot to list.
 const authorUiFiles = [
-  new URL("../src/pages/index.astro", import.meta.url),
-  new URL("../src/islands/TaskList.tsx", import.meta.url),
-];
-
-const packageConsumers = [
-  new URL("../src/app.ts", import.meta.url),
   new URL("../src/pages/index.astro", import.meta.url),
   new URL("../src/layouts/Shell.astro", import.meta.url),
   new URL("../src/islands/AccountGate.tsx", import.meta.url),
   new URL("../src/islands/TaskList.tsx", import.meta.url),
   new URL("../src/islands/use-tasks.ts", import.meta.url),
+];
+
+// schema.ts and permissions.ts are the starter's two deliberate raw-Jazz
+// surfaces; every other rule still applies to them.
+const schemaSurfaceFiles = [
+  new URL("../src/schema.ts", import.meta.url),
+  new URL("../src/permissions.ts", import.meta.url),
+];
+
+const packageConsumers = [
+  new URL("../src/app.ts", import.meta.url),
+  ...authorUiFiles,
+  ...schemaSurfaceFiles,
 ];
 
 const forbidden = [
@@ -23,6 +32,7 @@ const forbidden = [
   { pattern: /workbox/i, name: "Workbox configuration" },
   { pattern: /navigator\.|globalThis\.(?:isSecureContext|SharedWorker)/, name: "browser branch" },
 ];
+const forbiddenOnSchemaSurface = forbidden.filter((rule) => rule.name !== "raw Jazz import");
 
 test("author source consumes public lofi package seams and hides plumbing from product UI", async () => {
   for (
@@ -48,6 +58,14 @@ test("author source consumes public lofi package seams and hides plumbing from p
   for (const file of authorUiFiles) {
     const source = await Deno.readTextFile(file);
     for (const rule of forbidden) {
+      if (rule.pattern.test(source)) {
+        throw new Error(`${file.pathname} exposes forbidden ${rule.name}`);
+      }
+    }
+  }
+  for (const file of schemaSurfaceFiles) {
+    const source = await Deno.readTextFile(file);
+    for (const rule of forbiddenOnSchemaSurface) {
       if (rule.pattern.test(source)) {
         throw new Error(`${file.pathname} exposes forbidden ${rule.name}`);
       }

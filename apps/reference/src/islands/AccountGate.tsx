@@ -76,15 +76,15 @@ export default function AccountGate() {
     void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
   }, []);
 
+  // Every account action funnels through here: one busy flag, one error line,
+  // and any returned Session becomes the new snapshot.
   const run = useCallback(
-    (kind: Busy, action: () => Promise<unknown>) => {
+    (kind: Busy, action: () => Promise<Session | void>) => {
       setBusy(kind);
       setError(null);
       void action().then(
         (result) => {
-          if (result && typeof result === "object" && "syncAvailable" in result) {
-            setSession(result as Session);
-          }
+          if (result) setSession(result);
         },
         (cause) => setError(describe(cause)),
       ).finally(() => setBusy(null));
@@ -113,13 +113,6 @@ export default function AccountGate() {
       <ol class="account-words" aria-label="Recovery phrase">
         {phrase.split(" ").map((word, index) => <li key={index}>{word}</li>)}
       </ol>
-      <button
-        type="button"
-        class="account-secondary"
-        onClick={() => void navigator.clipboard?.writeText(phrase).catch(() => {})}
-      >
-        Copy phrase
-      </button>
     </div>
   );
 

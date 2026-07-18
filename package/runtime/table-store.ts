@@ -6,6 +6,13 @@ import type { RuntimeDiagnostics } from "./diagnostics.ts";
 export type TableRow = { id: string };
 
 /**
+ * The row type of one declared schema table — `RowOf<typeof app.schema.tasks>`.
+ * Lets author code derive row types from its schema without importing the
+ * vendor module, keeping UI islands on public package seams.
+ */
+export type RowOf<Table> = Table extends { readonly _rowType: infer Row } ? Row : never;
+
+/**
  * A declared schema table (`schema.<name>`). It is both an insert/update/delete
  * target and a query source, so the store accepts the intersection Jazz expects.
  * `T` is the row type and `Init` the insert type (row minus server-owned fields).

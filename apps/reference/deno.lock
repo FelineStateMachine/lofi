@@ -3,6 +3,8 @@
   "specifiers": {
     "npm:@astrojs/check@0.9.9": "0.9.9_typescript@6.0.3",
     "npm:@astrojs/preact@6.0.1": "6.0.1_preact@10.29.7__preact-render-to-string@6.7.0_@babel+core@7.29.7",
+    "npm:@noble/ciphers@1.3.0": "1.3.0",
+    "npm:@noble/hashes@1.8.0": "1.8.0",
     "npm:astro@7.0.9": "7.0.9_@emnapi+core@1.11.1_@emnapi+runtime@1.11.1",
     "npm:jazz-tools@2.0.0-alpha.53": "2.0.0-alpha.53",
     "npm:preact-render-to-string@6.7.0": "6.7.0_preact@10.29.7",
@@ -936,6 +938,12 @@
         "@tybys/wasm-util"
       ]
     },
+    "@noble/ciphers@1.3.0": {
+      "integrity": "sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw=="
+    },
+    "@noble/hashes@1.8.0": {
+      "integrity": "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A=="
+    },
     "@noble/hashes@2.2.0": {
       "integrity": "sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg=="
     },
@@ -1312,7 +1320,7 @@
     "@scure/bip39@2.2.0": {
       "integrity": "sha512-T/Bj/YvYMNkIPq6EENO6/rcs2e7qTNuyoUXf0KBFDmp0ZDu0H2X4Lq6yC3i0c8PcWkov5EbW+yQZZbdMmk154A==",
       "dependencies": [
-        "@noble/hashes",
+        "@noble/hashes@2.2.0",
         "@scure/base"
       ]
     },
@@ -3104,6 +3112,8 @@
     "dependencies": [
       "npm:@astrojs/check@0.9.9",
       "npm:@astrojs/preact@6.0.1",
+      "npm:@noble/ciphers@1.3.0",
+      "npm:@noble/hashes@1.8.0",
       "npm:astro@7.0.9",
       "npm:jazz-tools@2.0.0-alpha.53",
       "npm:preact-render-to-string@6.7.0",
@@ -3116,6 +3126,8 @@
         "dependencies": [
           "npm:@astrojs/check@0.9.9",
           "npm:@astrojs/preact@6.0.1",
+          "npm:@noble/ciphers@1.3.0",
+          "npm:@noble/hashes@1.8.0",
           "npm:astro@7.0.9",
           "npm:jazz-tools@2.0.0-alpha.53",
           "npm:playwright@1.61.1",

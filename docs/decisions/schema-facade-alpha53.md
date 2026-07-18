@@ -48,8 +48,8 @@ test.
 
 - `package/schema/mod.ts` — the facade; `package/schema/mod_test.ts` verifies member identity
   against `jazz-tools` and round-trips `defineApp`/`definePermissions` through the facade.
-- `package/schema/merge_sync_test.ts` — concurrent-writer merge semantics (counter, g-set) over a
-  real JazzServer with two synced clients and a fresh observer.
+- `package/schema/merge_sync_test.ts` — concurrent-writer merge semantics (lww, counter, g-set) over
+  a real JazzServer with two synced clients and a fresh observer.
 - `apps/reference/tests/author-boundary_test.ts` — rejects `jazz-tools` imports in all author
   source, including `schema.ts` and `permissions.ts`.
 - `deno task check` and `deno task build` pass with the reference app (and therefore the starter,
@@ -69,14 +69,20 @@ The column-type conformance suite (`package/schema/conformance_test.ts`, task
 `deno task test:conformance`, part of `deno task check`) exercises every facade column type through
 the official policy test harness against the real engine. Verified working end to end: string,
 boolean, int (within i32), float, timestamp storage, enum, ref, json, array, bytes (≥32-byte
-payloads observed reliable), `.optional()`, `.default()`, counter merge (single-session), g-set
-merge (single-table apps), and policy conditions over typed columns. Engine and type bugs found and
-pinned in the suite so an alpha bump surfaces any change:
+payloads observed reliable), `.optional()`, `.default()`, `.transform()` (view type on
+insert/read/update; `where` filters take the stored type), lww merge (the default; concurrent
+conflicts resolve to the last write to reach the server on every replica), counter merge
+(single-session), g-set merge (single-table apps, cross-writer union), and policy conditions over
+typed columns. The three merge strategies (`lww`, `counter`, `g-set`) are the complete
+collaborative-value surface of the pinned alpha — Jazz 2 exports no successor to the 1.x CoValue
+types. Engine and type bugs found and pinned in the suite so an alpha bump surfaces any change:
 
-1. **`.merge()` erases column typing.** The legacy untyped `merge(): this` signature shadows the
-   typed overload, degrading the column to `ColumnBuilder` and poisoning the whole table's row
-   types. Runtime unaffected. Workaround documented on `@nzip/lofi/schema`: cast the result back
-   (e.g. `as unknown as IntColumn<false, true>`).
+1. **`.merge()` and `.transform()` erase column typing.** The legacy untyped signatures
+   (`merge(): this`, `transform(): ColumnBuilder`) shadow the typed overloads, degrading the column
+   to `ColumnBuilder` and poisoning the whole table's row types. Runtime unaffected. Workaround
+   documented on `@nzip/lofi/schema`: cast the result back (e.g.
+   `as unknown as
+   IntColumn<false, true>`, `as unknown as StringColumn<false, false, string[]>`).
 2. **Int columns are i32 at runtime.** Values outside i32 are rejected with
    `InvalidArg … expected
    i32` despite the `number` static type. Pinned.

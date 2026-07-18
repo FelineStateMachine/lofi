@@ -83,13 +83,17 @@ export type {
 
 /**
  * Column builder types re-exported for signatures and for the alpha.53
- * workaround below: calling `.merge()` on a column loses the typed builder
- * (the untyped `merge(): this` signature shadows the typed overload
- * upstream), so cast the result back to the intended column type. The
- * runtime object is unchanged; only the declaration needs repair:
+ * workaround below: calling `.merge()` or `.transform()` on a column loses
+ * the typed builder (the legacy untyped signatures shadow the typed
+ * overloads upstream), so cast the result back to the intended column type.
+ * The runtime object is unchanged; only the declaration needs repair:
  *
  * ```ts
  * total: s.int().default(0).merge("counter") as unknown as IntColumn<false, true>,
+ * tags: s.string().transform({
+ *   from: (value: string) => value.split(","),
+ *   to: (value: string[]) => value.join(","),
+ * }) as unknown as StringColumn<false, false, string[]>,
  * ```
  */
 export type {

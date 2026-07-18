@@ -1,5 +1,6 @@
-// Concurrent-writer merge semantics for the facade's merge strategies:
-// counter and g-set columns written by two synced clients. Single-session
+// Concurrent-writer merge semantics for the facade's merge strategies: lww
+// (the default), counter, and g-set columns written by two synced clients.
+// Single-session
 // behavior is covered by the conformance suite; this file is the multi-client
 // half, built on the JazzServer setup from package/access/access_sync_test.ts.
 //
@@ -9,7 +10,7 @@
 import { createDb } from "jazz-tools";
 import { deploy, startLocalJazzServer } from "jazz-tools/testing";
 import { assert } from "../runtime/test-assert.ts";
-import { type ArrayColumn, type IntColumn, s } from "./mod.ts";
+import { type ArrayColumn, type IntColumn, s, type StringColumn } from "./mod.ts";
 
 const counterApp = s.defineApp({
   tallies: s.table({
@@ -38,6 +39,22 @@ const gsetPermissions = s.definePermissions(gsetApp, ({ policy }) => {
   policy.tagged.allowRead.always();
   policy.tagged.allowUpdate.always();
   policy.tagged.allowDelete.always();
+});
+
+// One column with the implicit default strategy and one with explicit
+// .merge("lww"): the same conflict runs through both so the test also pins
+// that the default is last-write-wins.
+const lwwApp = s.defineApp({
+  docs: s.table({
+    title: s.string(),
+    body: s.string().merge("lww") as unknown as StringColumn<false, false>,
+  }),
+});
+const lwwPermissions = s.definePermissions(lwwApp, ({ policy }) => {
+  policy.docs.allowInsert.always();
+  policy.docs.allowRead.always();
+  policy.docs.allowUpdate.always();
+  policy.docs.allowDelete.always();
 });
 
 function secret(fill: number): string {
@@ -260,6 +277,67 @@ Deno.test("g-set columns union concurrent offline updates and converge everywher
       assert(
         tags === union,
         `g-set: ${label} read ${tags}, not the union of both writers' elements`,
+      );
+    }
+  } finally {
+    await harness.stop();
+  }
+});
+
+Deno.test("lww columns resolve concurrent offline updates to one winner everywhere", async () => {
+  const harness = await bootHarness(lwwApp, lwwPermissions);
+  try {
+    const alice = await harness.client(1);
+    const bob = await harness.client(2);
+    const row = await within(
+      alice.insert(lwwApp.docs, { title: "seed-title", body: "seed-body" }).wait({
+        tier: "global",
+      }),
+      "seed insert",
+    );
+    const bobView = await within(
+      bob.all(lwwApp.docs.where({ id: row.id }), { tier: "global" }),
+      "bob initial read",
+    );
+    assert(bobView.length === 1, "bob did not sync the seeded row");
+
+    await alice.disconnect();
+    await bob.disconnect();
+    const aliceWrite = alice.update(lwwApp.docs, row.id, {
+      title: "alice-title",
+      body: "alice-body",
+    });
+    const bobWrite = bob.update(lwwApp.docs, row.id, { title: "bob-title", body: "bob-body" });
+    await alice.reconnect();
+    await bob.reconnect();
+    await within(aliceWrite.wait({ tier: "global" }), "alice lww durability");
+    await within(bobWrite.wait({ tier: "global" }), "bob lww durability");
+
+    const read = async (db: typeof alice, label: string) => {
+      const rows = await within(
+        db.all(lwwApp.docs.where({ id: row.id }), { tier: "global" }),
+        `${label} read`,
+      );
+      return { title: rows[0]?.title, body: rows[0]?.body };
+    };
+    const aliceDoc = await read(alice, "alice");
+    const bobDoc = await read(bob, "bob");
+    const charlie = await harness.client(3);
+    const canonical = await read(charlie, "fresh client");
+
+    // Bob reconnects after Alice, so his write is the last to arrive and wins
+    // on every replica — for the implicit-default column and the explicit
+    // "lww" column alike. Unlike counter, live replicas and fresh boots agree.
+    for (
+      const [label, doc] of [
+        ["alice", aliceDoc],
+        ["bob", bobDoc],
+        ["fresh client", canonical],
+      ] as const
+    ) {
+      assert(
+        doc.title === "bob-title" && doc.body === "bob-body",
+        `lww: ${label} read ${JSON.stringify(doc)}, not the later-arriving writer's values`,
       );
     }
   } finally {

@@ -8,7 +8,7 @@
 // application author can actually reach.
 import { createPolicyTestApp } from "jazz-tools/testing";
 import { assert } from "../runtime/test-assert.ts";
-import { type ArrayColumn, type IntColumn, s } from "./mod.ts";
+import { type ArrayColumn, type IntColumn, s, type StringColumn } from "./mod.ts";
 
 const app = s.defineApp({
   parents: s.table({ name: s.string() }),
@@ -31,6 +31,17 @@ const app = s.defineApp({
     // which poisons the whole table's row types. The cast restores the typed
     // column; the runtime object is correct without it.
     total: s.int().default(0).merge("counter") as unknown as IntColumn<false, true>,
+  }),
+  transformed: s.table({
+    // Stored as comma-joined TEXT, viewed as string[]. The untyped
+    // `transform(): ColumnBuilder` signature shadows the typed overload the
+    // same way `.merge()` does, so the cast restores the transformed value
+    // type.
+    tags: s.string().transform({
+      from: (value: string) => value.split(","),
+      to: (value: string[]) => value.join(","),
+    }) as unknown as StringColumn<false, false, string[]>,
+    label: s.string(),
   }),
   gated: s.table({ visible: s.boolean(), title: s.string() }),
 });
@@ -66,6 +77,7 @@ const allowAllTables = [
   "refs",
   "arrays",
   "modifiers",
+  "transformed",
 ] as const;
 
 type RuleSet = {
@@ -374,6 +386,43 @@ Deno.test("CANARY alpha.53: g-set cross-table writes are unreliable", async () =
     gsetFirst.includes("gset-table-write:OK") && gsetFirst.includes("sibling-table-write:OK"),
     `g-set canary: seeding the g-set table first no longer unblocks sibling writes: ${gsetFirst}`,
   );
+});
+
+Deno.test("transformed columns apply the TypeScript-boundary transform on insert, read, and update", async () => {
+  const testApp = await createPolicyTestApp(app, permissions, expectLike);
+  try {
+    const db = testApp.as(session("author"));
+    const row = await db.insert(app.transformed, { tags: ["a", "b"], label: "first" })
+      .wait({ tier: "global" });
+    assert(
+      sameValue(row.tags, ["a", "b"]),
+      `transformed: insert returned ${describeValue(row.tags)}, not the view value`,
+    );
+    const readBack = (await db.all(app.transformed.where({ id: row.id })))[0];
+    assert(readBack !== undefined, "transformed: row lost after insert");
+    assert(
+      sameValue(readBack.tags, ["a", "b"]),
+      `transformed: read back ${describeValue(readBack.tags)}, not the view value`,
+    );
+
+    await db.update(app.transformed, row.id, { tags: ["a", "b", "c"] }).wait({ tier: "global" });
+    const updated = (await db.all(app.transformed.where({ id: row.id })))[0];
+    assert(
+      sameValue(updated?.tags, ["a", "b", "c"]),
+      `transformed: update read back ${describeValue(updated?.tags)}`,
+    );
+
+    // Filters address the stored representation, not the view: the where type
+    // for a transformed column is the stored type, and the runtime agrees.
+    await db.insert(app.transformed, { tags: ["z"], label: "decoy" }).wait({ tier: "global" });
+    const byStored = await db.all(app.transformed.where({ tags: "a,b,c" }));
+    assert(
+      byStored.length === 1 && byStored[0].label === "first",
+      `transformed: where on the stored value returned ${byStored.length} rows`,
+    );
+  } finally {
+    await testApp.shutdown();
+  }
 });
 
 Deno.test("policies filter on typed columns, not only magic columns", async () => {

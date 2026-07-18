@@ -77,10 +77,12 @@ it:
 ### Column modifiers and merge strategies
 
 Modifiers chain on any constructor: `.optional()` makes the column nullable, `.default(value)` fills
-omitted inserts, and `.merge(strategy)` picks a conflict strategy for concurrent writers. In the
-pinned alpha `.merge()` returns the untyped builder (the legacy `merge(): this` signature shadows
-the typed overload), which degrades the whole table's row types — cast the result back to the
-intended column type; the runtime object is unchanged:
+omitted inserts, and `.merge(strategy)` picks a conflict strategy for concurrent writers.
+`.transform({ from, to })` (experimental upstream) maps stored values to a different TypeScript view
+type: inserts, reads, and updates use the view type, while `where` filters address the stored
+representation. In the pinned alpha `.merge()` and `.transform()` return the untyped builder (the
+legacy untyped signatures shadow the typed overloads), which degrades the whole table's row types —
+cast the result back to the intended column type; the runtime object is unchanged:
 
 ```ts
 import { type ArrayColumn, type IntColumn, s } from "@nzip/lofi/schema";
@@ -93,8 +95,13 @@ export const app = s.defineApp({
 });
 ```
 
-Merge behavior is verified with two synced clients in `package/schema/merge_sync_test.ts`:
+The pinned alpha ships exactly three merge strategies — `"lww"` (the default), `"counter"`, and
+`"g-set"` — and they are the whole collaborative-value surface: Jazz 2 has no successor to the 1.x
+CoValue types (`co.map`, CoText, FileStream). All three are verified with two synced clients in
+`package/schema/merge_sync_test.ts`:
 
+- **`"lww"` (the default) works**: with or without an explicit `.merge("lww")`, a concurrent
+  conflict resolves to the last write to reach the server, and live replicas and fresh boots agree.
 - **`"g-set"` works**: concurrent writers union their elements and every replica — including a fresh
   boot — converges on the same set. Keep a g-set table in its own single-table app for now; in the
   pinned alpha a g-set column destabilizes writes to sibling tables in the same app.

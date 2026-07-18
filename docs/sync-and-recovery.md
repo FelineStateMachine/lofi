@@ -84,6 +84,15 @@ Semantics to rely on:
   `scope: "provision"` ticket additionally administers the store through the node's gate — the basis
   for opt-in store provisioning. A ticket with an unrecognized scope is rejected outright rather
   than silently granted less than it claims.
+- **A provision ticket is split before anything persists.** Enrollment asks the node's scope-down
+  exchange for a derived sync ticket; that becomes the declared sink, and the provision capability
+  is only _held_ in memory. Sealing it at rest is a separate, explicit passkey ceremony
+  (`sealProvisionCapability` / `unlockProvisionCapability`), attempted rather than
+  capability-detected; on a device whose authenticator cannot evaluate the WebAuthn PRF extension,
+  nothing persists and the durable copy is the ticket in the user's password manager. The packaged
+  `TicketEnrollForm` (`@nzip/lofi/preact`) is shaped for exactly that custody — the ticket is a
+  `current-password` field a manager saves on first paste and autofills later. Against a node
+  without the exchange, the ticket enrolls as pasted, exactly as before.
 - If the node revokes the ticket, requests fail with 401 and live sockets close; treat the stored
   sink as dead and surface re-enrollment rather than retrying silently.
 

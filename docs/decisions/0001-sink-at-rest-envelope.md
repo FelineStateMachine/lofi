@@ -89,6 +89,6 @@ The stored declaration is no longer cleartext; declaration APIs (`declareDataSin
 
 ## Follow-up
 
-PRF slot wiring, the enrollment exchange flow, and password-manager custody UX (tracked as A3 phase
-2 on #123); field encryption scoped in #126 with the account-private/group-shared split; claim
-alignment in #122 §2 and §4.
+PRF slot wiring, the enrollment exchange flow, and password-manager custody UX landed as A3 phase 2
+(`provision.ts`, `authenticateAndDerivePrfSecret`, `TicketEnrollForm`); field encryption is scoped
+in #126 with the account-private/group-shared split; claim alignment continues in #122 §2 and §4.

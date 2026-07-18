@@ -8,14 +8,29 @@
  * runtime (typically by enrolling a `lofisync1.` app-connect ticket issued by
  * a self-hosted node) overrides the default for this device.
  *
- * One durable record holds the declaration, written atomically and keyed by
- * the device-local anchor app id, and this module is its only reader and
- * writer. The record is device-local state, like the namespace election; the
- * recovery envelope carrying the sink behind the passkey is separate,
- * follow-on work.
+ * The ticket URL is a bearer credential, so the declaration never touches
+ * storage in cleartext: it persists as a sealed envelope (see `envelope.ts`)
+ * under a silent device-bound key. That protects the record at rest — disk
+ * images, backups, storage exfiltration — while opening with zero ceremony;
+ * it does not defend against same-origin script, which can drive the silent
+ * open itself. Boot unseals the record once into module memory
+ * ({@link restoreDeclaredSink}), and every synchronous reader answers from
+ * that state. The recovery envelope carrying the sink behind the passkey is
+ * separate, follow-on work.
  *
  * @module
  */
+
+import {
+  defaultDeviceKeyStore,
+  deviceKeyProtector,
+  deviceKeyResolver,
+  type DeviceKeyStore,
+  EnvelopeError,
+  openJsonEnvelope,
+  parseSealedEnvelope,
+  sealJsonEnvelope,
+} from "./envelope.ts";
 
 declare const __LOFI_JAZZ_APP_ID__: string;
 declare const __LOFI_JAZZ_SERVER_URL__: string;
@@ -87,41 +102,115 @@ export class DataSinkError extends Error {
   }
 }
 
-type SinkRecord = { v: 1; sink: DataSinkDeclaration };
-
 const sinkKey = `lofi:data-sink:${anchorAppId}`;
+const sinkPurpose = `lofi:data-sink:${anchorAppId}`;
+const sinkDeviceKeyId = `data-sink:${anchorAppId}`;
 
-function parseRecord(raw: string | null): DataSinkDeclaration | null {
-  if (!raw) return null;
-  try {
-    const record = JSON.parse(raw) as Partial<SinkRecord> | null;
-    const sink = record?.v === 1 ? record.sink : undefined;
-    if (
-      sink && typeof sink.appId === "string" && sink.appId &&
-      typeof sink.serverUrl === "string" && sink.serverUrl
-    ) {
-      return {
-        appId: sink.appId,
-        serverUrl: sink.serverUrl,
-        ...(sink.scope === "provision" || sink.scope === "sync" ? { scope: sink.scope } : {}),
-        ...(typeof sink.label === "string" ? { label: sink.label } : {}),
-        ...(typeof sink.node === "string" ? { node: sink.node } : {}),
-      };
-    }
-  } catch {
-    // An unreadable record is treated as absent below.
-  }
-  return null;
-}
+// The declaration in effect for this document, populated by
+// restoreDeclaredSink at boot and by successful declarations afterwards.
+// Synchronous readers answer from here; storage holds only the envelope.
+let cachedSink: DataSinkDeclaration | null = null;
 
-/** Reads the declared sink, or `null` when this device has not declared one. */
-export function readDeclaredSink(): DataSinkDeclaration | null {
-  if (typeof localStorage === "undefined") return null;
-  try {
-    return parseRecord(localStorage.getItem(sinkKey));
-  } catch {
+function validateDeclaration(value: unknown): DataSinkDeclaration | null {
+  if (value === null || typeof value !== "object") return null;
+  const sink = value as Partial<DataSinkDeclaration>;
+  if (
+    typeof sink.appId !== "string" || !sink.appId ||
+    typeof sink.serverUrl !== "string" || !sink.serverUrl
+  ) {
     return null;
   }
+  return {
+    appId: sink.appId,
+    serverUrl: sink.serverUrl,
+    ...(sink.scope === "provision" || sink.scope === "sync" ? { scope: sink.scope } : {}),
+    ...(typeof sink.label === "string" ? { label: sink.label } : {}),
+    ...(typeof sink.node === "string" ? { node: sink.node } : {}),
+  };
+}
+
+async function persistSealed(
+  declaration: DataSinkDeclaration,
+  keyStore: DeviceKeyStore,
+): Promise<void> {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const sealed = await sealJsonEnvelope(sinkPurpose, declaration, [
+      await deviceKeyProtector(keyStore, sinkDeviceKeyId),
+    ]);
+    localStorage.setItem(sinkKey, JSON.stringify({ v: 2, sealed }));
+  } catch {
+    // A private-mode storage failure must not break enrollment; the sink then
+    // lasts for this document only via the in-memory declaration.
+  }
+}
+
+/**
+ * How {@link restoreDeclaredSink} resolved the persisted record: `none` (no
+ * record), `restored` (envelope opened), `migrated` (a pre-envelope cleartext
+ * record was read and resealed), or `unopenable` (an envelope exists but no
+ * available key opens it — the record is left intact and the device behaves
+ * as local-only until the sink is re-declared).
+ */
+export type SinkRestoreOutcome = "none" | "restored" | "migrated" | "unopenable";
+
+/**
+ * Unseals the persisted declaration into memory. Boot awaits this before any
+ * sync decision (see `boot.ts`); tests and non-boot embedders call it
+ * directly. Safe to call repeatedly — it re-reads storage each time.
+ */
+export async function restoreDeclaredSink(
+  keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
+): Promise<SinkRestoreOutcome> {
+  cachedSink = null;
+  if (typeof localStorage === "undefined") return "none";
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(sinkKey);
+  } catch {
+    return "none";
+  }
+  if (!raw) return "none";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return "none";
+  }
+  const record = parsed as { v?: number; sink?: unknown; sealed?: unknown } | null;
+  if (record?.v === 1) {
+    // A record from before the envelope: adopt it, then reseal so the
+    // cleartext bearer URL leaves storage on the first boot that can.
+    const sink = validateDeclaration(record.sink);
+    if (!sink) return "none";
+    cachedSink = sink;
+    await persistSealed(sink, keyStore);
+    return "migrated";
+  }
+  if (record?.v === 2) {
+    const sealed = parseSealedEnvelope(record.sealed);
+    if (!sealed) return "unopenable";
+    try {
+      const payload = await openJsonEnvelope(sinkPurpose, sealed, deviceKeyResolver(keyStore));
+      const sink = validateDeclaration(payload);
+      if (!sink) return "unopenable";
+      cachedSink = sink;
+      return "restored";
+    } catch (error) {
+      if (error instanceof EnvelopeError) return "unopenable";
+      throw error;
+    }
+  }
+  return "none";
+}
+
+/**
+ * Reads the declared sink, or `null` when this device has not declared one.
+ * Answers from the state restored at boot; callers outside the booted app
+ * (tests, embedders) await {@link restoreDeclaredSink} first.
+ */
+export function readDeclaredSink(): DataSinkDeclaration | null {
+  return cachedSink;
 }
 
 function assertHttpServerUrl(serverUrl: string): void {
@@ -147,10 +236,15 @@ function assertHttpServerUrl(serverUrl: string): void {
  * app id that contradicts a compiled-in managed app, and refuses to replace a
  * different declared sink (one store, one active sink — clear the existing
  * declaration first; switching stores is deliberately not a silent overwrite).
- * Re-declaring the same store updates the label. Declaration alone changes no
- * runtime state; electing sync (see `session.ts`) is what connects.
+ * Re-declaring the same store updates the label. The declaration persists as
+ * a sealed envelope; in a context that cannot store it (private mode) it
+ * lasts for this document only. Declaration alone changes no runtime state;
+ * electing sync (see `session.ts`) is what connects.
  */
-export function declareDataSink(declaration: DataSinkDeclaration): DataSinkDeclaration {
+export async function declareDataSink(
+  declaration: DataSinkDeclaration,
+  keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
+): Promise<DataSinkDeclaration> {
   if (!declaration.appId.trim()) {
     throw new DataSinkError("invalid-ticket", "sink app id must not be empty");
   }
@@ -170,21 +264,14 @@ export function declareDataSink(declaration: DataSinkDeclaration): DataSinkDecla
       "a different sink is already declared on this device; clear it before declaring another",
     );
   }
-  if (typeof localStorage !== "undefined") {
-    try {
-      const record: SinkRecord = { v: 1, sink: declaration };
-      localStorage.setItem(sinkKey, JSON.stringify(record));
-    } catch {
-      // A private-mode storage failure must not break enrollment; the sink
-      // then lasts for this document only via the default resolution below
-      // returning null — callers observe the absence through readDeclaredSink.
-    }
-  }
+  await persistSealed(declaration, keyStore);
+  cachedSink = declaration;
   return declaration;
 }
 
 /** Removes the declared sink. Existing local data and elections are untouched. */
 export function clearDeclaredSink(): void {
+  cachedSink = null;
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.removeItem(sinkKey);
@@ -250,18 +337,21 @@ export function parseSyncTicket(text: string): SyncTicket | null {
  * declaration errors otherwise. Electing sync afterwards (see
  * `enrollSyncTicket` in `session.ts`) is what actually connects.
  */
-export function declareSinkFromTicket(text: string): DataSinkDeclaration {
+export async function declareSinkFromTicket(
+  text: string,
+  keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
+): Promise<DataSinkDeclaration> {
   const ticket = parseSyncTicket(text);
   if (!ticket) {
     throw new DataSinkError("invalid-ticket", "not a valid lofisync1 app-connect ticket");
   }
-  return declareDataSink({
+  return await declareDataSink({
     appId: ticket.appId,
     serverUrl: ticket.url,
     ...(ticket.scope ? { scope: ticket.scope } : {}),
     ...(ticket.label ? { label: ticket.label } : {}),
     ...(ticket.node ? { node: ticket.node } : {}),
-  });
+  }, keyStore);
 }
 
 /** True when an error is a data-sink or ticket problem the user can fix and retry. */

@@ -119,6 +119,8 @@ export {
   isDataSinkError,
   parseSyncTicket,
   readDeclaredSink,
+  restoreDeclaredSink,
+  type SinkRestoreOutcome,
   type SyncTicket,
 } from "./data-sink.ts";
 export { RecoveryError } from "./recovery.ts";

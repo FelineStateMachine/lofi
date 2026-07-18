@@ -388,7 +388,8 @@ const KIND_LABEL: Record<string, string> = {
 function renderSymbol(symbol: SymbolNode): string {
   const out: string[] = [];
   const kinds = [...new Set(symbol.declarations.map((dec) => KIND_LABEL[dec.kind] ?? dec.kind))];
-  out.push(`### ${symbol.name}`);
+  // h2 keeps the heading hierarchy sequential under the page h1
+  out.push(`## ${symbol.name}`);
   out.push(`<sup>${kinds.join(", ")}</sup>`);
   const signatures = symbol.declarations
     .map((dec) => declarationSignature(symbol.name, dec))

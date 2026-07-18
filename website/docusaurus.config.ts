@@ -219,8 +219,10 @@ const config: Config = {
       copyright: `MIT licensed. Built with Docusaurus.`,
     },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      // gruvbox material is the standard theme closest to the brand palette:
+      // olive/lime greens and mint aquas on warm dark and cream backgrounds
+      theme: prismThemes.gruvboxMaterialLight,
+      darkTheme: prismThemes.gruvboxMaterialDark,
       additionalLanguages: ["bash", "json", "diff"],
     },
   } satisfies Preset.ThemeConfig,

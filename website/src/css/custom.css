@@ -4,6 +4,35 @@
  * cream #f3faf6, mint #99e5bd, jade #39725c.
  */
 
+/* Self-hosted fonts (Fontsource): bundled and precached, so offline visits
+   keep their real faces and no request leaves the origin. Latin subsets and
+   only the weights the site actually sets — the full subset files would
+   multiply the payload for scripts the docs never use. */
+/* brand mark */
+@import "@fontsource/nunito/latin-900.css";
+/* root landing display */
+@import "@fontsource/comfortaa/latin-700.css";
+/* landing body */
+@import "@fontsource/karla/latin-400.css";
+@import "@fontsource/karla/latin-500.css";
+@import "@fontsource/karla/latin-700.css";
+/* mono: landings, docs code blocks */
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/ibm-plex-mono/latin-600.css";
+/* /node display + mark */
+@import "@fontsource/young-serif/latin-400.css";
+@import "@fontsource/grenze-gotisch/latin-500.css";
+/* /node body */
+@import "@fontsource/alegreya-sans/latin-400.css";
+@import "@fontsource/alegreya-sans/latin-400-italic.css";
+@import "@fontsource/alegreya-sans/latin-500.css";
+@import "@fontsource/alegreya-sans/latin-700.css";
+/* /node mono */
+@import "@fontsource/spline-sans-mono/latin-400.css";
+@import "@fontsource/spline-sans-mono/latin-500.css";
+@import "@fontsource/spline-sans-mono/latin-600.css";
+
 :root {
   --ifm-color-primary: #39725c;
   --ifm-color-primary-dark: #336753;
@@ -72,11 +101,70 @@
   color: #8fae9f !important;
 }
 
-/* the footer wears the brand forest, like the navbar */
+/* Tables everywhere share the landing pages' editorial style instead of
+   Infima's boxed default: no outer borders, no striped rows, no header
+   background — mono uppercase section-label headers over a strong rule,
+   hairline row rules, and a symmetric 1rem inset on the outer columns.
+   Colors ride the theme variables, so light and dark both work. */
+.markdown table {
+  border-collapse: collapse;
+}
+.markdown table thead,
+.markdown table tr,
+.markdown table tr:nth-child(2n) {
+  background: none;
+  border: 0;
+}
+.markdown table th {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ifm-color-emphasis-500);
+  font-family: var(--ifm-font-family-monospace);
+  font-weight: 500;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ifm-color-primary);
+  vertical-align: middle;
+  padding: 0.55rem 1rem 0.55rem 0;
+}
+.markdown table td {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  padding: 0.7rem 1rem 0.7rem 0;
+  vertical-align: top;
+}
+.markdown table th:first-child,
+.markdown table td:first-child {
+  padding-left: 1rem;
+}
+
+/* The footer wears the brand forest, like the navbar — but muted: it is a
+   jump table, not a destination, so links sit dim until hovered. */
 .footer--dark {
   --ifm-footer-background-color: #18231f;
   --ifm-footer-color: #8fae9f;
-  --ifm-footer-link-color: #f3faf6;
-  --ifm-footer-link-hover-color: #d5f26a;
-  --ifm-footer-title-color: #99e5bd;
+  --ifm-footer-link-color: #8fae9f;
+  --ifm-footer-link-hover-color: #f3faf6;
+  --ifm-footer-title-color: #6f9d88;
+  --ifm-footer-padding-vertical: 2rem;
+}
+.footer--dark .footer__title {
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+/* Each product's links flow in one row where space allows and wrap to a
+   compact grid where it doesn't. */
+.footer--dark .footer__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.6rem;
+}
+.footer--dark .footer__item {
+  margin: 0;
+}
+.footer--dark .footer__copyright {
+  font-size: 0.82rem;
 }

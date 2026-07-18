@@ -52,7 +52,7 @@ before debugging anything else.
 
 ## Compatibility status, honestly
 
-The hosting flow is validated end to end against lofi's reference app with real browser clients:
+The whole flow is validated end to end against lofi's reference app with real browser clients:
 build, boot, offline edits, reconvergence, and the full provisioning lifecycle through the gate and
 through an iroh-paired leaf. One known upstream finding: lofi's opt-in browser convergence gate
 fails at its final stage with a catalogue error **identically against lofi-node and against lofi's

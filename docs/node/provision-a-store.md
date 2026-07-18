@@ -4,7 +4,7 @@
      tests/provisioning_test.ts (the executable version of this tutorial). -->
 
 A fresh node has no schema deployed, and an app must never sync against a store in that state — the
-engine's writes hang rather than fail. Provisioning is the explicit, user-opt-in step that creates
+engine's writes hang rather than fail. Provisioning is the explicit step you opt into that creates
 or updates the store's schema, and this tutorial walks it end to end: first app in, then a **second
 app joining the store that already holds the first app's data**. Every step here is also executable
 — lofi-node's `tests/provisioning_test.ts` runs this exact flow through the gate in CI.

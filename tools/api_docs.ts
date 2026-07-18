@@ -5,16 +5,26 @@
  */
 import { type Entrypoint, entrypoints } from "./entrypoints.ts";
 
-// `--node` renders the lofi-node API instead: same renderer, sourced from a
-// checkout of FelineStateMachine/lofi-node (LOFI_NODE_DIR, default
-// ../lofi-node), emitted into the /node/api docs instance. lofi-node is not
-// published to a registry; the checkout is the source of truth.
+// `--node` renders the lofi-node API instead: same renderer, sourced from the
+// pinned checkout of FelineStateMachine/lofi-node (LOFI_NODE_DIR, default
+// ../lofi-node) so pages match the ref the /node docs render from; the
+// package itself is published as jsr:@nzip/lofi-node.
 const NODE_MODE = Deno.args.includes("--node");
 const NODE_DIR = NODE_MODE ? (Deno.env.get("LOFI_NODE_DIR") ?? "../lofi-node") : "";
 
 const nodeEntrypoints: readonly Entrypoint[] = [
-  { jsrName: ".", file: `${NODE_DIR}/mod.ts`, page: "node", title: "Sync node" },
-  { jsrName: "./testing", file: `${NODE_DIR}/testing/mod.ts`, page: "testing", title: "Testing" },
+  {
+    jsrName: ".",
+    file: `${NODE_DIR}/mod.ts`,
+    page: "node",
+    title: "Sync node",
+  },
+  {
+    jsrName: "./testing",
+    file: `${NODE_DIR}/testing/mod.ts`,
+    page: "testing",
+    title: "Testing",
+  },
 ];
 
 const activeEntrypoints = NODE_MODE ? nodeEntrypoints : entrypoints;
@@ -37,8 +47,14 @@ type TsType = {
   // deno-lint-ignore no-explicit-any
   [key: string]: any;
 };
-// deno-lint-ignore no-explicit-any
-type Param = { kind: string; name?: string; optional?: boolean; tsType?: TsType; [k: string]: any };
+type Param = {
+  kind: string;
+  name?: string;
+  optional?: boolean;
+  tsType?: TsType;
+  // deno-lint-ignore no-explicit-any
+  [k: string]: any;
+};
 type TypeParam = { name: string; constraint?: TsType; default?: TsType };
 type Declaration = {
   kind: string;
@@ -104,7 +120,9 @@ function printType(t: TsType | undefined | null): string {
       const v = t.value ?? {};
       const parts: string[] = [];
       for (const sig of v.indexSignatures ?? []) {
-        parts.push(`[${(sig.params ?? []).map(printParam).join(", ")}]: ${printType(sig.tsType)}`);
+        parts.push(
+          `[${(sig.params ?? []).map(printParam).join(", ")}]: ${printType(sig.tsType)}`,
+        );
       }
       for (const p of v.properties ?? []) {
         parts.push(
@@ -203,10 +221,14 @@ function classSignature(name: string, def: any): string {
   const lines: string[] = [];
   let head = `class ${name}${printTypeParams(def?.typeParams ?? [])}`;
   if (def?.extends) head += ` extends ${def.extends}`;
-  if (def?.implements?.length) head += ` implements ${def.implements.map(printType).join(", ")}`;
+  if (def?.implements?.length) {
+    head += ` implements ${def.implements.map(printType).join(", ")}`;
+  }
   lines.push(`${head} {`);
   for (const ctor of def?.constructors ?? []) {
-    lines.push(`  constructor(${(ctor.params ?? []).map(printParam).join(", ")});`);
+    lines.push(
+      `  constructor(${(ctor.params ?? []).map(printParam).join(", ")});`,
+    );
   }
   for (const prop of def?.properties ?? []) {
     const mods = [
@@ -237,7 +259,9 @@ function classSignature(name: string, def: any): string {
 function interfaceSignature(name: string, def: any): string {
   const lines: string[] = [];
   let head = `interface ${name}${printTypeParams(def?.typeParams ?? [])}`;
-  if (def?.extends?.length) head += ` extends ${def.extends.map(printType).join(", ")}`;
+  if (def?.extends?.length) {
+    head += ` extends ${def.extends.map(printType).join(", ")}`;
+  }
   lines.push(`${head} {`);
   for (const prop of def?.properties ?? []) {
     lines.push(
@@ -347,7 +371,9 @@ function renderJsDoc(jsDoc: JsDoc | undefined): string {
     out.push("| Parameter | Description |");
     out.push("| --- | --- |");
     for (const tag of params) {
-      out.push(`| \`${tag.name}\` | ${renderJsDocText(tag.doc ?? "").replaceAll("\n", " ")} |`);
+      out.push(
+        `| \`${tag.name}\` | ${renderJsDocText(tag.doc ?? "").replaceAll("\n", " ")} |`,
+      );
     }
   }
   for (const tag of tags) {
@@ -379,14 +405,22 @@ async function docModule(file: string): Promise<ModuleNodes> {
   });
   const result = await command.output();
   if (!result.success) {
-    throw new Error(`deno doc --json ${file} failed:\n${new TextDecoder().decode(result.stderr)}`);
+    throw new Error(
+      `deno doc --json ${file} failed:\n${new TextDecoder().decode(result.stderr)}`,
+    );
   }
-  const parsed = JSON.parse(new TextDecoder().decode(result.stdout)) as DocOutput;
+  const parsed = JSON.parse(
+    new TextDecoder().decode(result.stdout),
+  ) as DocOutput;
   if (parsed.version !== 2) {
-    throw new Error(`deno doc --json for ${file} returned schema v${parsed.version}; expected v2.`);
+    throw new Error(
+      `deno doc --json for ${file} returned schema v${parsed.version}; expected v2.`,
+    );
   }
   const modules = Object.values(parsed.nodes);
-  if (modules.length === 0) throw new Error(`deno doc --json ${file} returned no modules.`);
+  if (modules.length === 0) {
+    throw new Error(`deno doc --json ${file} returned no modules.`);
+  }
   return modules[0];
 }
 
@@ -402,7 +436,11 @@ const KIND_LABEL: Record<string, string> = {
 
 function renderSymbol(symbol: SymbolNode): string {
   const out: string[] = [];
-  const kinds = [...new Set(symbol.declarations.map((dec) => KIND_LABEL[dec.kind] ?? dec.kind))];
+  const kinds = [
+    ...new Set(
+      symbol.declarations.map((dec) => KIND_LABEL[dec.kind] ?? dec.kind),
+    ),
+  ];
   // h2 keeps the heading hierarchy sequential under the page h1
   out.push(`## ${symbol.name}`);
   out.push(`<sup>${kinds.join(", ")}</sup>`);
@@ -421,7 +459,8 @@ function renderSymbol(symbol: SymbolNode): string {
 function symbolSortKey(symbol: SymbolNode): [number, string] {
   const kindRank =
     symbol.declarations.some((dec) =>
-        dec.kind === "function" || dec.kind === "class" || dec.kind === "variable"
+        dec.kind === "function" || dec.kind === "class" ||
+        dec.kind === "variable"
       )
       ? 0
       : 1;
@@ -430,7 +469,8 @@ function symbolSortKey(symbol: SymbolNode): [number, string] {
 
 function moduleSummary(moduleDoc: JsDoc | undefined): string {
   const doc = moduleDoc?.doc ?? "";
-  const firstSentence = doc.split(/\n\s*\n/)[0]?.replaceAll("\n", " ").trim() ?? "";
+  const firstSentence = doc.split(/\n\s*\n/)[0]?.replaceAll("\n", " ").trim() ??
+    "";
   return renderJsDocText(firstSentence);
 }
 
@@ -449,9 +489,8 @@ for (const entry of activeEntrypoints) {
     page: entry.page,
     position: entry.page.startsWith("recipes/")
       ? 1 +
-        [...activeEntrypoints.filter((e) => e.page.startsWith("recipes/"))].findIndex((e) =>
-          e.page === entry.page
-        )
+        [...activeEntrypoints.filter((e) => e.page.startsWith("recipes/"))]
+          .findIndex((e) => e.page === entry.page)
       : 1 + pageOrder.indexOf(entry.page),
     entries: [],
   };
@@ -466,7 +505,9 @@ const denoJson = JSON.parse(
   description: string;
 };
 
-await Deno.mkdir(NODE_MODE ? OUT_DIR : `${OUT_DIR}/recipes`, { recursive: true });
+await Deno.mkdir(NODE_MODE ? OUT_DIR : `${OUT_DIR}/recipes`, {
+  recursive: true,
+});
 
 const indexRows: string[] = [];
 let totalSymbols = 0;
@@ -495,7 +536,9 @@ for (const group of groups.values()) {
     });
     const isCommand = group.page === "cli";
     if (!isCommand && symbols.length === 0) {
-      throw new Error(`No exported symbols found for ${entry.file}; refusing to emit empty page.`);
+      throw new Error(
+        `No exported symbols found for ${entry.file}; refusing to emit empty page.`,
+      );
     }
     if (!module.module_doc?.doc && symbols.length === 0) {
       throw new Error(`No module doc or symbols for ${entry.file}.`);
@@ -508,14 +551,14 @@ for (const group of groups.values()) {
     if (isCommand) {
       sections.push(`## ${entry.title}`);
       sections.push(`\`\`\`sh\ndeno run -A jsr:${jsrSpecifier}\n\`\`\``);
-      if (module.module_doc?.doc) sections.push(renderJsDocText(module.module_doc.doc.trim()));
+      if (module.module_doc?.doc) {
+        sections.push(renderJsDocText(module.module_doc.doc.trim()));
+      }
     } else {
-      sections.push(
-        NODE_MODE
-          ? `\`\`\`ts\nimport * as mod from "${jsrSpecifier}"; // from a lofi-node repo checkout\n\`\`\``
-          : `\`\`\`ts\nimport * as mod from "jsr:${jsrSpecifier}";\n\`\`\``,
-      );
-      if (module.module_doc?.doc) sections.push(renderJsDocText(module.module_doc.doc.trim()));
+      sections.push(`\`\`\`ts\nimport * as mod from "jsr:${jsrSpecifier}";\n\`\`\``);
+      if (module.module_doc?.doc) {
+        sections.push(renderJsDocText(module.module_doc.doc.trim()));
+      }
       sections.push(...symbols.map(renderSymbol));
     }
     indexRows.push(
@@ -536,10 +579,8 @@ for (const group of groups.values()) {
 }
 
 const indexIntro = NODE_MODE
-  ? `Generated from the JSDoc of [\`@nzip/lofi-node\`](https://github.com/FelineStateMachine/lofi-node) v${denoJson.version}.
-${denoJson.description}
-
-lofi-node is consumed from a repository checkout; it is not yet published to a registry.`
+  ? `Generated from the JSDoc of [\`@nzip/lofi-node\`](https://jsr.io/@nzip/lofi-node) v${denoJson.version}.
+${denoJson.description}`
   : `Generated from the JSDoc of [\`@nzip/lofi\`](https://jsr.io/@nzip/lofi) v${denoJson.version}.
 ${denoJson.description}`;
 

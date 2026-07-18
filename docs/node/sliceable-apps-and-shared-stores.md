@@ -3,9 +3,9 @@
 <!-- Source: lofi #109 (design + conformance), lofi docs/store-provisioning.md and
      docs/examples/nested-namespaces.md, lofi-node #2; jazz-tools typed-app surface. -->
 
-A self-hosted store is shared infrastructure. The user brings the store; apps are tenants in it.
-This guide is the mental model that makes that safe: what a slice is, how one store's schema grows
-app by app, and why an app cannot damage a neighbor even though the store trusts its administrator.
+Your store is shared infrastructure. You bring the store; the apps you use are tenants in it. This
+guide is the mental model that makes that safe: what a slice is, how one store's schema grows app by
+app, and why an app cannot damage a neighbor even though the store trusts its administrator.
 
 ## A slice is a naming discipline, not a partition
 
@@ -60,8 +60,8 @@ Two properties fall out, both verified against a real server in lofi's conforman
 Stated honestly: this is a _framework_ boundary, not cryptography. Store administration (the admin
 secret, or a provision-scoped ticket) can technically do anything; the invariant keeps apps built on
 lofi honest through the surface they actually use. The node-side complement is that a provision
-ticket never exposes the admin secret itself — the gate injects it — so handing a user provisioning
-power does not hand them a credential to leak.
+ticket never exposes the admin secret itself — the gate injects it — so holding provisioning power
+never means holding a credential you could leak.
 
 ## Where each piece lives
 

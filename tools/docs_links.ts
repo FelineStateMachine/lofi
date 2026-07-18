@@ -12,7 +12,9 @@ async function collectMarkdown(directory: string): Promise<void> {
   for await (const entry of Deno.readDir(directory)) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory) await collectMarkdown(path);
-    else if (entry.isFile && entry.name.endsWith(".md")) markdownFiles.push(path);
+    else if (entry.isFile && entry.name.endsWith(".md")) {
+      markdownFiles.push(path);
+    }
   }
 }
 
@@ -41,7 +43,9 @@ for (const markdown of markdownFiles) {
 }
 
 if (broken.length > 0) {
-  console.error(`Broken local Markdown links:\n${broken.map((link) => `- ${link}`).join("\n")}`);
+  console.error(
+    `Broken local Markdown links:\n${broken.map((link) => `- ${link}`).join("\n")}`,
+  );
   Deno.exit(1);
 }
 

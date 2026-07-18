@@ -15,8 +15,9 @@
   --ink-dim: #8fae9f;
   --grid: 56px;
 
-  --f-display: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
-  --f-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --f-display: "Comfortaa", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  /* Fraunces retired with the old hero-title; system serifs cover the var. */
+  --f-serif: "Iowan Old Style", Georgia, serif;
   --f-body: "Karla", system-ui, -apple-system, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
@@ -51,7 +52,8 @@
     linear-gradient(to bottom, var(--forest-2) 1px, transparent 1px);
   background-size: var(--grid) var(--grid);
   opacity: 0.55;
-  mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, #000 30%, transparent
+    78%);
 }
 /* --- risograph grain --------------------------------------- */
 .landing::after {
@@ -89,7 +91,8 @@
 .landing h2,
 .landing h3 {
   font-family: var(--f-display);
-  font-weight: 900;
+  /* Comfortaa's heaviest weight */
+  font-weight: 700;
   line-height: 1.06;
   letter-spacing: -0.02em;
   margin: 0;
@@ -100,7 +103,7 @@
 }
 .landing h3 {
   font-size: 1.06rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.35;
 }
@@ -148,13 +151,16 @@
   font-size: 0.94rem;
   margin-bottom: 1.6rem;
 }
+/* Inline code sits on a subtle chip so its bounds are legible — a period
+   beside bare mono text is easy to lose. */
 .landing .inline-mono {
   font-family: var(--f-mono);
   font-size: 0.85em;
   color: var(--lime);
-  background: none;
+  background: rgba(34, 51, 44, 0.9);
   border: 0;
-  padding: 0;
+  border-radius: 5px;
+  padding: 0.1em 0.38em;
 }
 .landing .life-cmd {
   margin-top: 0.8rem;
@@ -199,6 +205,84 @@
 }
 .landing .band-head--tight {
   margin-bottom: 1.8rem;
+}
+
+/* ============================================================
+   Mark-led hero, shared by / and /node: the product logotype
+   leads, with the version pill and CTAs alongside — no big
+   headline + subheadline pair.
+   ============================================================ */
+/* The mark is branding: always Nunito black, on both pages, regardless of
+   the page's display face. */
+.landing .nmark {
+  font-family: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-weight: 900;
+  font-size: clamp(3rem, 8vw, 5.2rem);
+  line-height: 1;
+  margin: 0;
+  letter-spacing: -0.015em;
+}
+.landing .nmark .lo {
+  color: var(--lime);
+}
+.landing .nmark .fi {
+  color: var(--cream);
+}
+.landing .nmark .dash {
+  color: var(--jade);
+  margin: 0 0.06em;
+}
+.landing .nmark .node {
+  color: var(--mint);
+}
+
+.landing .hero-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.4rem 2.4rem;
+  flex-wrap: wrap;
+  padding: 3.4rem 0 0;
+  margin-bottom: 2rem;
+}
+.landing .hero-side {
+  display: grid;
+  justify-items: end;
+  gap: 0.8rem;
+}
+.landing .hero-side .cta-row {
+  margin: 0;
+}
+.landing .hero-claim {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(1.5rem, 2.8vw, 2.2rem);
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  color: var(--cream);
+  margin: 0 0 1.7rem;
+}
+.landing .hero-main {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 3rem;
+  align-items: center;
+  padding-bottom: 1rem;
+}
+@media (max-width: 860px) {
+  .landing .hero-top {
+    padding-top: 2.2rem;
+  }
+  .landing .hero-side {
+    justify-items: start;
+  }
+  .landing .hero-main {
+    grid-template-columns: 1fr;
+    gap: 1.6rem;
+  }
+  .landing .hero-main .hero-art {
+    max-width: 420px;
+  }
 }
 
 /* ============================================================
@@ -260,6 +344,19 @@
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* The /node landing's hero art is a quick-start terminal in the tree style. */
+.landing .hero-term {
+  font-size: 0.82rem;
+  line-height: 1.75;
+  align-self: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+@media (max-width: 860px) {
+  .landing .hero-term {
+    margin-top: 1.6rem;
+  }
 }
 
 .landing .cta-row {
@@ -384,7 +481,8 @@
   top: 0.35rem;
   bottom: 0.35rem;
   width: 1px;
-  background-image: linear-gradient(to bottom, var(--jade) 3px, transparent 3px);
+  background-image: linear-gradient(to bottom, var(--jade) 3px, transparent
+    3px);
   background-size: 1px 8px;
 }
 .landing .life-step h3 {
@@ -425,7 +523,8 @@
     bottom: auto;
     width: auto;
     height: 1px;
-    background-image: linear-gradient(to right, var(--jade) 3px, transparent 3px);
+    background-image: linear-gradient(to right, var(--jade) 3px, transparent
+      3px);
     background-size: 8px 1px;
   }
 }
@@ -779,7 +878,8 @@
     margin-block: 0.2rem;
   }
   .landing .wire-line {
-    background-image: linear-gradient(to bottom, var(--mint) 3px, transparent 3px);
+    background-image: linear-gradient(to bottom, var(--mint) 3px, transparent
+      3px);
     background-size: 2px 9px;
     background-repeat: repeat-y;
   }
@@ -982,21 +1082,44 @@
   display: table;
   margin: 0;
 }
+/* Single-title tables use a real <caption>, styled as the section label —
+   the underline runs edge to edge and assistive tech gets true semantics. */
+.landing .tbl caption {
+  caption-side: top;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 0.82rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mint);
+  text-align: left;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--jade);
+}
+
+/* Multi-column header cells keep the same label voice. */
 .landing .tbl th {
   font-family: var(--f-mono);
   font-weight: 500;
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
+  font-size: 0.82rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--mint);
   text-align: left;
   white-space: nowrap;
-  padding: 0 1rem 0.7rem 0;
+  vertical-align: middle;
+  padding: 0.5rem 1rem 0.5rem 0;
   border-bottom: 1px solid var(--jade);
   border-left: 0;
   border-right: 0;
   border-top: 0;
   background: none;
+}
+/* Symmetric inset: the first column carries the same leading space the last
+   column's trailing padding provides. */
+.landing .tbl th:first-child,
+.landing .tbl td:first-child {
+  padding-left: 1rem;
 }
 .landing .tbl tr {
   background: none;
@@ -1063,4 +1186,63 @@
 .landing .limits b {
   color: var(--cream);
   font-weight: 700;
+}
+
+/* ============================================================
+   Entrances. One shared rise: heroes stagger in on load, and
+   where scroll-driven animations exist, section furniture rises
+   as it enters the viewport. Reduced motion gets none of it.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes lofi-rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+  .landing .hero-top,
+  .landing .node-hero-top {
+    animation: lofi-rise 0.5s 0.05s ease-out backwards;
+  }
+  .landing .hero-main > div:first-child,
+  .landing .node-hero .np {
+    animation: lofi-rise 0.55s 0.18s ease-out backwards;
+  }
+  .landing .hero-main .hero-art {
+    animation: lofi-rise 0.6s 0.32s ease-out backwards;
+  }
+  @supports (animation-timeline: view()) {
+    .landing .band-head,
+    .landing .grid-3 .cell,
+    .landing .life-step,
+    .landing .anat > *,
+    .landing .two-up > *,
+    .landing .ta,
+    .landing .sm,
+    .landing .demo-shell {
+      animation: lofi-rise 0.55s ease-out both;
+      animation-timeline: view();
+      animation-range: entry 5% entry 45%;
+    }
+  }
+}
+
+/* ============================================================
+   Selection. Controls and decorative scenes are not copy; the
+   create command, console output, and prose remain selectable.
+   ============================================================ */
+.landing .np-scene,
+.landing .sm-shelf,
+.landing .ta-wire,
+.landing .np-actions,
+.landing .sm-actions,
+.landing .cta-row,
+.landing .btn,
+.landing .np-btn,
+.landing .ta-field,
+.landing .ta-scope,
+.landing .cmd button,
+.landing .switch {
+  -webkit-user-select: none;
+  user-select: none;
 }

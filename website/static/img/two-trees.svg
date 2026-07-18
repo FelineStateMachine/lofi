@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">lofi and lofi-node leaf marks</title>
+  <!-- Two of the brand leaf mark (docs/assets/brand/lofi-mark-color.svg):
+       the smaller mint leaf (lofi-node) tucked behind the lime one (lofi),
+       partially covered so they read as one plant. -->
+  <defs>
+    <mask id="two-trees-cutout">
+      <rect x="-512" y="-512" width="2048" height="2048" fill="white" />
+      <path
+        d="M183 184v146h124M183 330 91 455"
+        fill="none"
+        stroke="black"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="38"
+      />
+    </mask>
+  </defs>
+  <g transform="translate(228 128) scale(0.56)">
+    <path
+      d="M415 56C253 58 112 112 67 224c-32 80-21 173 24 231l47-49c57 29 135 21 197-20 52-34 80-93 80-160Z"
+      fill="#99e5bd"
+      mask="url(#two-trees-cutout)"
+    />
+  </g>
+  <g transform="translate(-34 24) scale(0.9)">
+    <path
+      d="M415 56C253 58 112 112 67 224c-32 80-21 173 24 231l47-49c57 29 135 21 197-20 52-34 80-93 80-160Z"
+      fill="#d5f26a"
+      mask="url(#two-trees-cutout)"
+    />
+  </g>
+</svg>

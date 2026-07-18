@@ -1,19 +1,19 @@
-# Self-hosting with lofi-node
+# Your data, on your node
 
 <!-- Source: FelineStateMachine/lofi-node README.md; site-voice page owned by lofi docs/node/. -->
 
-lofi apps work locally with no server at all, and sync is an election the user makes — so the
-natural end of that road is owning the sync location too.
-[lofi-node](https://github.com/FelineStateMachine/lofi-node) is the first-class way to do it: one
-daemon that embeds a real Jazz sync server, [iroh](https://iroh.computer) node-to-node transport,
-and a ticket-based access gate. Browsers keep speaking Jazz's protocol; only the server URL changes,
-and that URL is user-selected data the app enrolls at runtime, not configuration a developer
+You use lofi apps; lofi-node is how you decide where their data lives. This is not something an
+app's developer sets up for you, and it is not a way to host the app itself — the app stays wherever
+it is deployed. The node is yours: [lofi-node](https://github.com/FelineStateMachine/lofi-node) is
+one daemon that embeds a real Jazz sync server, [iroh](https://iroh.computer) node-to-node
+transport, and a ticket-based access gate. Browsers keep speaking Jazz's protocol; only the server
+URL changes, and that URL is data you hand the app at runtime, not configuration its developer
 compiled in.
 
 What the node gives you:
 
-- **A real Jazz sync server** — SQLite-backed, health-checked, serving exactly the pinned Jazz
-  version your lofi apps run. Any lofi app can use it by URL.
+- **A real Jazz sync server** — SQLite-backed, health-checked, running exactly the pinned Jazz
+  version the apps you use run. Any lofi app you use can sync into it.
 - **Tickets, not accounts.** A `lofisync1.` app-connect ticket carries location and access in one
   string; possession is transport access, revocation is one command. A provision-scoped ticket
   additionally administers the store, with the admin secret never leaving the node.

@@ -1,0 +1,621 @@
+/* ============================================================
+   /node landing — lofi-node's own furniture, on the shared
+   forest/lime tokens from landing.css (scoped under .landing).
+   Three interactive rigs: the playable node (np-), the ticket
+   anatomy (ta-), and the shared-store merge (sm-).
+
+   The page carries its own, more natural type palette: Young
+   Serif's hand-hewn display, Alegreya Sans' humanist body, and
+   Spline Sans Mono's soft console — swapped in through the
+   font variables so every shared rule follows along.
+   ============================================================ */
+/* Font faces load from the site-wide stylesheet link (docusaurus.config.ts);
+   an @import here would serialize the font CSS behind the app bundle. */
+
+.landing--node {
+  --f-display: "Young Serif", "Iowan Old Style", Georgia, serif;
+  --f-body: "Alegreya Sans", "Gill Sans", system-ui, sans-serif;
+  --f-mono: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 17.5px;
+}
+.landing--node h1,
+.landing--node h2,
+.landing--node h3 {
+  font-weight: 400; /* Young Serif ships one weight; let it breathe */
+  letter-spacing: 0;
+}
+
+/* ---------- the lofi-node mark ---------- */
+.landing--node .node-hero {
+  padding: 3.4rem 0 1rem;
+}
+.landing--node .node-hero-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.4rem 2.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+/* The root page's mark is brand Nunito; this page's mark wears its own
+   face — a gothic serif with dark-fantasy blood, still legible as a
+   wordmark. */
+.landing--node .nmark {
+  font-family: "Grenze Gotisch", "Young Serif", Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.landing--node .node-hero-side {
+  display: grid;
+  justify-items: end;
+  gap: 0.8rem;
+}
+.landing--node .node-hero-side .cta-row {
+  margin: 0;
+}
+.landing--node .node-hero .np {
+  max-width: 920px;
+  margin: 0 auto;
+}
+.landing--node .node-hero .np-scene {
+  min-height: 168px;
+}
+@media (max-width: 860px) {
+  .landing--node .node-hero-side {
+    justify-items: start;
+  }
+}
+
+/* ---------- the playable node ---------- */
+.landing .np {
+  background: rgba(34, 51, 44, 0.55);
+  border: 1px solid var(--forest-2);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.2rem 1.1rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.landing .np-scene {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-height: 132px;
+  padding: 0.6rem 0.2rem 1rem;
+}
+
+/* Resting opacity stays legible: the scene must read at a glance before any
+   interaction. Turning on brightens; it doesn't reveal. */
+.landing .np-device {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+  min-width: 64px;
+  position: relative;
+}
+.landing .np-device.is-on {
+  opacity: 1;
+}
+.landing .np-device-glyph {
+  font-size: 4rem;
+  line-height: 1;
+  color: var(--mint);
+}
+.landing .np-device-label,
+.landing .np-home-label {
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.landing .np-chip {
+  position: absolute;
+  top: -0.9rem;
+  font-family: var(--f-mono);
+  font-size: 0.58rem;
+  color: var(--forest);
+  background: var(--lime);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  white-space: nowrap;
+}
+.landing .np-chip--dead {
+  background: var(--jade);
+  color: var(--cream);
+  text-decoration: line-through;
+}
+/* The freshly issued ticket hovers above the home's roof until it is
+   pasted into the app — then it reappears pinned to the phone. */
+.landing .np-chip--ticket {
+  top: -1.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* No grid gap: the roof must sit flush on the body. The label carries its
+   own spacing instead. */
+.landing .np-home {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+  position: relative;
+}
+.landing .np-home .np-home-label {
+  margin-top: 0.3rem;
+}
+.landing .np-home.is-on {
+  opacity: 1;
+}
+.landing .np-home-roof {
+  width: 0;
+  height: 0;
+  border-left: 34px solid transparent;
+  border-right: 34px solid transparent;
+  border-bottom: 20px solid var(--jade);
+}
+.landing .np-home-body {
+  display: grid;
+  gap: 0.3rem;
+  background: var(--forest);
+  border: 1px solid var(--jade);
+  border-top: 0;
+  padding: 0.45rem;
+  width: 68px;
+}
+.landing .np-part {
+  font-family: var(--f-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  /* Left-aligned on a shared inset: centered words of different lengths
+     never share an edge, which reads as misalignment at this size. */
+  text-align: left;
+  color: var(--ink-dim);
+  border: 1px dashed var(--jade);
+  border-radius: 4px;
+  padding: 0.18rem 0.2rem 0.18rem 0.45rem;
+  opacity: 0.75;
+  transition: opacity 0.3s ease, border-color 0.3s ease;
+  position: relative;
+}
+.landing .np-part.is-on {
+  opacity: 1;
+  color: var(--cream);
+  border-style: solid;
+}
+.landing .np-led {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lime);
+}
+
+/* Links are drawn as a repeating dash gradient rather than a dashed border
+   so the live animation can move the PATTERN (segments streaming toward the
+   store) while the element — and the rtt label inside it — stays put. */
+.landing .np-link {
+  flex: 1 1 30px;
+  max-width: 92px;
+  height: 2px;
+  --np-link-ink: var(--jade);
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--np-link-ink) 0 6px,
+    transparent 6px 12px
+  );
+  margin: 0 0.5rem;
+  position: relative;
+}
+.landing .np-link.is-live {
+  --np-link-ink: var(--mint);
+}
+.landing .np-link.is-cut {
+  --np-link-ink: var(--jade);
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--np-link-ink) 0 2px,
+    transparent 2px 8px
+  );
+}
+.landing .np-link--tunnel {
+  max-width: 76px;
+}
+.landing .np-link--tunnel.is-live {
+  --np-link-ink: var(--lime);
+}
+/* Two stacked lines so the label never cuts into the houses beside it. */
+.landing .np-rtt {
+  position: absolute;
+  top: 0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 0.56rem;
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .landing .np-led {
+    animation: np-breathe 1.6s ease-in-out infinite;
+  }
+  .landing .np-link.is-live:not(.is-cut) {
+    animation: np-march 0.8s linear infinite;
+  }
+  @keyframes np-breathe {
+    50% {
+      opacity: 0.35;
+    }
+  }
+  /* One full dash period per loop — a seamless rightward stream. */
+  @keyframes np-march {
+    to {
+      background-position-x: 12px;
+    }
+  }
+}
+
+/* Lines pin to the bottom and grow upward, like a real terminal. */
+.landing .np-console {
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  border-top: 1px solid var(--forest-2);
+  padding-top: 0.7rem;
+  min-height: 5.6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.landing .np-console p {
+  margin: 0;
+  color: var(--ink-dim);
+  max-width: none;
+}
+.landing .np-console p[data-kind="cmd"] {
+  color: var(--cream);
+}
+.landing .np-console p[data-kind="cmd"] b {
+  color: var(--lime);
+  font-weight: 500;
+}
+.landing .np-console p[data-kind="warn"] {
+  color: var(--mint);
+}
+
+.landing .np-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+.landing .np-btn {
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  color: var(--cream);
+  background: var(--forest);
+  border: 1px solid var(--jade);
+  border-radius: 999px;
+  padding: 0.32rem 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.landing .np-btn:hover {
+  border-color: var(--mint);
+}
+.landing .np-btn--go {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--forest);
+  font-weight: 600;
+}
+.landing .np-btn--go:hover {
+  background: var(--mint);
+  border-color: var(--mint);
+}
+.landing .np-btn--ghost {
+  border-color: transparent;
+  color: var(--ink-dim);
+}
+.landing .np-btn--ghost:hover {
+  border-color: var(--jade);
+  color: var(--cream);
+}
+
+/* ---------- ticket anatomy ---------- */
+.landing .ta-wire {
+  font-family: var(--f-mono);
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+.landing .ta-prefix {
+  color: var(--lime);
+}
+.landing .ta-blob {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 34ch;
+  opacity: 0.7;
+}
+.landing .ta-open {
+  color: var(--mint);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.landing .ta-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 1.6rem;
+  align-items: start;
+}
+.landing .ta-json {
+  font-family: var(--f-mono);
+  font-size: 0.8rem;
+  line-height: 2;
+  background: rgba(34, 51, 44, 0.5);
+  border: 1px solid var(--forest-2);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  margin: 0;
+  color: var(--jade);
+  overflow-x: auto;
+}
+.landing .ta-json code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+.landing .ta-field {
+  font: inherit;
+  color: var(--cream);
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed var(--jade);
+  padding: 0.05rem 0.1rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.landing .ta-field:hover {
+  background: rgba(153, 229, 189, 0.12);
+}
+.landing .ta-field.is-active {
+  background: var(--lime);
+  color: var(--forest);
+  border-bottom-color: transparent;
+  border-radius: 4px;
+}
+.landing .ta-secret {
+  letter-spacing: 0.06em;
+}
+
+.landing .ta-card {
+  border-left: 2px solid var(--lime);
+  padding: 0.2rem 0 0.2rem 1.1rem;
+  min-height: 11rem;
+}
+.landing .ta-card h3 {
+  margin-bottom: 0.45rem;
+}
+.landing .ta-card p {
+  font-size: 0.92rem;
+  color: var(--ink-dim);
+  margin-bottom: 0.7rem;
+}
+.landing .ta-scope {
+  display: inline-flex;
+  border: 1px solid var(--jade);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.6rem;
+}
+.landing .ta-scope button {
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  background: none;
+  border: 0;
+  color: var(--ink-dim);
+  padding: 0.25rem 0.8rem;
+  cursor: pointer;
+}
+.landing .ta-scope button.is-active {
+  background: var(--lime);
+  color: var(--forest);
+  font-weight: 600;
+}
+.landing .ta-inject {
+  font-family: var(--f-mono);
+  font-size: 0.74rem;
+  color: var(--ink-dim);
+}
+.landing .ta-inject.is-on {
+  color: var(--mint);
+}
+
+@media (max-width: 860px) {
+  .landing .ta-body {
+    grid-template-columns: 1fr;
+  }
+  .landing .ta-card {
+    min-height: 0;
+  }
+}
+
+/* ---------- shared-store merge ---------- */
+.landing .sm {
+  background: rgba(34, 51, 44, 0.55);
+  border: 1px solid var(--forest-2);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.3rem 1.1rem;
+}
+.landing .sm-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.landing .sm-status {
+  font-family: var(--f-mono);
+  font-size: 0.74rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--jade);
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  color: var(--cream);
+}
+.landing .sm-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--jade);
+}
+.landing .sm-status[data-code="ok"] i {
+  background: var(--lime);
+}
+.landing .sm-status[data-code="no_schema"] i,
+.landing .sm-status[data-code="schema_drift"] i {
+  background: var(--mint);
+}
+.landing .sm-note {
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+}
+
+.landing .sm-shelf {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 7.2rem;
+  border-top: 1px dashed var(--forest-2);
+  border-bottom: 1px dashed var(--forest-2);
+  padding: 0.9rem 0;
+}
+/* The empty store is a vacant slice: same footprint and radius as a real
+   one, dashed outline, waiting to be filled by the first provisioning. */
+.landing .sm-empty {
+  flex: 1 1 100%;
+  display: grid;
+  place-items: center;
+  min-height: 4.6rem;
+  border: 1px dashed var(--jade);
+  border-radius: 10px;
+  font-family: var(--f-mono);
+  font-size: 0.76rem;
+  color: var(--ink-dim);
+  font-style: italic;
+}
+.landing .sm-slice {
+  display: flex;
+  align-items: center;
+  align-content: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--jade);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  /* Slices share the full shelf width on desktop and wrap on small screens. */
+  flex: 1 1 280px;
+}
+.landing .sm-slice--notes {
+  border-color: var(--lime);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .landing .sm-slice--notes {
+    animation: sm-arrive 0.35s ease-out;
+  }
+  @keyframes sm-arrive {
+    from {
+      transform: translateX(14px);
+      opacity: 0;
+    }
+  }
+}
+.landing .sm-ns {
+  font-family: var(--f-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+.landing .sm-table {
+  font-family: var(--f-mono);
+  font-size: 0.76rem;
+  color: var(--forest);
+  background: var(--mint);
+  border-radius: 6px;
+  padding: 0.28rem 0.6rem;
+}
+.landing .sm-slice--notes .sm-table {
+  background: var(--lime);
+}
+.landing .sm-table.is-contested {
+  background: none;
+  color: var(--mint);
+  border: 1px dashed var(--mint);
+  /* The border replaces the fill; keep the chip's box the same size. */
+  padding: calc(0.28rem - 1px) calc(0.6rem - 1px);
+}
+.landing .sm-seal {
+  flex-basis: 100%;
+  font-family: var(--f-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+.landing .sm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.9rem;
+}
+
+/* ---------- page-level bits ---------- */
+/* Footnotes directly under the rigs are single pointers, not body prose;
+   let them use the band's full width instead of the 62ch reading measure. */
+.landing--node .band > .intro-note {
+  max-width: none;
+  margin-bottom: 0;
+  padding-top: 1rem;
+}
+
+.landing .node-paths {
+  columns: 2;
+  column-gap: 3rem;
+  max-width: none;
+}
+.landing .node-paths li {
+  break-inside: avoid;
+  margin-bottom: 0.55rem;
+  color: var(--ink-dim);
+}
+.landing .node-paths li b {
+  color: var(--cream);
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .landing .node-paths {
+    columns: 1;
+  }
+}

@@ -1,137 +1,209 @@
 import type { ReactNode } from "react";
 import Link from "@docusaurus/Link";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Layout from "@theme/Layout";
+import NodePlayground from "../components/NodePlayground";
+import TicketAnatomy from "../components/TicketAnatomy";
+import SliceMerge from "../components/SliceMerge";
 
-// The /node homepage: what lofi-node is and where its docs live. Content is
-// sourced from the lofi-node README (FelineStateMachine/lofi-node); the
-// tutorial, guide, and reference pages under /node/docs are assembled by
-// tools/node_docs.ts.
+import "../css/landing.css";
+import "../css/node-landing.css";
 
-const QUICK_START = [
-  ["deno task compile", "one self-contained binary (dist/lofi-node)"],
-  ["dist/lofi-node init --port 4802", "ticket-gated by default; --open opts out"],
-  ["dist/lofi-node start", "gate URL + node-pairing ticket"],
-  ["dist/lofi-node ticket issue --label phone", "app-connect ticket (shown once)"],
-] as const;
-
-const CARDS: Array<{ title: string; body: string; to: string; link: string }> = [
-  {
-    title: "Self-host your first sync node",
-    body:
-      "Compile the binary, start a ticket-gated node, issue an app ticket, and enroll it in a lofi app.",
-    to: "/node/docs/self-host-a-sync-node",
-    link: "Start the tutorial",
-  },
-  {
-    title: "Sliceable apps and shared stores",
-    body:
-      "One store as shared infrastructure: slices, the namespace honesty invariant, and the four store states.",
-    to: "/node/docs/sliceable-apps-and-shared-stores",
-    link: "Read the guide",
-  },
-  {
-    title: "App-ticket contract",
-    body:
-      "The lofisync1 format, scopes, revocation semantics, and the store-status preflight — the contract the lofi side implements.",
-    to: "/node/docs/app-ticket",
-    link: "Read the contract",
-  },
-  {
-    title: "API reference",
-    body:
-      "createSyncNode, SyncNode, ticket codecs, and the test mesh — generated from the lofi-node sources.",
-    to: "/node/api",
-    link: "Browse the API",
-  },
-];
+// The /node landing: lofi-node's front door. Shares the brand tokens with the
+// root landing but none of its furniture. The page is three interactive
+// rigs: a node you operate, a ticket you open, and a store two apps share.
+// lofi-node is an END USER capability (owning where their data syncs), not a
+// way to host a lofi app; the copy keeps that audience.
 
 export default function NodeHome(): ReactNode {
+  const { siteConfig } = useDocusaurusContext();
+  const version = siteConfig.customFields?.lofiNodeVersion as string;
+
   return (
     <Layout
-      title="Self-host with lofi-node"
-      description="One daemon that self-hosts a lofi app's sync backend: an embedded Jazz sync server, iroh node-to-node transport, and a ticket-based access gate."
+      title="lofi-node: user-owned sync"
+      description="lofi apps let their users choose where data syncs. lofi-node makes that choice real. One daemon a user runs, with an embedded Jazz sync server, iroh node-to-node transport, and a ticket-based access gate."
     >
-      <main className="container margin-vert--lg">
-        <div className="row">
-          <div className="col col--8 col--offset-2">
-            <h1>Own your sync location</h1>
-            <p>
-              <strong>lofi-node</strong>{" "}
-              is the first-class way to self-host the sync backend for lofi apps: one daemon
-              embedding a real Jazz sync server, <a href="https://iroh.computer">iroh</a>{" "}
-              node-to-node transport, and a ticket-based access gate. Browsers keep speaking Jazz's
-              protocol — only the server URL changes, and that URL is{" "}
-              <em>user-selected data, not developer configuration</em>: the app stores the ticket
-              you issue and syncs where you point it.
-            </p>
-            <ul>
-              <li>
-                <strong>A real Jazz sync server</strong>{" "}
-                — SQLite-backed, health-checked, usable by any lofi app by URL.
-              </li>
-              <li>
-                <strong>Node-to-node replication over iroh</strong>{" "}
-                — two homes converge by ticket: dialed by key, hole-punched, no static IPs, no
-                cloud dependency.
-              </li>
-              <li>
-                <strong>Tickets, not accounts</strong>{" "}
-                — possession of a <code>lofisync1.</code>{" "}
-                app ticket is transport access; a provision-scoped ticket additionally administers
-                the store, with the admin secret never leaving the node.
-              </li>
-              <li>
-                <strong>One binary</strong>{" "}
-                — <code>deno task compile</code>{" "}
-                embeds the prebuilt native matrix and runs on macOS and Linux.
-              </li>
-            </ul>
+      <main className="landing landing--node">
+        {/* ===================== HERO: MARK + THE PLAYABLE NODE ===================== */}
+        <div className="wrap">
+          <header className="node-hero">
+            <div className="node-hero-top">
+              <h1 className="nmark" aria-label="lofi-node">
+                <span className="lo">lo</span>
+                <span className="fi">fi</span>
+                <span className="dash">-</span>
+                <span className="node">node</span>
+              </h1>
+              <div className="node-hero-side">
+                <p className="eyebrow">
+                  <span>user-owned sync</span>
+                  <span className="pill">v{version} · alpha · MIT</span>
+                </p>
+                <div className="cta-row">
+                  <Link
+                    className="btn btn--primary"
+                    to="/node/docs/self-host-a-sync-node"
+                  >
+                    Host your first node
+                  </Link>
+                  <Link className="btn" to="/node/docs">docs</Link>
+                  <Link
+                    className="btn"
+                    href="https://github.com/FelineStateMachine/lofi-node"
+                  >
+                    source
+                  </Link>
+                </div>
+              </div>
+            </div>
+            <NodePlayground />
+          </header>
+        </div>
 
-            <h2>Quick start</h2>
-            <pre>
-              <code>
-                {QUICK_START.map(([cmd, note]) => `$ ${cmd}\n    # ${note}\n`).join("")}
-              </code>
-            </pre>
-            <p>
-              The issued ticket carries <em>location + access</em>; the user pastes it into their
-              lofi app, which stores it and uses its URL as the sync server. Enrollment on the app
-              side is{" "}
-              <Link to="/docs/sync-and-recovery">
-                documented with the rest of sync and recovery
+        {/* ===================== TICKET ANATOMY ===================== */}
+        <div className="wrap">
+          <section className="band band--rule">
+            <div className="band-head">
+              <p className="eyebrow">A singular entry</p>
+              <h2>Open the ticket.</h2>
+              <p className="lede band-lede">
+                No accounts, no OAuth, no server-side user table. A{" "}
+                <code className="inline-mono">lofisync1.</code>{" "}
+                string carries the store's identity and a bearer secret riding
+                the URL path, which is why the app needs zero changes to sync
+                somewhere new. Click a field.
+              </p>
+            </div>
+            <TicketAnatomy />
+            <p className="dim intro-note">
+              The normative spec lives with the node and renders here from the
+              pinned source:{" "}
+              <Link to="/node/docs/app-ticket">the app-ticket contract</Link>.
+              <br />
+              Both repos test against the same conformance fixtures, so the
+              string above can't drift quietly.
+            </p>
+          </section>
+        </div>
+
+        {/* ===================== SHARED STORE ===================== */}
+        <div className="wrap">
+          <section className="band band--rule">
+            <div className="band-head">
+              <p className="eyebrow">many apps, one store, no folklore</p>
+              <h2>Apps are tenants. The store is yours.</h2>
+              <p className="lede band-lede">
+                A user's node can hold several lofi apps' data at once. Each app
+                may provision only the tables under its own namespaces;
+                everything else, a neighbor's tables{" "}
+                <em>and its access rules</em>, rides through byte-for-byte. Run
+                the story below; every step of it is a real, conformance-tested
+                flow.
+              </p>
+            </div>
+            <SliceMerge />
+            <p className="dim intro-note">
+              The full model:{" "}
+              <Link to="/node/docs/sliceable-apps-and-shared-stores">
+                sliceable apps and shared stores
+              </Link>{" "}
+              and the hands-on version,{" "}
+              <Link to="/node/docs/provision-a-store">
+                provision a store
               </Link>.
             </p>
+          </section>
+        </div>
 
-            <div className="row margin-top--lg">
-              {CARDS.map((card) => (
-                <div className="col col--6 margin-bottom--lg" key={card.to}>
-                  <div className="card" style={{ height: "100%" }}>
-                    <div className="card__header">
-                      <h3>{card.title}</h3>
-                    </div>
-                    <div className="card__body">
-                      <p>{card.body}</p>
-                    </div>
-                    <div className="card__footer">
-                      <Link className="button button--secondary button--block" to={card.to}>
-                        {card.link}
-                      </Link>
-                    </div>
-                  </div>
+        {/* ===================== HONESTY + PATHS ===================== */}
+        <div className="wrap">
+          <section className="band band--rule">
+            <div className="two-up">
+              <div>
+                <div className="band-head band-head--tight">
+                  <h2>Still curious?</h2>
                 </div>
-              ))}
+                <ul className="limits">
+                  <li>
+                    <b>The data plane is Jazz 2 alpha, pinned exactly.</b>{" "}
+                    A node must run the same alpha as the apps it serves; bumps
+                    are coordinated.
+                  </li>
+                  <li>
+                    <b>Windows runs LAN-only.</b>{" "}
+                    A documented native-build gap; the store works, pairing
+                    reports itself unavailable instead of degrading silently.
+                  </li>
+                  <li>
+                    <b>Tickets are bearer credentials.</b>{" "}
+                    Plain http is for trusted LANs; beyond one, front the gate
+                    with TLS.
+                  </li>
+                  <li>
+                    <b>Storage is SQLite or memory</b>, the engine's honest
+                    surface today. Replicate the file for off-site durability.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <div className="band-head band-head--tight">
+                  <h2>Keep going.</h2>
+                </div>
+                <ul className="node-paths">
+                  <li>
+                    <b>
+                      <Link to="/node/docs/self-host-a-sync-node">
+                        Self-host a node
+                      </Link>
+                    </b>: compile, init, ticket, enroll.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/docs/pair-two-homes">Pair two homes</Link>
+                    </b>: hole-punched, no static IPs.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/docs/provision-a-store">
+                        Provision a store
+                      </Link>
+                    </b>: the merge, end to end.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/docs/tickets-explained">
+                        Tickets explained
+                      </Link>
+                    </b>: scopes, revocation, posture.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/docs/cli">CLI</Link> ·{" "}
+                      <Link to="/node/docs/configuration">Configuration</Link> ·
+                      {" "}
+                      <Link to="/node/docs/http-surface">HTTP</Link>
+                    </b>: the reference shelf.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/api">API reference</Link>
+                    </b>: <code className="inline-mono">createSyncNode</code>
+                    {" "}
+                    and friends, generated from source.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/llms.txt" target="_blank">
+                        /node/llms.txt
+                      </Link>
+                    </b>: the node corpus for agents, separate from the
+                    framework's.
+                  </li>
+                </ul>
+              </div>
             </div>
-
-            <p>
-              Full documentation: <Link to="/node/docs">/node/docs</Link> · agents can ingest{" "}
-              <Link to="/node/llms.txt" target="_blank">/node/llms.txt</Link> or{" "}
-              <Link to="/node/llms-full.txt" target="_blank">/node/llms-full.txt</Link> · source:
-              {" "}
-              <a href="https://github.com/FelineStateMachine/lofi-node">
-                FelineStateMachine/lofi-node
-              </a>
-            </p>
-          </div>
+          </section>
         </div>
       </main>
     </Layout>

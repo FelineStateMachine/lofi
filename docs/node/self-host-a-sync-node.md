@@ -3,20 +3,28 @@
 <!-- Source: FelineStateMachine/lofi-node docs/hosting-lofi-apps.md and cli.ts; validated flow. -->
 
 By the end of this tutorial you will have a sync node running on your own machine, an app-connect
-ticket in hand, and a lofi app syncing against it. Nothing here requires a cloud account, a static
-IP, or TLS on a trusted LAN — one binary and one paste.
+ticket in hand, and a lofi app you use syncing against it. You are the app's user here, not its
+developer: the app stays exactly as it was deployed, and pointing it at your node is entirely your
+call. Nothing below requires a cloud account, a static IP, or TLS on a trusted LAN — one binary and
+one paste.
 
-## 1. Get the binary
+## 1. Install lofi-node
 
-From a checkout of [lofi-node](https://github.com/FelineStateMachine/lofi-node):
+Install the tool from [JSR](https://jsr.io/@nzip/lofi-node), which puts `lofi-node` on your PATH:
 
 ```sh
-deno task compile
+deno install -g -A -n lofi-node jsr:@nzip/lofi-node/cli
 ```
 
-This produces a self-contained `dist/lofi-node` with the native transport layer embedded (macOS
-arm64/x86_64 and Linux x86_64/aarch64; on Windows the node runs LAN-only —
-[why](troubleshooting.md)). You can also run the CLI directly with `deno run -A cli.ts`.
+For a single self-contained binary instead, compile from a checkout of
+[lofi-node](https://github.com/FelineStateMachine/lofi-node):
+
+```sh
+deno task compile   # → dist/lofi-node
+```
+
+Either way, the native transport layer covers macOS arm64/x86_64 and Linux x86_64/aarch64; on
+Windows the node runs LAN-only ([why](troubleshooting.md)).
 
 ## 2. Initialize and start
 
@@ -59,11 +67,13 @@ the secret lives in the URL path: [Tickets explained](tickets-explained.md).
 
 ## 4. Enroll the ticket in a lofi app
 
-The user pastes the ticket into the app. On the app side that is one call —
-`enrollSyncTicket(pastedTicket)` — which declares the node as the device's sync location and elects
-sync in one step; the app's existing local data pushes up under the same account identity. The
-enrollment flow, its guardrails, and the UI surface are covered in the framework docs:
-[Sync and recovery](/docs/sync-and-recovery).
+Paste the ticket into the app — a lofi app with sync exposes enrollment in its account UI. That
+declares your node as the device's sync location and elects sync in one step; the data you already
+made in the app pushes up under the same account identity. Nothing about the app changes or
+redeploys — pointing it at your node is your call, not the app developer's.
+
+(If you are the app developer: the framework side is one call, `enrollSyncTicket`, documented in
+[Sync and recovery](/docs/sync-and-recovery).)
 
 ## 5. Verify
 

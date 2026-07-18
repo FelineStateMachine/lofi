@@ -3,8 +3,8 @@
 <!-- Source: FelineStateMachine/lofi-node docs/hosting-lofi-apps.md ("Storage choice") and
      src/config.ts (StorageConfig). -->
 
-The node's store is where your users' synced data durably lives, and the choice is deliberately
-narrow because the underlying engine's honest surface is narrow: jazz-napi supports exactly a SQLite
+The node's store is where your synced data durably lives, and the choice is deliberately narrow
+because the underlying engine's honest surface is narrow: jazz-napi supports exactly a SQLite
 directory or memory today. The `storage.type` discriminator in `config.json` is the seam future
 providers slot into.
 

@@ -47,6 +47,6 @@ Jazz server works, `status().mesh` reports `{ state: "unavailable", reason: … 
 ## The version invariant
 
 A node pins the **exact** Jazz alpha of the apps it serves; version bumps are coordinated changes,
-never drive-by. Before pointing production apps at a node, confirm the pins match — a mismatched
-pair fails in protocol-level ways no amount of network configuration fixes. See
+never drive-by. Before pointing the apps you rely on at your node, confirm the pins match — a
+mismatched pair fails in protocol-level ways no amount of network configuration fixes. See
 [troubleshooting](troubleshooting.md) for what the mismatches look like.

@@ -22,7 +22,9 @@ Blocked at any step — environment, browser, build, or test failures? Go straig
 [Troubleshooting](troubleshooting.md).
 
 The root [README](https://github.com/FelineStateMachine/lofi/blob/main/README.md) provides the
-shortest product overview and command summary.
+shortest product overview and command summary. AI agents can ingest these docs as
+[llms.txt](https://lofi.host/llms.txt) (index) or [llms-full.txt](https://lofi.host/llms-full.txt)
+(complete corpus including the API reference).
 
 ## Reference
 

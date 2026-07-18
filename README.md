@@ -13,6 +13,10 @@ or rewriting product code.
 [Documentation](https://lofi.host/docs) · [API reference](https://lofi.host/api) ·
 [JSR package](https://jsr.io/@nzip/lofi) · [MIT License](LICENSE)
 
+Building with an AI agent? Feed it [llms.txt](https://lofi.host/llms.txt) for an index of the
+documentation, or [llms-full.txt](https://lofi.host/llms-full.txt) for the complete docs and API
+reference in one file — both generated from the deployed version's sources.
+
 ## Quick start
 
 Requires **Deno 2.9+**. It is the only global runtime you need.

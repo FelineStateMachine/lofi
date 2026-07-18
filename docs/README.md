@@ -44,6 +44,8 @@ shortest product overview and command summary. AI agents can ingest these docs a
   - [Schema evolution](examples/schema-evolution.md)
   - [Nested app namespaces](examples/nested-namespaces.md)
 - [Store provisioning](store-provisioning.md)
+- [Self-hosting with lofi-node](https://lofi.host/node) — run the sync backend yourself; tutorials,
+  guides, and the node reference live in the site's `/node` section
 - [Optional installed-app recipes](recipes/README.md)
 - [Advanced device-auth primitive](auth.md)
 

@@ -79,7 +79,7 @@ async function collectApiDir(dir: string, urlPrefix: string): Promise<void> {
     const markdown = await Deno.readTextFile(sourcePath);
     const stem = entry.name.slice(0, -".md".length);
     const position = Number(markdown.match(/^sidebar_position:\s*(\d+)$/m)?.[1] ?? 99);
-    const url = stem === "index" ? `${siteUrl}/api` : `${urlPrefix}/${stem}`;
+    const url = stem === "index" ? urlPrefix : `${urlPrefix}/${stem}`;
     apiEntries.push({
       title: firstHeading(markdown) ?? stem,
       url,
@@ -110,6 +110,8 @@ const shortLines: string[] = [
   `lofi is published on JSR as \`@nzip/lofi\` (v${denoJson.version}).`,
   `This file indexes the documentation deployed at ${siteUrl} for this exact version.`,
   `The full documentation corpus is available at ${siteUrl}/llms-full.txt.`,
+  `The self-hosted sync node (lofi-node) is indexed separately at ${siteUrl}/node/llms.txt` +
+  ` (full corpus: ${siteUrl}/node/llms-full.txt).`,
   "",
 ];
 for (const section of sections) {
@@ -145,8 +147,91 @@ for (const doc of allDocs) {
 
 await Deno.writeTextFile(`${OUT_DIR}/llms.txt`, shortLines.join("\n"));
 await Deno.writeTextFile(`${OUT_DIR}/llms-full.txt`, fullParts.join("\n"));
+const mainApiCount = apiEntries.length;
+
+// The node-scoped pair: agents enrolling an app against a self-hosted node
+// should not have to ingest the full framework corpus, and vice versa. Pages
+// come from the assembled /node/docs set (tools/node_docs.ts) so contract
+// pages rendered from the lofi-node checkout are included verbatim.
+const NODE_DOCS_DIR = "website/node-docs-gen";
+const NODE_API_DIR = "website/node-api-gen";
+
+const nodeManifest = JSON.parse(
+  await Deno.readTextFile("website/node-docs-manifest.json"),
+) as Manifest;
+
+function nodeDocUrl(id: string): string {
+  return id === "README" ? `${siteUrl}/node/docs` : `${siteUrl}/node/docs/${id}`;
+}
+
+const nodeSections: Section[] = [];
+for (const section of nodeManifest.sections) {
+  const docs: DocEntry[] = [];
+  for (const item of section.items) {
+    const sourcePath = `${NODE_DOCS_DIR}/${item.id}.md`;
+    let markdown: string;
+    try {
+      markdown = await Deno.readTextFile(sourcePath);
+    } catch {
+      console.error(`Missing ${sourcePath}; run \`deno task site:node\` first.`);
+      Deno.exit(1);
+    }
+    docs.push({
+      title: firstHeading(markdown) ?? item.label,
+      url: nodeDocUrl(item.id),
+      sourcePath,
+    });
+  }
+  nodeSections.push({ label: section.label ?? "Documentation", docs });
+}
+
+apiEntries.length = 0;
+try {
+  await collectApiDir(NODE_API_DIR, `${siteUrl}/node/api`);
+} catch (error) {
+  if (!(error instanceof Deno.errors.NotFound)) throw error;
+  console.error(`Missing ${NODE_API_DIR}; run \`deno task site:api:node\` first.`);
+  Deno.exit(1);
+}
+const nodeApiEntries = [...apiEntries];
+nodeApiEntries.sort((a, b) => a.position - b.position || a.url.localeCompare(b.url));
+
+const nodeShort: string[] = [
+  "# lofi-node",
+  "",
+  "> Self-host the sync backend for lofi apps: one daemon embedding a Jazz sync server, iroh node-to-node transport, and ticket-gated access.",
+  "",
+  `This file indexes the lofi-node documentation deployed at ${siteUrl}/node.`,
+  `The full corpus is available at ${siteUrl}/node/llms-full.txt; the lofi framework itself is indexed at ${siteUrl}/llms.txt.`,
+  "",
+];
+for (const section of nodeSections) {
+  nodeShort.push(`## ${section.label}`, "");
+  for (const doc of section.docs) nodeShort.push(`- [${doc.title}](${doc.url})`);
+  nodeShort.push("");
+}
+nodeShort.push("## API reference", "");
+for (const entry of nodeApiEntries) nodeShort.push(`- [${entry.title}](${entry.url})`);
+nodeShort.push("");
+
+const nodeFull: string[] = [
+  "# lofi-node documentation",
+  "",
+  `> Deployed at ${siteUrl}/node. Source: https://github.com/FelineStateMachine/lofi-node`,
+  "",
+];
+for (const doc of [...nodeSections.flatMap((section) => section.docs), ...nodeApiEntries]) {
+  const markdown = stripFrontmatter(await Deno.readTextFile(doc.sourcePath)).trim();
+  nodeFull.push("---", "", `<!-- Source: ${doc.url} -->`, "", markdown, "");
+}
+
+await Deno.mkdir(`${OUT_DIR}/node`, { recursive: true });
+await Deno.writeTextFile(`${OUT_DIR}/node/llms.txt`, nodeShort.join("\n"));
+await Deno.writeTextFile(`${OUT_DIR}/node/llms-full.txt`, nodeFull.join("\n"));
 
 const docCount = sections.reduce((sum, section) => sum + section.docs.length, 0);
+const nodeDocCount = nodeSections.reduce((sum, section) => sum + section.docs.length, 0);
 console.log(
-  `Generated llms.txt (${docCount} docs + ${apiEntries.length} API pages) and llms-full.txt into ${OUT_DIR}/.`,
+  `Generated llms.txt (${docCount} docs + ${mainApiCount} API pages), node/llms.txt ` +
+    `(${nodeDocCount} docs + ${nodeApiEntries.length} API pages), and the -full pair into ${OUT_DIR}/.`,
 );

@@ -25,6 +25,10 @@ for (const markdown of markdownFiles) {
   for (const match of source.matchAll(linkPattern)) {
     const raw = match[1].replace(/^<|>$/g, "");
     if (raw.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(raw)) continue;
+    // Site-absolute routes (e.g. /node/docs/app-ticket) point at deployed
+    // pages, some assembled at build time; the Docusaurus build validates
+    // them via onBrokenLinks, not the repository tree.
+    if (raw.startsWith("/")) continue;
     const target = decodeURIComponent(raw.split("#", 1)[0]);
     if (!target) continue;
     try {

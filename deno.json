@@ -64,9 +64,12 @@
     "test:golden": "deno run -A tools/golden.ts --source local",
     "test:golden:registry": "deno run -A tools/golden.ts --source registry",
     "site:api": "deno run --allow-read --allow-run --allow-write=website/api-gen tools/api_docs.ts",
+    "site:api:node": "deno run --allow-read --allow-run --allow-env=LOFI_NODE_DIR --allow-write=website/node-api-gen tools/api_docs.ts --node",
+    "site:node": "deno run --allow-read --allow-run=git --allow-env=LOFI_NODE_DIR,LOFI_NODE_REF --allow-write=website/node-docs-gen tools/node_docs.ts",
     "site:llms": "deno run --allow-read --allow-write=website/static --allow-env=SITE_URL tools/site_llms.ts",
-    "site:build": "deno task site:api && deno task site:llms && npm run build --prefix website",
-    "site:dev": "deno task site:api && deno task site:llms && npm start --prefix website",
+    "site:gen": "deno task site:api && deno task site:api:node && deno task site:node && deno task site:llms",
+    "site:build": "deno task site:gen && npm run build --prefix website",
+    "site:dev": "deno task site:gen && npm start --prefix website",
     "publish:dry": "deno publish --dry-run"
   },
   "fmt": {

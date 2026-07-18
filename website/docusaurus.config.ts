@@ -49,8 +49,8 @@ const config: Config = {
       {
         hashed: true,
         indexBlog: false,
-        docsRouteBasePath: ["docs", "api"],
-        docsDir: ["../docs", "api-gen"],
+        docsRouteBasePath: ["docs", "api", "node/docs", "node/api"],
+        docsDir: ["../docs", "api-gen", "node-docs-gen", "node-api-gen"],
       },
     ],
   ],
@@ -89,6 +89,29 @@ const config: Config = {
         editUrl: undefined,
       },
     ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        // Assembled by tools/node_docs.ts from docs/node/ plus contract pages
+        // rendered out of the pinned lofi-node checkout; no edit URL because
+        // pages have two possible homes — each page names its source.
+        id: "node",
+        path: "node-docs-gen",
+        routeBasePath: "node/docs",
+        sidebarPath: "./sidebars-node.ts",
+        editUrl: undefined,
+      },
+    ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        id: "node-api",
+        path: "node-api-gen",
+        routeBasePath: "node/api",
+        sidebarPath: "./sidebars-node-api.ts",
+        editUrl: undefined,
+      },
+    ],
   ],
 
   presets: [
@@ -106,6 +129,8 @@ const config: Config = {
             "devx-contract.md",
             "seed.md",
             "assets/**",
+            // Served under /node/docs by the "node" plugin instance instead.
+            "node/**",
             "**/_*.{js,jsx,ts,tsx,md,mdx}",
             "**/_*/**",
           ],
@@ -180,6 +205,7 @@ const config: Config = {
       items: [
         { type: "docSidebar", sidebarId: "docs", position: "left", label: "Docs" },
         { to: "/api", label: "API", position: "left" },
+        { to: "/node", label: "Self-host", position: "left" },
         { href: "https://jsr.io/@nzip/lofi", label: "JSR", position: "right" },
         {
           href: "https://github.com/FelineStateMachine/lofi",
@@ -205,6 +231,7 @@ const config: Config = {
             { label: "Permissions", to: "/docs/permissions" },
             { label: "Sync and recovery", to: "/docs/sync-and-recovery" },
             { label: "API reference", to: "/api" },
+            { label: "Self-host a sync node", to: "/node" },
           ],
         },
         {

@@ -6,7 +6,8 @@ back up and sync from the generated `AccountGate` UI.
 
 There are two ways a device gets a sync location: the deployment can compile one in (a managed Jazz
 app — the _default sink_), or the user can declare one at runtime by enrolling a ticket from a
-self-hosted node. Both feed the same election flow.
+self-hosted node. Both feed the same election flow. Running that node yourself — one binary,
+tickets, optional node-to-node replication — is covered in the [self-hosting section](/node).
 
 ## Provision a managed Jazz app
 

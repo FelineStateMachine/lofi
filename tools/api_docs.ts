@@ -3,9 +3,24 @@
  * into `website/api-gen/`. One page per entry in {@link entrypoints}, with the
  * six CLI command wrappers sharing a single page. Run via `deno task site:api`.
  */
-import { entrypoints } from "./entrypoints.ts";
+import { type Entrypoint, entrypoints } from "./entrypoints.ts";
 
-const OUT_DIR = "website/api-gen";
+// `--node` renders the lofi-node API instead: same renderer, sourced from a
+// checkout of FelineStateMachine/lofi-node (LOFI_NODE_DIR, default
+// ../lofi-node), emitted into the /node/api docs instance. lofi-node is not
+// published to a registry; the checkout is the source of truth.
+const NODE_MODE = Deno.args.includes("--node");
+const NODE_DIR = NODE_MODE ? (Deno.env.get("LOFI_NODE_DIR") ?? "../lofi-node") : "";
+
+const nodeEntrypoints: readonly Entrypoint[] = [
+  { jsrName: ".", file: `${NODE_DIR}/mod.ts`, page: "node", title: "Sync node" },
+  { jsrName: "./testing", file: `${NODE_DIR}/testing/mod.ts`, page: "testing", title: "Testing" },
+];
+
+const activeEntrypoints = NODE_MODE ? nodeEntrypoints : entrypoints;
+const packageName = NODE_MODE ? "@nzip/lofi-node" : "@nzip/lofi";
+
+const OUT_DIR = NODE_MODE ? "website/node-api-gen" : "website/api-gen";
 
 type JsDocTag = {
   kind: string;
@@ -425,14 +440,16 @@ type PageGroup = {
   entries: typeof entrypoints[number][];
 };
 
-const pageOrder = ["runtime", "astro", "access", "preact", "testing", "cli"];
+const pageOrder = NODE_MODE
+  ? ["node", "testing"]
+  : ["runtime", "astro", "access", "preact", "testing", "cli"];
 const groups = new Map<string, PageGroup>();
-for (const entry of entrypoints) {
+for (const entry of activeEntrypoints) {
   const group = groups.get(entry.page) ?? {
     page: entry.page,
     position: entry.page.startsWith("recipes/")
       ? 1 +
-        [...entrypoints.filter((e) => e.page.startsWith("recipes/"))].findIndex((e) =>
+        [...activeEntrypoints.filter((e) => e.page.startsWith("recipes/"))].findIndex((e) =>
           e.page === entry.page
         )
       : 1 + pageOrder.indexOf(entry.page),
@@ -442,12 +459,14 @@ for (const entry of entrypoints) {
   groups.set(entry.page, group);
 }
 
-const denoJson = JSON.parse(await Deno.readTextFile("deno.json")) as {
+const denoJson = JSON.parse(
+  await Deno.readTextFile(NODE_MODE ? `${NODE_DIR}/deno.json` : "deno.json"),
+) as {
   version: string;
   description: string;
 };
 
-await Deno.mkdir(`${OUT_DIR}/recipes`, { recursive: true });
+await Deno.mkdir(NODE_MODE ? OUT_DIR : `${OUT_DIR}/recipes`, { recursive: true });
 
 const indexRows: string[] = [];
 let totalSymbols = 0;
@@ -484,14 +503,18 @@ for (const group of groups.values()) {
     totalSymbols += symbols.length;
 
     const jsrSpecifier = entry.jsrName === "."
-      ? "@nzip/lofi"
-      : `@nzip/lofi${entry.jsrName.slice(1)}`;
+      ? packageName
+      : `${packageName}${entry.jsrName.slice(1)}`;
     if (isCommand) {
       sections.push(`## ${entry.title}`);
       sections.push(`\`\`\`sh\ndeno run -A jsr:${jsrSpecifier}\n\`\`\``);
       if (module.module_doc?.doc) sections.push(renderJsDocText(module.module_doc.doc.trim()));
     } else {
-      sections.push(`\`\`\`ts\nimport * as mod from "jsr:${jsrSpecifier}";\n\`\`\``);
+      sections.push(
+        NODE_MODE
+          ? `\`\`\`ts\nimport * as mod from "${jsrSpecifier}"; // from a lofi-node repo checkout\n\`\`\``
+          : `\`\`\`ts\nimport * as mod from "jsr:${jsrSpecifier}";\n\`\`\``,
+      );
       if (module.module_doc?.doc) sections.push(renderJsDocText(module.module_doc.doc.trim()));
       sections.push(...symbols.map(renderSymbol));
     }
@@ -512,16 +535,23 @@ for (const group of groups.values()) {
   await Deno.writeTextFile(`${OUT_DIR}/${group.page}.md`, body);
 }
 
+const indexIntro = NODE_MODE
+  ? `Generated from the JSDoc of [\`@nzip/lofi-node\`](https://github.com/FelineStateMachine/lofi-node) v${denoJson.version}.
+${denoJson.description}
+
+lofi-node is consumed from a repository checkout; it is not yet published to a registry.`
+  : `Generated from the JSDoc of [\`@nzip/lofi\`](https://jsr.io/@nzip/lofi) v${denoJson.version}.
+${denoJson.description}`;
+
 const index = `---
 title: "API reference"
 sidebar_position: 0
 slug: /
 ---
 
-# API reference
+# ${NODE_MODE ? "lofi-node API reference" : "API reference"}
 
-Generated from the JSDoc of [\`@nzip/lofi\`](https://jsr.io/@nzip/lofi) v${denoJson.version}.
-${denoJson.description}
+${indexIntro}
 
 | Export | Summary |
 | --- | --- |
@@ -529,16 +559,18 @@ ${indexRows.join("\n")}
 `;
 await Deno.writeTextFile(`${OUT_DIR}/index.md`, index);
 
-await Deno.writeTextFile(
-  `${OUT_DIR}/recipes/_category_.json`,
-  `${
-    JSON.stringify(
-      { label: "Recipes", position: 8, collapsed: true },
-      null,
-      2,
-    )
-  }\n`,
-);
+if (!NODE_MODE) {
+  await Deno.writeTextFile(
+    `${OUT_DIR}/recipes/_category_.json`,
+    `${
+      JSON.stringify(
+        { label: "Recipes", position: 8, collapsed: true },
+        null,
+        2,
+      )
+    }\n`,
+  );
+}
 
 console.log(
   `Generated ${groups.size + 1} API pages (${totalSymbols} exported symbols) into ${OUT_DIR}/.`,

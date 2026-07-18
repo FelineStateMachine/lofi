@@ -153,7 +153,7 @@ const config: Config = {
     [
       "@docusaurus/plugin-content-docs",
       {
-        // Assembled by tools/node_docs.ts from docs/node/ plus contract pages
+        // Assembled by tools/node_docs.ts from the pinned lofi-node checkout
         // rendered out of the pinned lofi-node checkout; no edit URL because
         // pages have two possible homes — each page names its source.
         id: "node",

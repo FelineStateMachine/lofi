@@ -1,7 +1,6 @@
 import type { JSX, VNode } from "preact";
 import { useEffect, useState } from "preact/hooks";
 // Package-owned optional diagnostics UI.
-import { serverUrl } from "../runtime/config.ts";
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
 import { settleUiMutation } from "../runtime/ui-mutation.ts";
 import { getPwaState, type PwaState, subscribePwaState } from "../runtime/pwa.ts";
@@ -68,7 +67,12 @@ export default function DeviceStatus(): VNode {
 
   if (!report) return <p class="device-status">Checking device capabilities…</p>;
 
-  const synced = Boolean(serverUrl);
+  const synced = Boolean(session?.syncAvailable);
+  const sinkState = session?.sink
+    ? session.sink.source === "declared"
+      ? `declared — ${session.sink.label ?? session.sink.host}`
+      : "configured (build default)"
+    : "not configured";
   const syncState = session?.syncing
     ? "syncing to your account"
     : session?.syncAvailable
@@ -126,12 +130,12 @@ export default function DeviceStatus(): VNode {
         </p>
         <dl>
           <Row label="Sync" value={syncState} />
-          <Row label="Managed server" value={synced ? "configured" : "not configured"} />
+          <Row label="Sync location" value={sinkState} />
         </dl>
         {!synced && (
           <p>
-            Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in{" "}
-            <code>.env</code>, then rebuild, to replicate writes to your account.
+            Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in <code>.env</code>{" "}
+            and rebuild, or enroll a sync ticket at runtime, to replicate writes to your account.
           </p>
         )}
       </div>

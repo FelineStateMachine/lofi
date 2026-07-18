@@ -19,7 +19,15 @@
 
 import { BrowserAuthSecretStore } from "jazz-tools";
 import { getLofiApp } from "./app.ts";
-import { appId, setSyncElected, syncAvailable, syncElected, syncing } from "./config.ts";
+import {
+  activeSink,
+  appId,
+  setSyncElected,
+  syncAvailable,
+  syncElected,
+  syncing,
+} from "./config.ts";
+import { declareSinkFromTicket } from "./data-sink.ts";
 import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
 import { authenticateDeviceCredential, AuthError, enrollDeviceCredential } from "./auth.ts";
 import {
@@ -39,12 +47,24 @@ import {
 } from "./runtime.ts";
 import { electManagedNamespace, readNamespaceState } from "./namespace-state.ts";
 
+/** A non-secret description of the sync location in effect. */
+export type SessionSink = {
+  /** `declared` is a runtime-declared sink; `default` is the compiled managed app. */
+  source: "declared" | "default";
+  /** The sink host (never the full URL — a ticket URL is a bearer credential). */
+  host: string;
+  /** The user-facing label from enrollment, when one was given. */
+  label?: string;
+};
+
 /** A snapshot of the account: what is possible and what the user has chosen. */
 export type Session = {
   /** Stable, app-scoped Jazz sharing identity for the active account. */
   user_id: string | null;
-  /** Whether a managed Jazz app is configured, so backup + sync is possible at all. */
+  /** Whether a sync location exists (declared or compiled), so backup + sync is possible. */
   syncAvailable: boolean;
+  /** The sync location in effect, or `null` while the device is local-only. */
+  sink: SessionSink | null;
   /** Whether the user has elected to back up and sync this account on this device. */
   backedUp: boolean;
   /** Whether writes replicate right now (available *and* elected). */
@@ -131,11 +151,24 @@ function setPasskeyRecoverable(value: boolean): void {
   }
 }
 
+function sessionSink(): SessionSink | null {
+  const sink = activeSink();
+  if (!sink) return null;
+  let host: string;
+  try {
+    host = new URL(sink.serverUrl).host;
+  } catch {
+    host = "unknown";
+  }
+  return { source: sink.source, host, ...(sink.label ? { label: sink.label } : {}) };
+}
+
 /** Reads the current session. Synchronous — it never prompts or touches the network. */
 export function readSession(): Session {
   return {
     user_id: getRuntimePrincipal(),
-    syncAvailable,
+    syncAvailable: syncAvailable(),
+    sink: sessionSink(),
     backedUp: syncElected(),
     syncing: syncing(),
     phraseGuarded: phraseGuarded(),
@@ -244,10 +277,10 @@ export async function revealRecoveryPhrase(): Promise<string> {
  * no Jazz app is configured.
  */
 export async function enableSyncBackup(): Promise<Session> {
-  // The documented no-op: without a managed Jazz app there is nothing to sync
+  // The documented no-op: without a sync location there is nothing to sync
   // to, and electing the managed namespace anyway would hide the local rows
   // behind an empty database on every later boot.
-  if (!syncAvailable) return readSession();
+  if (!syncAvailable()) return readSession();
   const alreadyManaged = readNamespaceState().mode === "managed";
   setSyncElected(true);
   if (alreadyManaged && runtimeCanReconnect()) {
@@ -261,6 +294,19 @@ export async function enableSyncBackup(): Promise<Session> {
   }
   globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));
   return readSession();
+}
+
+/**
+ * Enrolls a `lofisync1.` app-connect ticket as this device's sync location and
+ * elects to back up and sync in one step: the ticket's URL becomes the sync
+ * server, the local data pushes up under the same identity, and the session
+ * reflects the declared sink. Throws `DataSinkError` (see `data-sink.ts`) for
+ * malformed tickets, ws URLs, an app id that contradicts a compiled-in managed
+ * app, or a different sink already declared on this device.
+ */
+export async function enrollSyncTicket(ticket: string): Promise<Session> {
+  declareSinkFromTicket(ticket);
+  return await enableSyncBackup();
 }
 
 /**
@@ -318,7 +364,7 @@ async function replaceAccountSecret(
       // Commit election only after the restored secret is durably saved: a
       // replacement that fails earlier leaves the device booting its intact
       // local account instead of an empty managed namespace.
-      if (!syncAvailable) return;
+      if (!syncAvailable()) return;
       setSyncElected(true);
       electManagedNamespace({ migrateLocalRows: false });
     },

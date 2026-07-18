@@ -1,8 +1,12 @@
 # Sync and recovery
 
-Sync is optional infrastructure layered onto an account that already works locally. Configuring a
-Jazz app makes sync available; it does not automatically upload every user's local data. Each user
-elects to back up and sync from the generated `AccountGate` UI.
+Sync is optional infrastructure layered onto an account that already works locally. A sync location
+makes sync available; it does not automatically upload every user's local data. Each user elects to
+back up and sync from the generated `AccountGate` UI.
+
+There are two ways a device gets a sync location: the deployment can compile one in (a managed Jazz
+app — the _default sink_), or the user can declare one at runtime by enrolling a ticket from a
+self-hosted node. Both feed the same election flow.
 
 ## Provision a managed Jazz app
 
@@ -32,6 +36,50 @@ the build projects only the complete public pair and scans the client output for
 
 Run `deno task doctor` after provisioning. A partial public pair is invalid: set both public names
 or remove both to return to local-only mode.
+
+## Bring your own sync location
+
+The sync destination can be **user-selected data instead of developer configuration**. A self-hosted
+node (such as [lofi-node](https://github.com/FelineStateMachine/lofi-node)) issues an app-connect
+ticket — a `lofisync1.…` string carrying the store's app id and a gate URL — and the user pastes it
+into the app:
+
+```ts
+import { enrollSyncTicket, isDataSinkError } from "@nzip/lofi";
+
+try {
+  const session = await enrollSyncTicket(pastedTicket);
+  // session.sink → { source: "declared", host: "192.168.1.10:4802", label: "phone" }
+} catch (error) {
+  if (isDataSinkError(error)) showEnrollmentProblem(error.code, error.message);
+  else throw error;
+}
+```
+
+Enrollment declares the ticket as this device's _data sink_ and elects sync in one step: the local
+data pushes up under the same account identity, exactly as electing against a compiled managed app
+does. `parseSyncTicket` validates a pasted string without enrolling it (returns `null` on any
+malformed input), and `readDeclaredSink` / `clearDeclaredSink` manage the declaration directly. A
+non-ticket location can be declared with `declareDataSink({ appId, serverUrl })`.
+
+Semantics to rely on:
+
+- **First boot is unchanged.** Without a compiled managed app or a declared sink the device is
+  local-only, and nothing leaves it.
+- **A declared sink overrides the compiled default** for this device. A deployment pinned to its own
+  managed app refuses tickets for a different app id, so a hosted product cannot be silently
+  re-pointed.
+- **One store, one active sink.** Declaring a different sink over an existing one is refused; clear
+  the declaration first. Local data and elections survive clearing.
+- **The ticket URL is a bearer credential.** It is used verbatim as the sync server (its secret path
+  is what authorizes transport), stored in a device-local record, and never exposed through the
+  session snapshot — `session.sink` carries only the source, host, and label.
+- **Tickets carry a scope.** A plain (or `scope: "sync"`) ticket is transport only; a
+  `scope: "provision"` ticket additionally administers the store through the node's gate — the basis
+  for opt-in store provisioning. A ticket with an unrecognized scope is rejected outright rather
+  than silently granted less than it claims.
+- If the node revokes the ticket, requests fail with 401 and live sockets close; treat the stored
+  sink as dead and surface re-enrollment rather than retrying silently.
 
 ## The user's account journey
 

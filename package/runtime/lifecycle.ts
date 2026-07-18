@@ -1,11 +1,14 @@
-import { serverUrl, syncing } from "./config.ts";
+import { activeServerUrl, syncing } from "./config.ts";
 // Package-owned browser lifecycle.
 import { createForegroundRecovery, type ForegroundRecoveryState } from "./foreground-recovery.ts";
 import { getRuntime } from "./runtime.ts";
 import { isTransportPausedByInspector } from "./transport-gate.ts";
 
+// Evaluated at document load: declaring a sink reloads the document on the
+// SharedWorker path (see `session.ts`), so recovery activates on the boot that
+// first has a sync location.
 const recovery = typeof document === "undefined" ? null : createForegroundRecovery({
-  enabled: Boolean(serverUrl),
+  enabled: Boolean(activeServerUrl()),
   pageTarget: globalThis,
   visibilityTarget: document,
   isVisible: () => document.visibilityState === "visible",
@@ -21,7 +24,7 @@ const recovery = typeof document === "undefined" ? null : createForegroundRecove
 
 export function getForegroundRecoveryState(): ForegroundRecoveryState {
   return recovery?.getState() ?? {
-    mode: serverUrl ? "managed" : "local-only",
+    mode: activeServerUrl() ? "managed" : "local-only",
     status: "idle",
     attempts: 0,
     lastReason: "none",

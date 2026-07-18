@@ -96,6 +96,7 @@ export {
   createBackupPasskey,
   createRecoverablePasskeyBackup,
   enableSyncBackup,
+  enrollSyncTicket,
   isAccountReplacementError,
   isAuthError,
   isRecoverablePasskeyError,
@@ -107,8 +108,19 @@ export {
   restoreFromRecoveryPhrase,
   revealRecoveryPhrase,
   type Session,
+  type SessionSink,
   stopSyncBackup,
 } from "./session.ts";
+export {
+  clearDeclaredSink,
+  type DataSinkDeclaration,
+  DataSinkError,
+  declareDataSink,
+  isDataSinkError,
+  parseSyncTicket,
+  readDeclaredSink,
+  type SyncTicket,
+} from "./data-sink.ts";
 export { RecoveryError } from "./recovery.ts";
 export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";
 export {

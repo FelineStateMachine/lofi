@@ -1,4 +1,4 @@
-import { appId } from "../runtime/config.ts";
+import { activeAppId } from "../runtime/config.ts";
 import { getRuntime } from "../runtime/runtime.ts";
 import { AccessError } from "./errors.ts";
 
@@ -7,12 +7,17 @@ export type SharingIdentity = string & { readonly __lofiSharingIdentity: true };
 
 const prefix = "lofi1";
 
-/** Encodes a raw Jazz principal as a versioned identity scoped to the current app. */
+/**
+ * Encodes a raw Jazz principal as a versioned identity scoped to the active
+ * sync location's app. Identities are exchanged between users of the same
+ * store, so they carry the store's app id — the declared sink's when one is
+ * enrolled, the compiled managed app's otherwise.
+ */
 export function encodeSharingIdentity(userId: string): SharingIdentity {
   if (!userId || /[\s:]/.test(userId)) {
     throw new AccessError("invalid-identity", "Jazz returned an invalid sharing identity.");
   }
-  return `${prefix}:${appId}:${userId}` as SharingIdentity;
+  return `${prefix}:${activeAppId()}:${userId}` as SharingIdentity;
 }
 
 /**
@@ -24,7 +29,7 @@ export function encodeSharingIdentity(userId: string): SharingIdentity {
 export function decodeSharingIdentity(identity: string): string {
   const [version, identityAppId, userId, extra] = identity.trim().split(":");
   if (
-    version !== prefix || identityAppId !== appId || !userId || /\s/.test(userId) ||
+    version !== prefix || identityAppId !== activeAppId() || !userId || /\s/.test(userId) ||
     extra !== undefined
   ) {
     throw new AccessError(

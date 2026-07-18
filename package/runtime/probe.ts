@@ -1,4 +1,4 @@
-import { serverUrl, syncing } from "./config.ts";
+import { activeServerUrl, syncing } from "./config.ts";
 // Package-owned development probe.
 import { readDeviceCapabilityReport } from "./device-capabilities.ts";
 import { type InspectorAdapter, type InspectorSnapshot, mountInspector } from "./inspector.ts";
@@ -55,8 +55,8 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
       startupFailure: diagnostics.startupFailure?.code ?? "none",
     },
     sync: {
-      mode: serverUrl ? "managed configured" : "local-only",
-      transport: serverUrl
+      mode: activeServerUrl() ? "managed configured" : "local-only",
+      transport: activeServerUrl()
         ? isTransportPausedByInspector() ? "paused by inspector" : "live detail unavailable"
         : "not configured",
       pendingLocalWrites: diagnostics.pendingLocalWrites,
@@ -72,7 +72,7 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
     },
     lifecycle: {
       ...lifecycle,
-      transportDetail: serverUrl ? "live detail unavailable" : "not configured",
+      transportDetail: activeServerUrl() ? "live detail unavailable" : "not configured",
     },
     multiTab: {
       role: "unavailable",
@@ -97,7 +97,7 @@ const bridge: LofiDevelopmentBridge = {
     };
   },
   async setTransportPaused(paused) {
-    if (!serverUrl) {
+    if (!activeServerUrl()) {
       throw new Error("Cloud transport pause is unavailable in local-only mode");
     }
     const runtime = await getRuntime();

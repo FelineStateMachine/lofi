@@ -101,16 +101,10 @@ export {
   type NestedSchemaDefinition,
 } from "./nested.ts";
 
-export {
-  provisionStore,
-  readStoreStatus,
-  readTicketStoreStatus,
-  StoreProvisionError,
-  type StoreProvisionResult,
-  type StoreStatus,
-  type StoreTarget,
-  type TicketStoreStatus,
-} from "./store.ts";
+// Store provisioning (./store.ts) is deliberately NOT re-exported here: the
+// Jazz schema loader bundles the author's schema module graph — this facade
+// included — and executes it to derive the deployed schema, so this module
+// must stay authoring-only. Import provisioning from "@nzip/lofi/schema/store".
 
 /**
  * Schema-authoring types re-exported from the pinned Jazz 2 DSL for use in

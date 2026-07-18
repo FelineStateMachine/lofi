@@ -159,6 +159,7 @@ Deno.test("package manifest and generated version stay coupled", () => {
     "./recipes/web-share",
     "./recipes/window-controls-overlay",
     "./schema",
+    "./schema/store",
     "./test",
     "./testing",
   ]);

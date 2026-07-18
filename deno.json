@@ -15,6 +15,7 @@
     "./preact": "./package/preact/mod.ts",
     "./provision": "./package/commands/provision.ts",
     "./schema": "./package/schema/mod.ts",
+    "./schema/store": "./package/schema/store.ts",
     "./recipes/file-handler": "./package/recipes/file-handler.ts",
     "./recipes/launch-handler": "./package/recipes/launch-handler.ts",
     "./recipes/protocol-handler": "./package/recipes/protocol-handler.ts",

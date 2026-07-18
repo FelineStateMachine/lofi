@@ -104,6 +104,7 @@ function renderConfig(projectRoot: string): string {
   const accessEntry = join(projectRoot, ".lofi", "package", "access", "mod.ts");
   const preactEntry = join(projectRoot, ".lofi", "package", "preact", "mod.ts");
   const schemaEntry = join(projectRoot, ".lofi", "package", "schema", "mod.ts");
+  const schemaStoreEntry = join(projectRoot, ".lofi", "package", "schema", "store.ts");
   const fileHandlerRecipe = join(projectRoot, ".lofi", "package", "recipes", "file-handler.ts");
   const launchHandlerRecipe = join(
     projectRoot,
@@ -203,6 +204,9 @@ export default defineConfig({
   } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/preact$/, replacement: ${JSON.stringify(preactEntry)} },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/access$/, replacement: ${JSON.stringify(accessEntry)} },
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/schema\\/store$/, replacement: ${
+    JSON.stringify(schemaStoreEntry)
+  } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/schema$/, replacement: ${JSON.stringify(schemaEntry)} },
         { find: /^jsr:@nzip\\/lofi@[^/]+$/, replacement: ${JSON.stringify(runtimeEntry)} },
         { find: /^npm:preact@[^/]+\\/hooks$/, replacement: "preact/hooks" },

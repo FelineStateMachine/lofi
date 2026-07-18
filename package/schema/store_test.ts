@@ -5,14 +5,8 @@
 import { createDb } from "jazz-tools";
 import { startLocalJazzServer } from "jazz-tools/testing";
 import { assert } from "../runtime/test-assert.ts";
-import {
-  nestedAppDeployTarget,
-  provisionStore,
-  readStoreStatus,
-  s,
-  StoreProvisionError,
-  type StoreTarget,
-} from "./mod.ts";
+import { nestedAppDeployTarget, s } from "./mod.ts";
+import { provisionStore, readStoreStatus, StoreProvisionError, type StoreTarget } from "./store.ts";
 
 // The first app on the store.
 const taskRoot = s.defineNestedApp({

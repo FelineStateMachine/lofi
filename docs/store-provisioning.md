@@ -18,13 +18,17 @@ Two principles govern it:
    surface. A flat `s.defineApp` schema has no namespace and therefore may only provision a store it
    wholly owns.
 
+Provisioning lives at `@nzip/lofi/schema/store`, deliberately separate from `@nzip/lofi/schema`: the
+schema facade is bundled and executed by the Jazz schema loader when deriving the deployed schema,
+so the authoring surface stays free of the provisioning client.
+
 ## Classify before you connect
 
 With store administration (admin secret, or a provision-scoped ticket URL as `serverUrl` with
 `adminSecret` omitted):
 
 ```ts
-import { readStoreStatus } from "@nzip/lofi/schema";
+import { readStoreStatus } from "@nzip/lofi/schema/store";
 
 const status = await readStoreStatus(root, { serverUrl, appId, adminSecret });
 ```
@@ -33,7 +37,7 @@ Without it — any valid sync ticket may call the node's metadata-only preflight
 sync-only client learns `no_schema` before ever attaching sync:
 
 ```ts
-import { readTicketStoreStatus } from "@nzip/lofi/schema";
+import { readTicketStoreStatus } from "@nzip/lofi/schema/store";
 
 const preflight = await readTicketStoreStatus(ticketUrl);
 // → { state: "deployed", appId, headHash } | { state: "no_schema", appId }
@@ -54,7 +58,7 @@ attaching sync to a fresh store.
 ## Provision
 
 ```ts
-import { provisionStore } from "@nzip/lofi/schema";
+import { provisionStore } from "@nzip/lofi/schema/store";
 import { permissions, root } from "./schema.ts";
 
 const result = await provisionStore({

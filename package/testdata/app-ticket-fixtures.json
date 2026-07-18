@@ -1,0 +1,45 @@
+{
+  "comment": "Cross-repo contract fixtures for the lofisync1 app-ticket format. The lofi side's parser must accept `valid` entries with the listed expectations and reject every `invalid` entry. Secrets here are fixed placeholders, never issued by any node.",
+  "valid": [
+    {
+      "name": "sync ticket, no scope field (default sync)",
+      "ticket": "lofisync1.eyJ2IjoxLCJhcHBJZCI6IjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMSIsInVybCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTA6NDgwMi90L1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1MiLCJsYWJlbCI6InBob25lIn0",
+      "expect": {
+        "appId": "11111111-1111-4111-8111-111111111111",
+        "scope": "sync",
+        "url": "http://192.168.1.10:4802/t/SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+      }
+    },
+    {
+      "name": "provision ticket with node field",
+      "ticket": "lofisync1.eyJ2IjoxLCJhcHBJZCI6IjIyMjIyMjIyLTIyMjItNDIyMi04MjIyLTIyMjIyMjIyMjIyMiIsInVybCI6Imh0dHBzOi8vbm9kZS5leGFtcGxlLmNvbS90L1BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFAiLCJzY29wZSI6InByb3Zpc2lvbiIsImxhYmVsIjoibGFwdG9wLWFkbWluIiwibm9kZSI6ImVuZHBvaW50ZXhhbXBsZWV4YW1wbGVleGFtcGxlZXhhbXBsZWV4YW1wbGVleGFtcGxlIn0",
+      "expect": {
+        "appId": "22222222-2222-4222-8222-222222222222",
+        "scope": "provision",
+        "url": "https://node.example.com/t/PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "wrong prefix",
+      "ticket": "endpointabcdefabcdefabcdefabcdefabcdef"
+    },
+    {
+      "name": "empty payload",
+      "ticket": "lofisync1."
+    },
+    {
+      "name": "ws url",
+      "ticket": "lofisync1.eyJ2IjoxLCcorrupted"
+    },
+    {
+      "name": "bad secret path",
+      "ticket": "lofisync1.eyJ2IjoxLCJhcHBJZCI6IngiLCJ1cmwiOiJodHRwOi8vaC93cm9uZyJ9"
+    },
+    {
+      "name": "unknown scope",
+      "ticket": "lofisync1.eyJ2IjoxLCJhcHBJZCI6IngiLCJ1cmwiOiJodHRwOi8vaC90L1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1MiLCJzY29wZSI6InJvb3QifQ=="
+    }
+  ]
+}

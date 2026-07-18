@@ -74,6 +74,10 @@ Semantics to rely on:
 - **The ticket URL is a bearer credential.** It is used verbatim as the sync server (its secret path
   is what authorizes transport), stored in a device-local record, and never exposed through the
   session snapshot — `session.sink` carries only the source, host, and label.
+- **Tickets carry a scope.** A plain (or `scope: "sync"`) ticket is transport only; a
+  `scope: "provision"` ticket additionally administers the store through the node's gate — the basis
+  for opt-in store provisioning. A ticket with an unrecognized scope is rejected outright rather
+  than silently granted less than it claims.
 - If the node revokes the ticket, requests fail with 401 and live sockets close; treat the stored
   sink as dead and surface re-enrollment rather than retrying silently.
 

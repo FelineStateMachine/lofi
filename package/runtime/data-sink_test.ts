@@ -139,6 +139,33 @@ test(
   }),
 );
 
+// The machine-readable format contract shared with lofi-node
+// (docs/fixtures/app-ticket-fixtures.json there; vendored copy here). Either
+// side changing the format updates the fixtures, and this test is what fails
+// on drift.
+test("the vendored lofi-node ticket fixtures parse exactly as the contract expects", async () => {
+  const fixtures = JSON.parse(
+    await Deno.readTextFile(
+      new URL("../testdata/app-ticket-fixtures.json", import.meta.url),
+    ),
+  ) as {
+    valid: { name: string; ticket: string; expect: Record<string, string> }[];
+    invalid: { name: string; ticket: string }[];
+  };
+  for (const { name, ticket, expect } of fixtures.valid) {
+    const parsed = parseSyncTicket(ticket);
+    assert(parsed !== null, `valid fixture rejected: ${name}`);
+    assert(
+      parsed.appId === expect.appId && parsed.url === expect.url &&
+        (parsed.scope ?? "sync") === expect.scope,
+      `fixture "${name}" parsed as ${JSON.stringify(parsed)}, expected ${JSON.stringify(expect)}`,
+    );
+  }
+  for (const { name, ticket } of fixtures.invalid) {
+    assert(parseSyncTicket(ticket) === null, `invalid fixture accepted: ${name}`);
+  }
+});
+
 test("ticket parsing accepts the lofi-node format and rejects everything else", () => {
   const parsed = parseSyncTicket(` ${validTicket} `);
   assert(
@@ -146,6 +173,15 @@ test("ticket parsing accepts the lofi-node format and rejects everything else", 
       parsed.url.endsWith(`/t/${ticketSecret}`),
     `valid ticket parsed as ${JSON.stringify(parsed)}`,
   );
+  const provision = parseSyncTicket(
+    encodeTicket({
+      v: 1,
+      appId: ticketAppId,
+      url: `http://h/t/${ticketSecret}`,
+      scope: "provision",
+    }),
+  );
+  assert(provision?.scope === "provision", "provision scope must parse");
   const rejected = [
     "lofisync2.abc",
     "endpointAAAA",
@@ -154,6 +190,7 @@ test("ticket parsing accepts the lofi-node format and rejects everything else", 
     encodeTicket({ v: 1, appId: ticketAppId, url: "http://h/t/short" }),
     encodeTicket({ v: 1, appId: ticketAppId, url: "http://h/apps/x" }),
     encodeTicket({ v: 1, url: `http://h/t/${ticketSecret}` }),
+    encodeTicket({ v: 1, appId: ticketAppId, url: `http://h/t/${ticketSecret}`, scope: "root" }),
     "lofisync1.%%%not-base64%%%",
   ];
   for (const ticket of rejected) {
@@ -171,6 +208,7 @@ test(
     );
     const sink = readDeclaredSink();
     assert(sink?.appId === ticketAppId && sink.label === "phone", "ticket fields must carry over");
+    assert(sink.scope === undefined, "a scopeless ticket declares no explicit scope");
     try {
       declareSinkFromTicket("lofisync1.nope");
       throw new Error("a malformed ticket must not enroll");

@@ -52,6 +52,12 @@ export type DataSinkDeclaration = {
   appId: string;
   /** The http(s) sync server URL, used verbatim (a ticket URL keeps its secret path). */
   serverUrl: string;
+  /**
+   * The enrolled ticket's capability: `sync` is transport only; `provision`
+   * additionally administers the store through the node's gate (the admin
+   * secret never transits the client). Absent means `sync`.
+   */
+  scope?: "sync" | "provision";
   /** Optional user-facing label, e.g. the ticket's device label. */
   label?: string;
   /**
@@ -97,6 +103,7 @@ function parseRecord(raw: string | null): DataSinkDeclaration | null {
       return {
         appId: sink.appId,
         serverUrl: sink.serverUrl,
+        ...(sink.scope === "provision" || sink.scope === "sync" ? { scope: sink.scope } : {}),
         ...(typeof sink.label === "string" ? { label: sink.label } : {}),
         ...(typeof sink.node === "string" ? { node: sink.node } : {}),
       };
@@ -189,13 +196,18 @@ export function clearDeclaredSink(): void {
 /**
  * A parsed `lofisync1.` app-connect ticket — the credential a self-hosted
  * node issues so an app syncs against it. The format contract lives with the
- * node (lofi-node `docs/app-ticket.md`); this parser mirrors its validation:
- * version 1, an http(s) URL whose path is `/t/<43-char base64url secret>`.
+ * node (lofi-node `docs/app-ticket.md`, conformance fixtures vendored at
+ * `package/testdata/app-ticket-fixtures.json`); this parser mirrors its
+ * validation: version 1, an http(s) URL whose path is
+ * `/t/<43-char base64url secret>`, and a `scope` that is absent (meaning
+ * `sync`), `sync`, or `provision` — an unknown scope rejects the ticket
+ * rather than silently granting less than it claims.
  */
 export type SyncTicket = {
   v: 1;
   appId: string;
   url: string;
+  scope?: "sync" | "provision";
   label?: string;
   node?: string;
 };
@@ -217,6 +229,11 @@ export function parseSyncTicket(text: string): SyncTicket | null {
       .replaceAll("_", "/");
     const parsed = JSON.parse(atob(base64)) as SyncTicket;
     if (parsed.v !== 1 || typeof parsed.appId !== "string" || typeof parsed.url !== "string") {
+      return null;
+    }
+    if (
+      parsed.scope !== undefined && parsed.scope !== "sync" && parsed.scope !== "provision"
+    ) {
       return null;
     }
     const url = new URL(parsed.url);
@@ -241,6 +258,7 @@ export function declareSinkFromTicket(text: string): DataSinkDeclaration {
   return declareDataSink({
     appId: ticket.appId,
     serverUrl: ticket.url,
+    ...(ticket.scope ? { scope: ticket.scope } : {}),
     ...(ticket.label ? { label: ticket.label } : {}),
     ...(ticket.node ? { node: ticket.node } : {}),
   });

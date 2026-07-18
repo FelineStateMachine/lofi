@@ -17,7 +17,12 @@ export type LofiAstroOptions = {
   schemaDir?: string;
 };
 
-const runtimeFiles = [
+/**
+ * Runtime modules vendored into a project's `.lofi/` directory. Static because
+ * the published package cannot list directories over JSR; the manifest test
+ * fails when this list and `package/runtime/` drift apart.
+ */
+export const runtimeFiles = [
   "app.ts",
   "auth.ts",
   "boot.ts",
@@ -30,6 +35,7 @@ const runtimeFiles = [
   "lifecycle.ts",
   "live-query-store.ts",
   "mod.ts",
+  "namespace-state.ts",
   "passkey-recovery.ts",
   "probe.ts",
   "pwa.ts",
@@ -40,10 +46,12 @@ const runtimeFiles = [
   "startup-recovery.ts",
   "table-mutations.ts",
   "table-store.ts",
+  "transport-gate.ts",
   "ui-mutation.ts",
 ] as const;
 
-const accessFiles = [
+/** Access modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
+export const accessFiles = [
   "errors.ts",
   "identity.ts",
   "mod.ts",
@@ -52,7 +60,8 @@ const accessFiles = [
   "schema.ts",
 ] as const;
 
-const preactFiles = [
+/** Preact modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
+export const preactFiles = [
   "DeviceStatus.tsx",
   "live-data.ts",
   "mod.ts",
@@ -61,7 +70,8 @@ const preactFiles = [
   "use-device-capabilities.ts",
 ] as const;
 
-const recipeFiles = [
+/** Recipe modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
+export const recipeFiles = [
   "file-handler.ts",
   "launch-handler.ts",
   "protocol-handler.ts",

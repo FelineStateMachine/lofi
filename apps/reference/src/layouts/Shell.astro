@@ -24,6 +24,7 @@ const publicAsset = (name: string) => `${deploymentBase}${name}`;
     <main><slot /></main>
     <script>
       import { bootLofi } from "@nzip/lofi";
+      // Importing app.ts registers defineLofiApp before the runtime boots.
       import { app } from "../app.ts";
       void app;
       void bootLofi();

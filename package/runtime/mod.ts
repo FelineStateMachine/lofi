@@ -112,6 +112,7 @@ export {
 export { RecoveryError } from "./recovery.ts";
 export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";
 export {
+  type RowOf,
   type TableHandle,
   type TableRow,
   type TableSnapshot,

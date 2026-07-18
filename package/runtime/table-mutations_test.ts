@@ -14,6 +14,8 @@ class FakeDb {
   globalWaits = 0;
   failLocal: Error | null = null;
   nextId = 0;
+  batchIds = false;
+  nextBatch = 0;
   operations: string[] = [];
 
   value(): Db {
@@ -46,6 +48,7 @@ class FakeDb {
 
   private handle<T>(value: T) {
     return {
+      ...(this.batchIds ? { batchId: `batch-${++this.nextBatch}` } : {}),
       wait: ({ tier }: { tier: "local" | "global" }) => {
         if (tier === "local") {
           this.localWaits += 1;
@@ -143,6 +146,39 @@ Deno.test("local and asynchronous permission rejections reach public mutation st
   db.reject({ code: "WriteRejected", reason: "revoked" } as MutationErrorEvent);
   assert(lease.store.getSnapshot().error?.includes("revoked"), "async rejection hidden");
   assertCount(runtime.diagnostics.mutationErrors, 2, "rejections were not diagnosed");
+  stop();
+  lease.release();
+});
+
+Deno.test("asynchronous rejections reach only the store owning the batch", async () => {
+  const db = new FakeDb();
+  db.batchIds = true;
+  const runtime = environment(db);
+  const lease = new TableMutationRegistry(runtime.value).acquire(table);
+  const stop = lease.store.subscribe(() => undefined);
+  await flush();
+  await lease.store.insert({ title: "mine", archived: false });
+  db.reject(
+    {
+      code: "WriteRejected",
+      reason: "another table's write",
+      batch: { batchId: "batch-999" },
+    } as unknown as MutationErrorEvent,
+  );
+  assert(
+    lease.store.getSnapshot().durability !== "failed",
+    "a foreign batch rejection must not fail this store",
+  );
+  assertCount(runtime.diagnostics.mutationErrors, 0, "a foreign batch must not be counted here");
+  db.reject(
+    {
+      code: "WriteRejected",
+      reason: "revoked",
+      batch: { batchId: "batch-1" },
+    } as unknown as MutationErrorEvent,
+  );
+  assert(lease.store.getSnapshot().error?.includes("revoked"), "own rejection was hidden");
+  assertCount(runtime.diagnostics.mutationErrors, 1, "the owned rejection must count once");
   stop();
   lease.release();
 });

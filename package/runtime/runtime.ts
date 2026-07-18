@@ -229,8 +229,10 @@ function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
     store<T extends TableRow, Init>(table: TableHandle<T, Init>): TableStore<T, Init> {
       let store = stores.get(table);
       if (!store) {
+        // Live callback: stores follow later sync elections and stops without
+        // being recreated alongside the runtime.
         store = createTableStore(db, table, state.diagnostics, {
-          syncConfigured: syncing(),
+          syncConfigured: syncing,
           onDiagnosticsChange: () => notifyDiagnostics(state),
         }) as TableStore<TableRow, unknown>;
         stores.set(table, store);

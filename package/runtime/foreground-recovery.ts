@@ -21,6 +21,12 @@ export function createForegroundRecovery(options: {
   visibilityTarget: EventTarget;
   isVisible(): boolean;
   isOnline(): boolean;
+  /**
+   * Live gate consulted on every recovery request. Configuration (`enabled`)
+   * says reconnection is possible; this says it is currently wanted — false
+   * while the user has not elected sync, stopped it, or paused the transport.
+   */
+  shouldReconnect?(): boolean;
   reconnect(): Promise<void>;
 }): ForegroundRecovery {
   let active = true;
@@ -38,6 +44,10 @@ export function createForegroundRecovery(options: {
   };
   const request = (reason: ForegroundRecoveryReason): Promise<void> => {
     if (!active || !options.enabled) return Promise.resolve();
+    // A configured server is not consent to replicate: recovery must not
+    // silently reconnect an account whose user stopped sync or a transport
+    // the inspector paused. Idle is the honest state — nothing to recover.
+    if (options.shouldReconnect && !options.shouldReconnect()) return Promise.resolve();
     if (reason !== "online" && !options.isOnline()) {
       publish({ status: "offline-deferred", lastReason: reason });
       return Promise.resolve();

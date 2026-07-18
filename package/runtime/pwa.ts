@@ -386,9 +386,22 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
         else update({ failure: failure("runtime-cache") });
       }
     });
+    // A controller change means a new worker took over this tab. Every
+    // controlled tab must reload — the new worker prunes the old revision's
+    // caches, so a document kept on the old HTML/module graph goes stale —
+    // not just the tab whose applyUpdate() initiated the change. The first
+    // claim of a previously uncontrolled page does not reload, and a document
+    // reloads at most once, so a misbehaving worker cannot cause a loop.
+    let hadController = Boolean(container.controller);
+    let reloadedForController = false;
     container.addEventListener("controllerchange", () => {
-      if (!reloadForUpdate) return;
+      const wasControlled = hadController;
+      hadController = true;
+      const initiated = reloadForUpdate;
       reloadForUpdate = false;
+      if (!initiated && !wasControlled) return;
+      if (reloadedForController) return;
+      reloadedForController = true;
       waitingWorker = undefined;
       update({
         worker: "ready",

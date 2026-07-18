@@ -1,0 +1,1064 @@
+/* ============================================================
+   lofi landing page — ported from the standalone lofi-site.
+   Everything is scoped under .landing so the forest/lime
+   risograph theme stays page-local and never fights Infima
+   on docs pages. Brand tokens: docs/assets/brand/README.md
+   ============================================================ */
+.landing {
+  --forest: #18231f; /* deep forest   — page ink bed        */
+  --forest-2: #22332c; /* secondary     — surfaces, grid      */
+  --lime: #d5f26a; /* acid lime     — "lo", primary ink   */
+  --cream: #f3faf6; /* soft cream    — "fi", body ink      */
+  --mint: #99e5bd; /* muted mint    — sync, secondary     */
+  --jade: #39725c; /* jade          — rules, dim ink      */
+
+  --ink-dim: #8fae9f;
+  --grid: 56px;
+
+  --f-display: "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  --f-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --f-body: "Karla", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --measure: 62ch;
+  --radius: 14px;
+
+  position: relative;
+  background-color: var(--forest);
+  color: var(--cream);
+  font-family: var(--f-body);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+.landing *,
+.landing *::before,
+.landing *::after {
+  box-sizing: border-box;
+}
+
+/* --- the drafting grid, straight off the banner ------------- */
+.landing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--forest-2) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--forest-2) 1px, transparent 1px);
+  background-size: var(--grid) var(--grid);
+  opacity: 0.55;
+  mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, #000 30%, transparent 78%);
+}
+/* --- risograph grain --------------------------------------- */
+.landing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.landing .wrap {
+  position: relative;
+  z-index: 2;
+  width: min(1120px, 92vw);
+  margin-inline: auto;
+}
+
+/* grid children default to min-width:auto, which lets nowrap code blocks
+   push a whole column past the viewport. Let them shrink. */
+.landing .hero > *,
+.landing .anat > *,
+.landing .two-up > *,
+.landing .rig > *,
+.landing .life > * {
+  min-width: 0;
+}
+
+/* ============================================================
+   Type
+   ============================================================ */
+.landing h1,
+.landing h2,
+.landing h3 {
+  font-family: var(--f-display);
+  font-weight: 900;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--cream);
+}
+.landing h2 {
+  font-size: clamp(1.9rem, 4vw, 2.9rem);
+}
+.landing h3 {
+  font-size: 1.06rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+.landing p {
+  margin: 0 0 1rem;
+  max-width: var(--measure);
+}
+.landing a {
+  color: var(--lime);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.landing .eyebrow {
+  font-family: var(--f-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: var(--mint);
+  margin: 0 0 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+.landing .eyebrow::before {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: var(--jade);
+  flex: none;
+}
+.landing .lede {
+  font-size: 1.12rem;
+  color: #cfe3d8;
+}
+.landing .dim {
+  color: var(--ink-dim);
+}
+.landing .band-lede {
+  margin-top: 1rem;
+}
+.landing .intro-note {
+  font-size: 0.94rem;
+  margin-bottom: 1.6rem;
+}
+.landing .inline-mono {
+  font-family: var(--f-mono);
+  font-size: 0.85em;
+  color: var(--lime);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.landing .life-cmd {
+  margin-top: 0.8rem;
+  font-size: 0.8rem;
+}
+.landing .life-cmd .inline-mono {
+  font-size: 0.78rem;
+  color: var(--mint);
+}
+
+.landing :where(a, button, input, summary):focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.landing .pill {
+  font-family: var(--f-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--mint);
+  border: 1px solid var(--jade);
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Bands
+   ============================================================ */
+.landing .band {
+  padding-block: clamp(4rem, 9vw, 7rem);
+  position: relative;
+  z-index: 2;
+}
+.landing .band--rule {
+  border-top: 1px solid var(--forest-2);
+}
+.landing .band-head {
+  margin-bottom: 2.6rem;
+}
+.landing .band-head--tight {
+  margin-bottom: 1.8rem;
+}
+
+/* ============================================================
+   Hero
+   ============================================================ */
+.landing .hero {
+  /* Infima also defines a `.hero` component; neutralize its background,
+     color, and padding before applying the landing layout. */
+  background: none;
+  color: inherit;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 3rem;
+  align-items: center;
+  padding: 0;
+  padding-block: clamp(3rem, 7vw, 5.5rem) clamp(3.5rem, 8vw, 6rem);
+}
+/* the one serif moment on the page: a garden-press masthead,
+   set apart from the rounded-sans section heads below it */
+.landing .hero-title {
+  font-family: var(--f-serif);
+  font-weight: 620;
+  font-size: clamp(2.7rem, 6.6vw, 4.7rem);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  margin-bottom: 1.4rem;
+  position: relative;
+}
+/* restrained print registration: the mint plate sits a hair off the lime plate.
+   One deliberate misregistration on the page — nowhere else. */
+.landing .hero-title span {
+  position: relative;
+  display: inline;
+  font-style: italic;
+  color: var(--lime);
+}
+.landing .hero-title span::before {
+  content: attr(data-ink);
+  position: absolute;
+  left: -0.045em;
+  top: 0.055em;
+  color: var(--mint);
+  opacity: 0.45;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.landing .hero-sub {
+  max-width: 52ch;
+}
+
+.landing .hero-art {
+  position: relative;
+}
+/* the art ships with a transparent background (keyed out of the source
+   export), so the page and its grid show through — no edge mask needed */
+.landing .hero-art img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.landing .cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: center;
+  margin-top: 1.8rem;
+}
+.landing .btn {
+  font-family: var(--f-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0.62rem 1.05rem;
+  border-radius: 10px;
+  border: 1px solid var(--jade);
+  color: var(--cream);
+  transition: border-color 0.18s, color 0.18s, background-color 0.18s;
+}
+.landing .btn:hover {
+  border-color: var(--mint);
+  color: var(--mint);
+  text-decoration: none;
+}
+.landing .btn--primary {
+  background: var(--lime);
+  color: var(--forest);
+  border-color: var(--lime);
+  font-weight: 600;
+}
+.landing .btn--primary:hover {
+  background: #e2f88c;
+  border-color: #e2f88c;
+  color: var(--forest);
+}
+
+/* --- install command ---------------------------------------- */
+.landing .cmd {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-top: 2rem;
+  border: 1px solid var(--jade);
+  border-radius: var(--radius);
+  background: rgba(34, 51, 44, 0.6);
+  max-width: var(--measure);
+  overflow: hidden;
+}
+.landing .cmd code {
+  font-family: var(--f-mono);
+  font-size: 0.86rem;
+  color: var(--cream);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  flex: 1;
+  background: none;
+  border: 0;
+}
+.landing .cmd code b {
+  color: var(--mint);
+  font-weight: 400;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.landing .cmd button {
+  font-family: var(--f-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--jade);
+  color: var(--mint);
+  padding-inline: 1rem;
+  cursor: pointer;
+  flex: none;
+}
+.landing .cmd button:hover {
+  background: var(--forest-2);
+  color: var(--lime);
+}
+.landing .cmd-note {
+  font-family: var(--f-mono);
+  font-size: 0.76rem;
+  color: var(--ink-dim);
+  margin-top: 0.7rem;
+}
+
+@media (max-width: 860px) {
+  .landing .hero {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .landing .hero-art {
+    order: -1;
+    width: min(340px, 68vw);
+    margin-inline: auto;
+  }
+}
+
+/* ============================================================
+   Lifecycle — a real sequence, so it gets the wire treatment
+   ============================================================ */
+.landing .life {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+}
+.landing .life-step {
+  padding-right: 2rem;
+  position: relative;
+}
+.landing .life-step + .life-step {
+  padding-left: 2rem;
+}
+.landing .life-step + .life-step::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 1px;
+  background-image: linear-gradient(to bottom, var(--jade) 3px, transparent 3px);
+  background-size: 1px 8px;
+}
+.landing .life-step h3 {
+  margin-bottom: 0.5rem;
+}
+.landing .life-step p {
+  font-size: 0.94rem;
+  color: var(--ink-dim);
+  margin: 0;
+}
+.landing .life-tag {
+  font-family: var(--f-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lime);
+  display: block;
+  margin-bottom: 0.6rem;
+}
+.landing .life-step:nth-child(3) .life-tag {
+  color: var(--mint);
+}
+@media (max-width: 760px) {
+  .landing .life {
+    grid-template-columns: 1fr;
+    gap: 1.6rem;
+  }
+  .landing .life-step {
+    padding: 0;
+  }
+  .landing .life-step + .life-step {
+    padding: 1.6rem 0 0;
+  }
+  .landing .life-step + .life-step::before {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: 1px;
+    background-image: linear-gradient(to right, var(--jade) 3px, transparent 3px);
+    background-size: 8px 1px;
+  }
+}
+
+/* ============================================================
+   Demo — the signature
+   ============================================================ */
+.landing .demo-shell {
+  border: 1px solid var(--forest-2);
+  border-radius: 22px;
+  background: rgba(24, 35, 31, 0.72);
+  padding: clamp(1.2rem, 3vw, 2.2rem);
+}
+.landing .demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 1.4rem;
+  margin-bottom: 1.8rem;
+  border-bottom: 1px solid var(--forest-2);
+}
+.landing .demo-status {
+  font-family: var(--f-mono);
+  font-size: 0.78rem;
+  color: var(--mint);
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-right: auto;
+  margin-bottom: 0;
+}
+.landing .led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mint);
+  flex: none;
+  box-shadow: 0 0 0 4px rgba(153, 229, 189, 0.14);
+}
+.landing .is-offline .led {
+  background: var(--jade);
+  box-shadow: none;
+}
+.landing .is-offline .demo-status {
+  color: var(--ink-dim);
+}
+
+.landing .switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-family: var(--f-mono);
+  font-size: 0.78rem;
+  color: var(--cream);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.landing .switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.landing .switch-track {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--forest-2);
+  border: 1px solid var(--jade);
+  position: relative;
+  transition: background 0.2s, border-color 0.2s;
+  flex: none;
+}
+.landing .switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--mint);
+  transition: transform 0.2s ease, background 0.2s;
+}
+.landing .switch input:checked + .switch-track {
+  background: rgba(153, 229, 189, 0.16);
+  border-color: var(--mint);
+}
+.landing .switch input:not(:checked) + .switch-track .switch-thumb {
+  transform: translateX(20px);
+  background: var(--jade);
+}
+.landing .switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+}
+
+.landing .rig {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.66fr);
+  align-items: center;
+  gap: 0;
+}
+
+/* --- device frames, drawn like the hero art ------------------ */
+.landing .dev {
+  border: 2px solid var(--lime);
+  border-radius: 26px;
+  padding: 0.9rem 0.8rem 1rem;
+  background: rgba(18, 30, 27, 0.9);
+  position: relative;
+}
+.landing .dev--b {
+  border-color: var(--mint);
+}
+.landing .dev::before {
+  content: "";
+  position: absolute;
+  top: 0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.5;
+}
+.landing .dev--a {
+  color: var(--lime);
+}
+.landing .dev--b {
+  color: var(--mint);
+}
+.landing .dev-name {
+  font-family: var(--f-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: currentColor;
+  margin: 0.7rem 0 0.9rem;
+  text-align: center;
+}
+.landing .dev-body {
+  background: transparent;
+}
+
+.landing .add {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+.landing .add input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--f-body);
+  font-size: 0.86rem;
+  background: var(--forest-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--cream);
+  padding: 0.5rem 0.6rem;
+}
+.landing .add input::placeholder {
+  color: var(--ink-dim);
+}
+.landing .add input:focus {
+  outline: none;
+  border-color: currentColor;
+}
+.landing .add button {
+  font-family: var(--f-mono);
+  font-size: 0.8rem;
+  flex: none;
+  cursor: pointer;
+  background: transparent;
+  color: currentColor;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  width: 34px;
+}
+.landing .add button:hover {
+  background: currentColor;
+}
+.landing .add button:hover span {
+  color: var(--forest);
+}
+
+.landing .tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 132px;
+}
+.landing .tasks li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.86rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--forest-2);
+  margin-bottom: 0.35rem;
+  background: rgba(34, 51, 44, 0.45);
+  animation: lofi-pop 0.28s ease-out;
+}
+@keyframes lofi-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.landing .tasks li.is-done .task-text {
+  text-decoration: line-through;
+  color: var(--ink-dim);
+}
+.landing .task-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.landing .tick {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  flex: none;
+  cursor: pointer;
+  border: 1px solid var(--jade);
+  background: transparent;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+.landing .tick[aria-pressed="true"] {
+  background: var(--lime);
+  border-color: var(--lime);
+}
+.landing .tick svg {
+  width: 9px;
+  height: 9px;
+  opacity: 0;
+}
+.landing .tick[aria-pressed="true"] svg {
+  opacity: 1;
+}
+.landing .pending-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lime);
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.landing li.is-pending .pending-dot {
+  opacity: 1;
+}
+.landing .tasks-empty {
+  font-family: var(--f-mono);
+  font-size: 0.74rem;
+  color: var(--ink-dim);
+  text-align: center;
+  padding-top: 2.6rem;
+  border: 0;
+  background: none;
+  display: block;
+}
+
+/* --- the wire ------------------------------------------------ */
+.landing .wire {
+  position: relative;
+  width: 110px;
+  height: 2px;
+  align-self: center;
+}
+.landing .wire-line {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to right, var(--mint) 3px, transparent 3px);
+  background-size: 9px 2px;
+  background-repeat: repeat-x;
+  transition: opacity 0.3s;
+}
+.landing .is-offline .wire-line,
+.landing .demo-shell.is-offline .wire-line {
+  opacity: 0.28;
+}
+.landing .wire-flow {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lime);
+  opacity: 0;
+}
+.landing .wire.is-flowing .wire-flow {
+  animation: lofi-flow-x 0.55s linear;
+}
+@keyframes lofi-flow-x {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  99% {
+    opacity: 1;
+    transform: translateX(102px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(102px);
+  }
+}
+.landing .wire-badge {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  font-family: var(--f-mono);
+  font-size: 0.66rem;
+  white-space: nowrap;
+  color: var(--forest);
+  background: var(--lime);
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.landing .wire-badge.is-on {
+  opacity: 1;
+}
+
+@media (max-width: 760px) {
+  .landing .rig {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    gap: 0;
+  }
+  .landing .wire {
+    width: 2px;
+    height: 56px;
+    justify-self: center;
+    margin-block: 0.2rem;
+  }
+  .landing .wire-line {
+    background-image: linear-gradient(to bottom, var(--mint) 3px, transparent 3px);
+    background-size: 2px 9px;
+    background-repeat: repeat-y;
+  }
+  .landing .wire-flow {
+    top: 0;
+    left: -3px;
+  }
+  .landing .wire.is-flowing .wire-flow {
+    animation: lofi-flow-y 0.55s linear;
+  }
+  @keyframes lofi-flow-y {
+    0% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    99% {
+      opacity: 1;
+      transform: translateY(48px);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(48px);
+    }
+  }
+  .landing .wire-badge {
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing .wire.is-flowing .wire-flow {
+    animation: none;
+  }
+}
+
+.landing .demo-foot {
+  font-family: var(--f-mono);
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+  margin-top: 1.6rem;
+  margin-bottom: 0;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--forest-2);
+  max-width: none;
+}
+.landing .demo-foot code {
+  color: var(--mint);
+  background: none;
+  border: 0;
+  font-family: var(--f-mono);
+}
+
+/* ============================================================
+   Feature grid
+   ============================================================ */
+.landing .grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--forest-2);
+  border: 1px solid var(--forest-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.landing .cell {
+  background: var(--forest);
+  padding: 1.7rem 1.5rem;
+}
+.landing .cell h3 {
+  margin-bottom: 0.5rem;
+  color: var(--cream);
+}
+.landing .cell p {
+  font-size: 0.92rem;
+  color: var(--ink-dim);
+  margin: 0;
+}
+.landing .cell-leaf {
+  width: 16px;
+  height: 16px;
+  color: var(--lime);
+  display: block;
+  margin-bottom: 1rem;
+}
+@media (max-width: 860px) {
+  .landing .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   Anatomy — ownership is carried by ink colour, like the wordmark
+   ============================================================ */
+.landing .anat {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: start;
+}
+.landing .tree {
+  font-family: var(--f-mono);
+  font-size: 0.8rem;
+  line-height: 1.85;
+  background: rgba(34, 51, 44, 0.5);
+  border: 1px solid var(--forest-2);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+  margin: 0;
+  overflow-x: auto;
+  color: var(--jade);
+}
+.landing .tree code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+.landing .tree .yours {
+  color: var(--cream);
+}
+.landing .tree .yours b {
+  color: var(--lime);
+  font-weight: 500;
+}
+.landing .tree .theirs {
+  color: var(--mint);
+  opacity: 0.75;
+}
+.landing .tree .note {
+  color: var(--ink-dim);
+}
+.landing .legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.landing .legend li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  font-size: 0.9rem;
+  color: var(--ink-dim);
+}
+.landing .legend b {
+  color: var(--cream);
+}
+.landing .swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+  margin-top: 0.42rem;
+}
+.landing .swatch--yours {
+  background: var(--cream);
+}
+.landing .swatch--theirs {
+  background: var(--mint);
+}
+.landing .swatch--gen {
+  background: var(--ink-dim);
+}
+.landing .anat-more {
+  margin-top: 1.4rem;
+  font-size: 0.9rem;
+}
+@media (max-width: 860px) {
+  .landing .anat {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+/* ============================================================
+   Tables
+   ============================================================ */
+.landing .two-up {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3.5rem;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .landing .two-up {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+}
+
+.landing .tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  display: table;
+  margin: 0;
+}
+.landing .tbl th {
+  font-family: var(--f-mono);
+  font-weight: 500;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mint);
+  text-align: left;
+  padding: 0 1rem 0.7rem 0;
+  border-bottom: 1px solid var(--jade);
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: none;
+}
+.landing .tbl tr {
+  background: none;
+  border-top: 0;
+}
+.landing .tbl td {
+  padding: 0.7rem 1rem 0.7rem 0;
+  border-bottom: 1px solid var(--forest-2);
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  vertical-align: top;
+  color: var(--ink-dim);
+}
+.landing .tbl td:first-child {
+  color: var(--cream);
+  white-space: nowrap;
+}
+.landing .tbl code {
+  font-family: var(--f-mono);
+  font-size: 0.83rem;
+  color: var(--lime);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.landing .tbl .pin {
+  font-family: var(--f-mono);
+  color: var(--mint);
+  white-space: nowrap;
+}
+/* tables can't shrink below min-content; let the nowrap cells wrap on narrow screens */
+@media (max-width: 860px) {
+  .landing .tbl td:first-child,
+  .landing .tbl .pin {
+    white-space: normal;
+  }
+}
+
+/* --- constraints -------------------------------------------- */
+.landing .limits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.landing .limits li {
+  padding: 0.85rem 0 0.85rem 1.6rem;
+  border-bottom: 1px solid var(--forest-2);
+  font-size: 0.93rem;
+  color: var(--ink-dim);
+  position: relative;
+  max-width: var(--measure);
+}
+.landing .limits li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 1.4rem;
+  width: 8px;
+  height: 1px;
+  background: var(--lime);
+}
+.landing .limits b {
+  color: var(--cream);
+  font-weight: 700;
+}

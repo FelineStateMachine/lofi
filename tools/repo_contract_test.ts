@@ -24,6 +24,6 @@ Deno.test("real environment files are ignored and untracked", async () => {
 Deno.test("environment example contains names but no values", async () => {
   const example = await Deno.readTextFile(".env.example");
   const assignments = example.split("\n").filter((line) => /^[A-Z][A-Z0-9_]*=/.test(line));
-  assert(assignments.length === 4, "expected four documented environment variables");
+  assert(assignments.length === 5, "expected five documented environment variables");
   assert(assignments.every((line) => line.endsWith("=")), ".env.example must not contain values");
 });

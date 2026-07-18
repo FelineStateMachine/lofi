@@ -32,7 +32,8 @@ flowchart LR
 8. [Troubleshooting](troubleshooting.md) — diagnose common environment, browser, build, and test
    failures.
 
-The root [README](../README.md) provides the shortest product overview and command summary.
+The root [README](https://github.com/FelineStateMachine/lofi/blob/main/README.md) provides the
+shortest product overview and command summary.
 
 ## Reference
 

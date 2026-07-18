@@ -28,6 +28,21 @@ export class ReadinessError extends Error {
 /**
  * Wait for an app-owned browser predicate. The predicate runs in the page and
  * Playwright owns the timeout/polling, so tests do not need arbitrary sleeps.
+ *
+ * @example
+ * ```ts
+ * import { waitForReady } from "@nzip/lofi/testing";
+ *
+ * await waitForReady(client.page, () => document.querySelector(".task-list") !== null, undefined, {
+ *   description: "task list rendered",
+ * });
+ * ```
+ *
+ * @param page The Playwright page to poll.
+ * @param predicate An app-owned readiness check evaluated inside the page.
+ * @param argument A serializable value passed to the predicate in the page.
+ * @param options Optional description, timeout, and polling configuration.
+ * @returns Resolves when the predicate becomes true; rejects with {@link ReadinessError} on timeout.
  */
 export async function waitForReady<Argument>(
   page: Page,

@@ -1,24 +1,6 @@
-const entrypoints = [
-  "package/runtime/mod.ts",
-  "package/astro/mod.ts",
-  "package/access/mod.ts",
-  "package/commands/build.ts",
-  "package/create.ts",
-  "package/commands/dev.ts",
-  "package/commands/doctor.ts",
-  "package/commands/preview.ts",
-  "package/preact/mod.ts",
-  "package/commands/provision.ts",
-  "package/recipes/file-handler.ts",
-  "package/recipes/launch-handler.ts",
-  "package/recipes/protocol-handler.ts",
-  "package/recipes/related-app-discovery.ts",
-  "package/recipes/scope-extension.ts",
-  "package/recipes/web-share.ts",
-  "package/recipes/window-controls-overlay.ts",
-  "package/testing/mod.ts",
-  "package/commands/run_tests.ts",
-] as const;
+import { entrypoints as catalog } from "./entrypoints.ts";
+
+const entrypoints = catalog.map((entry) => entry.file);
 
 const command = new Deno.Command(Deno.execPath(), {
   args: ["doc", "--lint", ...entrypoints],

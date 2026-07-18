@@ -10,7 +10,20 @@ import {
 export { pwaFailureMessage } from "../runtime/pwa.ts";
 export type { PwaController, PwaFailureCode, PwaState, PwaUpdateState } from "../runtime/pwa.ts";
 
-/** Subscribes a Preact component to an isolated or shared PWA controller. */
+/**
+ * Subscribes a Preact component to an isolated or shared PWA controller.
+ *
+ * @example
+ * ```tsx
+ * import { usePwaState } from "@nzip/lofi/preact";
+ *
+ * const pwa = usePwaState();
+ * const updateReady = pwa.update === "ready";
+ * ```
+ *
+ * @param controller The controller to observe; defaults to the package-wide PWA controller.
+ * @returns The current install/update state, kept live via subscription.
+ */
 export function usePwaState(controller: PwaController = pwaController): PwaState {
   const [state, setState] = useState<PwaState>(controller.getState());
   useEffect(() => controller.subscribe(setState), [controller]);
@@ -25,7 +38,19 @@ export interface PwaActionsProps {
   readonly title?: string;
 }
 
-/** A composable install/update surface that keeps browser event handling package-owned. */
+/**
+ * A composable install/update surface that keeps browser event handling package-owned.
+ *
+ * @example
+ * ```tsx
+ * import { PwaActions } from "@nzip/lofi/preact";
+ *
+ * <PwaActions title="Install this app" />;
+ * ```
+ *
+ * @param props An optional controller override and heading text.
+ * @returns The install/update section, or `null` when no action or status is relevant.
+ */
 export function PwaActions({
   controller = pwaController,
   title = "Install & updates",

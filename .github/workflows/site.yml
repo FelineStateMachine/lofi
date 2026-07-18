@@ -1,0 +1,56 @@
+name: Docs site
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "website/**"
+      - "package/**"
+      - "tools/api_docs.ts"
+      - "tools/site_llms.ts"
+      - "tools/entrypoints.ts"
+      - "deno.json"
+      - ".github/workflows/site.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Generate API reference from JSDoc
+        run: deno task site:api
+      - name: Generate llms.txt and llms-full.txt
+        run: deno task site:llms
+      - name: Install site dependencies
+        run: npm ci --prefix website
+      - name: Build site (fails on broken links)
+        run: npm run build --prefix website
+      - name: Ensure Pages project exists
+        if: github.event_name == 'push'
+        continue-on-error: true # fails when the project already exists; that is fine
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create lofi-host --production-branch=main
+      - name: Deploy to Cloudflare Pages
+        if: github.event_name == 'push'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy website/build --project-name=lofi-host

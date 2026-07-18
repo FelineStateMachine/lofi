@@ -13,3 +13,10 @@ test-results/
 .playwright-cli/
 .nzip-*/
 .DS_Store
+
+# docs site build output and generated inputs (tools/api_docs.ts, tools/site_llms.ts)
+website/build/
+website/.docusaurus/
+website/api-gen/
+website/static/llms.txt
+website/static/llms-full.txt

@@ -1,0 +1,59 @@
+/**
+ * Global overrides on top of Infima, tuned to the lofi brand palette
+ * (docs/assets/brand/README.md): forest #18231f, lime #d5f26a,
+ * cream #f3faf6, mint #99e5bd, jade #39725c.
+ */
+
+:root {
+  --ifm-color-primary: #39725c;
+  --ifm-color-primary-dark: #336753;
+  --ifm-color-primary-darker: #30614e;
+  --ifm-color-primary-darkest: #285040;
+  --ifm-color-primary-light: #3f7d65;
+  --ifm-color-primary-lighter: #42836a;
+  --ifm-color-primary-lightest: #4a9477;
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-monospace: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+
+  /* the navbar wears the brand forest on both color modes, so the
+     landing page and the docs share one continuous header */
+  --ifm-navbar-background-color: #18231f;
+  --ifm-navbar-link-color: #f3faf6;
+  --ifm-navbar-link-hover-color: #d5f26a;
+  --ifm-menu-color-background-active: rgba(57, 114, 92, 0.12);
+}
+
+[data-theme="dark"] {
+  --ifm-color-primary: #99e5bd;
+  --ifm-color-primary-dark: #7dddac;
+  --ifm-color-primary-darker: #6fd9a3;
+  --ifm-color-primary-darkest: #46cd8b;
+  --ifm-color-primary-light: #b5edce;
+  --ifm-color-primary-lighter: #c3f0d8;
+  --ifm-color-primary-lightest: #edfbf3;
+  --ifm-background-color: #131b18;
+  --ifm-background-surface-color: #18231f;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+.navbar {
+  --ifm-navbar-search-input-background-color: #22332c;
+  --ifm-navbar-search-input-color: #f3faf6;
+}
+.navbar__logo {
+  /* the wordmark is wide (1120x360); give it room and keep it crisp */
+  height: 1.7rem;
+  width: auto;
+}
+.navbar__toggle,
+.navbar .clean-btn {
+  color: #f3faf6;
+}
+/* mobile menu inherits the navbar surface */
+.navbar-sidebar {
+  background-color: #18231f;
+}
+.navbar-sidebar .menu__link {
+  color: #f3faf6;
+}

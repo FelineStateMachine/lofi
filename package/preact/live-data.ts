@@ -18,7 +18,30 @@ const loading = <T extends TableRow>(): LiveQuerySnapshot<T> => ({
   error: null,
 });
 
-/** Subscribes a Preact component to any typed Jazz query. */
+/**
+ * Subscribes a Preact component to any typed Jazz query.
+ *
+ * Equivalent mounted queries share one Jazz subscription. The snapshot preserves
+ * the exact row type produced by the builder, including `select` and `include`
+ * projections. An empty `rows` array with `status: "ready"` is an empty result,
+ * not a loading signal.
+ *
+ * @example
+ * ```ts
+ * import { useLiveQuery } from "@nzip/lofi/preact";
+ * import { app } from "../app.ts";
+ *
+ * const records = useLiveQuery(
+ *   () => app.schema.records.where({ workspaceId, archived: false }),
+ *   [workspaceId],
+ * );
+ * // records.status is "loading" | "ready" | "error"; records.rows is typed.
+ * ```
+ *
+ * @param createQuery Builds the typed Jazz query; re-invoked when dependencies change.
+ * @param dependencies Values that, when changed, release the query and open a replacement.
+ * @returns The live snapshot: `status`, exact typed `rows`, and `error`.
+ */
 export function useLiveQuery<T extends TableRow>(
   createQuery: () => QueryBuilder<T>,
   dependencies: readonly unknown[],
@@ -53,7 +76,27 @@ export type TableMutations<T extends TableRow, Init> = TableMutationSnapshot & {
   remove(id: string): Promise<void>;
 };
 
-/** Binds one typed Jazz table to stable insert, update, and remove methods. */
+/**
+ * Binds one typed Jazz table to stable insert, update, and remove methods.
+ *
+ * Mutation promises resolve after local durability; when managed sync is active,
+ * global confirmation continues in the background and updates the shared
+ * table-scoped `pending`, `durability`, and `error` state.
+ *
+ * @example
+ * ```ts
+ * import { useTableMutations } from "@nzip/lofi/preact";
+ * import { app } from "../app.ts";
+ *
+ * const records = useTableMutations(app.schema.records);
+ * const created = await records.insert({ title: "Release notes", archived: false });
+ * await records.update(created.id, { archived: true });
+ * await records.remove(created.id);
+ * ```
+ *
+ * @param table The typed schema table to mutate, e.g. `app.schema.records`.
+ * @returns Stable `insert`, `update`, and `remove` methods plus the shared mutation state.
+ */
 export function useTableMutations<T extends TableRow, Init>(
   table: TableProxy<T, Init>,
 ): TableMutations<T, Init> {

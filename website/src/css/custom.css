@@ -64,6 +64,14 @@
   color: #f3faf6;
 }
 
+/* Dracula's comment color fails WCAG contrast on its background; sage
+   clears 4.5:1. prism-react-renderer inlines token colors, so !important. */
+[data-theme="dark"] .theme-code-block .token.comment,
+[data-theme="dark"] .theme-code-block .token.prolog,
+[data-theme="dark"] .theme-code-block .token.cdata {
+  color: #8fae9f !important;
+}
+
 /* the footer wears the brand forest, like the navbar */
 .footer--dark {
   --ifm-footer-background-color: #18231f;

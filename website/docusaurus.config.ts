@@ -172,6 +172,10 @@ const config: Config = {
       logo: {
         alt: "lofi",
         src: "img/lofi-wordmark.svg",
+        // intrinsic dimensions (800x360 viewBox at the navbar's 1.7rem height)
+        // so the image never contributes layout shift
+        width: 60,
+        height: 27,
       },
       items: [
         { type: "docSidebar", sidebarId: "docs", position: "left", label: "Docs" },

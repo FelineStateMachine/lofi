@@ -69,6 +69,32 @@ test("principal replacement prepares, destroys, then creates behind one serializ
   );
 });
 
+test("replacement queues behind an in-flight recreation and still prepares", async () => {
+  const state = createSerializedResourceState<{ id: number }>();
+  const destroy = (_value: { id: number }) => Promise.resolve();
+  await getResource(state, () => Promise.resolve({ id: 1 }));
+
+  let prepared = 0;
+  const recreation = recreateResource(state, () => Promise.resolve({ id: 2 }), destroy);
+  const replaced = await replaceResource(
+    state,
+    () => {
+      prepared += 1;
+      return Promise.resolve();
+    },
+    () => Promise.resolve({ id: 3 }),
+    destroy,
+  );
+
+  assertCount(prepared, 1, "replacement during recreation must still run its preparation");
+  assert(replaced.id === 3, "replacement must resolve to its own resource, not the recreation's");
+  assert((await recreation).id === 2, "the earlier recreation must keep its own result");
+  assert(
+    (await getResource(state, () => Promise.resolve({ id: 4 }))).id === 3,
+    "the replacement must be the resource left active",
+  );
+});
+
 test("HMR disposal before dependency resolution never attaches an obsolete adapter", async () => {
   const lifecycle = new AdapterLifecycle<{ id: number }, { id: number }>();
   let resolveDependency: ((value: { id: number }) => void) | undefined;

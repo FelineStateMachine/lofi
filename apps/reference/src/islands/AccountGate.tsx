@@ -61,6 +61,10 @@ export default function AccountGate() {
   const [error, setError] = useState<string | null>(null);
   const [phrase, setPhrase] = useState<string | null>(null);
   const [phraseInput, setPhraseInput] = useState("");
+  // Backup happens in two steps: reveal the phrase first, then enable sync
+  // only after the user confirms it is saved — enabling sync reloads the
+  // document, which would wipe an unread phrase from the screen.
+  const [pendingEnable, setPendingEnable] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [confirmReplacement, setConfirmReplacement] = useState(false);
   const sharingIdentity = session?.user_id ? encodeSharingIdentity(session.user_id) : null;
@@ -212,24 +216,28 @@ export default function AccountGate() {
         portable bearer-secret fallback.
       </p>
       <div class="account-actions">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() =>
-            run("enable", async () => {
-              try {
-                await createRecoverablePasskeyBackup();
-                setUnguarded(false);
-              } catch (cause) {
-                if (!isRecoverablePasskeyError(cause) || cause.code !== "unsupported") throw cause;
-                setUnguarded(true);
-              }
-              setPhrase(await revealRecoveryPhrase());
-              return await enableSyncBackup();
-            })}
-        >
-          {busy === "enable" ? "Backing up…" : "Back up & enable sync"}
-        </button>
+        {!pendingEnable && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              run("enable", async () => {
+                try {
+                  await createRecoverablePasskeyBackup();
+                  setUnguarded(false);
+                } catch (cause) {
+                  if (!isRecoverablePasskeyError(cause) || cause.code !== "unsupported") {
+                    throw cause;
+                  }
+                  setUnguarded(true);
+                }
+                setPhrase(await revealRecoveryPhrase());
+                setPendingEnable(true);
+              })}
+          >
+            {busy === "enable" ? "Backing up…" : "Back up & enable sync"}
+          </button>
+        )}
         <button
           type="button"
           class="account-secondary"
@@ -270,6 +278,21 @@ export default function AccountGate() {
         lost.
       </label>
       {phraseBlock}
+      {pendingEnable && (
+        <div class="account-actions">
+          <p class="account-note">
+            Sync starts once you confirm the phrase is saved — the page reloads and the phrase will
+            not be shown again automatically.
+          </p>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => run("enable", enableSyncBackup)}
+          >
+            {busy === "enable" ? "Enabling sync…" : "I saved my phrase — enable sync"}
+          </button>
+        </div>
+      )}
       {restoring && (
         <div class="account-field">
           <label for="recovery-input">Recovery phrase</label>

@@ -25,6 +25,7 @@ import {
   runRuntimeStartup,
   type RuntimeStartupFailure,
 } from "./startup-recovery.ts";
+import { completeLocalRowMigration, readNamespaceState } from "./namespace-state.ts";
 
 /** The shared, lazily opened Jazz client and its application-facing adapters. */
 export type LofiRuntime = {
@@ -50,8 +51,6 @@ type RuntimeSlot = {
 };
 
 const slotName = "__LOFI_ALPHA53_RUNTIME__";
-const migrateLocalRowsKey = `lofi:migrate-local-rows:${appId}`;
-const managedRuntimeKey = `lofi:managed-runtime:${appId}`;
 const browserGlobal = globalThis as typeof globalThis & { [slotName]?: RuntimeSlot };
 
 function slot(): RuntimeSlot {
@@ -121,9 +120,6 @@ async function migrateLocalRows(
   secret: string,
   namespace: string,
 ): Promise<void> {
-  if (typeof localStorage === "undefined" || localStorage.getItem(migrateLocalRowsKey) !== "1") {
-    return;
-  }
   const record = (failure: RuntimeStartupFailure) => recordStartupFailure(state, failure);
   const local = await runRuntimeStartup(
     "local",
@@ -150,20 +146,22 @@ async function migrateLocalRows(
       for (const column of columns) {
         if (column.name && column.name in row) values[column.name] = row[column.name];
       }
-      await db.insert(table as never, values as never, { id: row.id }).wait({ tier: "global" });
+      // Local-tier durability is the completion bar: it holds offline, so boot
+      // never blocks on the network, and the managed client replicates the
+      // copied rows globally through normal sync once connected.
+      await db.insert(table as never, values as never, { id: row.id }).wait({ tier: "local" });
     }
   }
-  localStorage.removeItem(migrateLocalRowsKey);
+  completeLocalRowMigration();
   // Keep the read-only source connection until navigation. In alpha.53,
   // shutting down either browser Db can retire the shared broker used by its
   // sibling; the page lifecycle releases both ports safely.
 }
 
 async function createClient(state: RuntimeSlot): Promise<Db> {
-  const managedNamespace = typeof localStorage !== "undefined" &&
-    localStorage.getItem(managedRuntimeKey) === "1";
+  const namespaceState = readNamespaceState();
   const connect = syncing();
-  const runtimeMode = managedNamespace || connect ? "managed" : "local";
+  const runtimeMode = namespaceState.mode === "managed" || connect ? "managed" : "local";
   const record = (failure: RuntimeStartupFailure) => recordStartupFailure(state, failure);
   state.diagnostics.storageState = "persistent-requested";
   state.diagnostics.startupFailure = null;
@@ -186,7 +184,12 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     // without it, an immediate post-replacement mutation can see no attainable
     // durability tier and be rejected even though OPFS is configured.
     await awaitLocalReady(db);
-    if (syncing()) await migrateLocalRows(state, db, secret, namespace);
+    // Gate on the namespace record, not on live sync: rows written before the
+    // election must reach the managed namespace even when the connection is
+    // unavailable, otherwise they sit hidden in the local namespace.
+    if (runtimeMode === "managed" && namespaceState.migrateLocalRows) {
+      await migrateLocalRows(state, db, secret, namespace);
+    }
     state.principal = db.getAuthState().session?.user_id ?? null;
     state.serverConfigured = connect;
     state.diagnostics.storageState = "persistent-driver-open";
@@ -323,25 +326,44 @@ export async function reloadBrowserRuntime(): Promise<never> {
   return await new Promise<never>(() => {});
 }
 
+async function releaseRuntime(state: RuntimeSlot): Promise<void> {
+  await adapter.release((runtime) => runtime.shutdown());
+  await shutdownResource(state.client, (db) => destroyClient(state, db));
+}
+
 /**
  * Replaces the local-first secret and every runtime object tied to the old
  * principal. Consumers and the old Jazz client close before the secret is
  * replaced; a fresh runtime then opens on the restored principal.
+ * `onSecretSaved` runs once the new secret is durably saved and before the
+ * replacement runtime opens, so callers can commit dependent state (namespace
+ * election) only when replacement is past the point of failure.
  */
-export function replaceRuntimePrincipal(secret: string): Promise<LofiRuntime> {
-  if (recreationPromise) return recreationPromise;
+export function replaceRuntimePrincipal(
+  secret: string,
+  options: { onSecretSaved?: () => void } = {},
+): Promise<LofiRuntime> {
   const state = slot();
+  const previous = recreationPromise;
   const operation = (async () => {
-    if (typeof window !== "undefined" && typeof SharedWorker !== "undefined") {
-      await shutdownRuntime();
+    // Wait out any in-flight recreation instead of aliasing to it: an
+    // unrelated recreation never saves this secret, so returning it would let
+    // a restore report success without replacing the principal.
+    await previous?.catch(() => undefined);
+    const saveSecret = async () => {
       await BrowserAuthSecretStore.saveSecret(secret, { appId });
+      options.onSecretSaved?.();
+    };
+    if (typeof window !== "undefined" && typeof SharedWorker !== "undefined") {
+      await releaseRuntime(state);
+      await saveSecret();
       globalThis.location.reload();
       return await new Promise<LofiRuntime>(() => {});
     }
     await adapter.release((runtime) => runtime.shutdown());
     const db = await replaceResource(
       state.client,
-      () => BrowserAuthSecretStore.saveSecret(secret, { appId }),
+      saveSecret,
       () => createClient(state),
       (current) => replaceClient(state, current),
     );
@@ -360,8 +382,7 @@ export function shutdownRuntime(): Promise<void> {
   const state = slot();
   const operation = (async () => {
     await recreationPromise?.catch(() => undefined);
-    await adapter.release((runtime) => runtime.shutdown());
-    await shutdownResource(state.client, (db) => destroyClient(state, db));
+    await releaseRuntime(state);
   })();
   const tracked = operation.finally(() => {
     if (shutdownPromise === tracked) shutdownPromise = null;

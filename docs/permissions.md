@@ -109,6 +109,16 @@ The helper stores the role label plus fixed capability bits because the pinned J
 role-string comparisons inside relationship policies. Only the four role names are accepted by the
 typed operations; custom roles belong in a raw Jazz policy.
 
+**The group creator holds a permanent superseat.** Whoever created the group row can always update
+it and — because membership management derives from group-update authority — can always restore
+their own admin membership, even after other admins demote or remove them. This is a documented
+property of the template, not revocable admin membership: the pinned Jazz alpha cannot express
+"creator authority only until the first admin exists" (its policy engine drops negated existence
+conditions), so do not present creator handover as complete in product UI. The creator can also
+delete their own group rows, which is what lets group creation roll back cleanly if bootstrapping
+the first admin membership fails. See
+[the decision record](decisions/group-creator-authority-alpha53.md).
+
 Direct shares and group membership use a non-secret `lofi1:<app-id>:<jazz-user-id>` sharing
 identity. It is safe to copy for this purpose but is not a directory, invitation, or sign-in token.
 The package deliberately does not discover users or deliver invitations.

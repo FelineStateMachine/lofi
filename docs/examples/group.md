@@ -41,4 +41,7 @@ await groups.removeMember(group.id, recipientIdentity);
 
 Readers can read. Contributors can create and edit their own rows. Writers can edit any group row.
 Admins can do everything writers can and manage membership. `leaveGroup` removes the current
-principal's membership. Managed sync is required for every group operation.
+principal's membership. Managed sync is required for every group operation. The group's creator
+additionally keeps a permanent superseat: demoting or removing them does not end their ability to
+manage the group — see [Permission templates](../permissions.md#fixed-group-roles) before building
+handover flows.

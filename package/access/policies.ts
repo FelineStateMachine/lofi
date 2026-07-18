@@ -195,6 +195,22 @@ export function defineAccessPolicies<TApp extends object>(
       const hasCapability = (groupId: unknown, capability: string) =>
         members.exists.where({ groupId, user_id: session.user_id, [capability]: true });
       const isAdmin = (groupId: unknown) => hasCapability(groupId, "can_manage");
+      // Group-creator authority is PERMANENT by design: the creator can always
+      // update the group row, and — because membership management derives from
+      // group-update via `allowedTo.update` — can always restore their own
+      // admin membership after demotion or removal. This is a documented trust
+      // property of the template, not an oversight: scoping creator authority
+      // to a bootstrap window ("only while no admin membership exists")
+      // requires a negated existence condition, and the pinned Jazz alpha.53
+      // policy engine silently drops Not around Exists/ExistsRel — the window
+      // cannot be enforced at the policy boundary. The engine canary in
+      // access_security_test.ts fails when an upgrade fixes negation; implement
+      // the window then. See docs/decisions/group-creator-authority-alpha53.md.
+      //
+      // Direct creator delete below grants no additional authority (a creator
+      // can always self-bootstrap an admin membership and delete transitively);
+      // it exists so group creation can roll back when the first admin insert
+      // fails, instead of stranding an undeletable orphan row.
       groups.allowRead.where((group: Record<string, unknown>) =>
         anyOf([isMember(group.id), { $createdBy: session.user_id }])
       );
@@ -202,7 +218,9 @@ export function defineAccessPolicies<TApp extends object>(
       groups.allowUpdate.where((group: Record<string, unknown>) =>
         anyOf([{ $createdBy: session.user_id }, isAdmin(group.id)])
       );
-      groups.allowDelete.where((group: Record<string, unknown>) => isAdmin(group.id));
+      groups.allowDelete.where((group: Record<string, unknown>) =>
+        anyOf([{ $createdBy: session.user_id }, isAdmin(group.id)])
+      );
       members.allowRead.where(
         anyOf([
           { user_id: session.user_id },

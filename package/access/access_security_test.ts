@@ -281,6 +281,156 @@ Deno.test("official Jazz harness enforces fixed group roles and membership lifec
   }
 });
 
+Deno.test("group-creator authority is permanent, exclusive, and survives demotion", async () => {
+  const testApp = await createPolicyTestApp(app, permissions, expectLike);
+  try {
+    const creator = testApp.as(session("creator"));
+    const successor = testApp.as(session("successor"));
+    const stranger = testApp.as(session("stranger"));
+
+    const group = await creator.insert(app.workspaces, { name: "handover" }).wait({
+      tier: "global",
+    });
+    // Creator authority never extends to anyone else.
+    stranger.expectDenied((db) => db.update(app.workspaces, group.id, { name: "hijacked" }));
+    stranger.expectDenied((db) =>
+      db.insert(app.workspaceMembers, {
+        groupId: group.id,
+        user_id: "stranger",
+        ...groupRoleCapabilities("admin"),
+      })
+    );
+    stranger.expectDenied((db) => db.delete(app.workspaces, group.id));
+
+    const creatorMembership = await creator.insert(app.workspaceMembers, {
+      groupId: group.id,
+      user_id: "creator",
+      ...groupRoleCapabilities("admin"),
+    }).wait({ tier: "global" });
+    await creator.insert(app.workspaceMembers, {
+      groupId: group.id,
+      user_id: "successor",
+      ...groupRoleCapabilities("admin"),
+    }).wait({ tier: "global" });
+
+    // The documented trust property of the template on the pinned Jazz
+    // alpha.53 engine: demoting or removing the creator does NOT end their
+    // authority — they retain group update and, through it, membership
+    // management, so they can always restore their own admin membership.
+    // The engine cannot express "creator authority only while no admin
+    // exists" (see the negation canary below); when that becomes possible,
+    // this contract is expected to change to a bootstrap-only window.
+    successor.expectAllowed((db) =>
+      db.update(app.workspaceMembers, creatorMembership.id, groupRoleCapabilities("reader"))
+    );
+    creator.expectAllowed((db) =>
+      db.update(app.workspaceMembers, creatorMembership.id, groupRoleCapabilities("admin"))
+    );
+    successor.expectAllowed((db) => db.delete(app.workspaceMembers, creatorMembership.id));
+    creator.expectAllowed((db) =>
+      db.insert(app.workspaceMembers, {
+        groupId: group.id,
+        user_id: "creator",
+        ...groupRoleCapabilities("admin"),
+      })
+    );
+  } finally {
+    await testApp.shutdown();
+  }
+});
+
+Deno.test("engine canary: pinned alpha.53 silently drops Not around existence conditions", async () => {
+  // Guard rule that SHOULD deny deletion while an admin membership exists:
+  // Not(ExistsRel(members WHERE groupId = <this group> AND can_manage)).
+  // The pinned engine ignores the negation, so the delete is ALLOWED below.
+  // WHEN THIS TEST FAILS after a jazz-tools upgrade: negation started
+  // working — replace permanent group-creator authority with the
+  // bootstrap-only window design in
+  // docs/decisions/group-creator-authority-alpha53.md and update the
+  // permanent-authority contract test above.
+  const canaryPermissions = s.definePermissions(app, (rawContext) => {
+    const { policy } = rawContext as unknown as {
+      policy: Record<
+        string,
+        {
+          allowRead: { always(): unknown };
+          allowInsert: { always(): unknown };
+          allowDelete: { where(input: unknown): unknown };
+        }
+      >;
+    };
+    policy.workspaces.allowRead.always();
+    policy.workspaces.allowInsert.always();
+    policy.workspaceMembers.allowRead.always();
+    policy.workspaceMembers.allowInsert.always();
+    policy.workspaces.allowDelete.where({
+      type: "Not",
+      expr: {
+        type: "ExistsRel",
+        rel: {
+          Filter: {
+            input: { TableScan: { table: "workspaceMembers" } },
+            predicate: {
+              And: [
+                {
+                  Cmp: {
+                    left: { column: "groupId" },
+                    op: "Eq",
+                    right: { OuterColumn: { column: "id" } },
+                  },
+                },
+                {
+                  Cmp: {
+                    left: { column: "can_manage" },
+                    op: "Eq",
+                    right: { Literal: true },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+  });
+  const testApp = await createPolicyTestApp(app, canaryPermissions, expectLike);
+  try {
+    const creator = testApp.as(session("creator"));
+    const group = await creator.insert(app.workspaces, { name: "canary" }).wait({
+      tier: "global",
+    });
+    await creator.insert(app.workspaceMembers, {
+      groupId: group.id,
+      user_id: "creator",
+      ...groupRoleCapabilities("admin"),
+    }).wait({ tier: "global" });
+    // A working Not would DENY this delete (an admin membership exists).
+    creator.expectAllowed((db) => db.delete(app.workspaces, group.id));
+  } finally {
+    await testApp.shutdown();
+  }
+});
+
+Deno.test("a group without its first admin remains deletable by its creator only", async () => {
+  const testApp = await createPolicyTestApp(app, permissions, expectLike);
+  try {
+    const creator = testApp.as(session("creator"));
+    const stranger = testApp.as(session("stranger"));
+    // A group whose first-admin insert failed: the row exists, no membership.
+    const orphan = await creator.insert(app.workspaces, { name: "orphan" }).wait({
+      tier: "global",
+    });
+    stranger.expectDenied((db) => db.delete(app.workspaces, orphan.id));
+    await creator.delete(app.workspaces, orphan.id).wait({ tier: "global" });
+    assert(
+      (await creator.all(app.workspaces.where({ id: orphan.id }))).length === 0,
+      "the creator's rollback delete did not remove the orphaned group",
+    );
+  } finally {
+    await testApp.shutdown();
+  }
+});
+
 Deno.test("access templates reject malformed relationship tables with actionable errors", () => {
   const malformed = s.defineApp({
     docs: s.table({ title: s.string() }),

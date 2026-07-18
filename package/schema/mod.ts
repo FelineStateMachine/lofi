@@ -101,6 +101,15 @@ export {
   type NestedSchemaDefinition,
 } from "./nested.ts";
 
+export {
+  provisionStore,
+  readStoreStatus,
+  StoreProvisionError,
+  type StoreProvisionResult,
+  type StoreStatus,
+  type StoreTarget,
+} from "./store.ts";
+
 /**
  * Schema-authoring types re-exported from the pinned Jazz 2 DSL for use in
  * application signatures. Row types for UI code come from `@nzip/lofi`

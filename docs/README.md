@@ -43,6 +43,7 @@ shortest product overview and command summary. AI agents can ingest these docs a
   - [Binary and structured payloads](examples/payloads.md)
   - [Schema evolution](examples/schema-evolution.md)
   - [Nested app namespaces](examples/nested-namespaces.md)
+- [Store provisioning](store-provisioning.md)
 - [Optional installed-app recipes](recipes/README.md)
 - [Advanced device-auth primitive](auth.md)
 

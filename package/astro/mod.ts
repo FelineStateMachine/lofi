@@ -65,6 +65,7 @@ export const accessFiles = [
 export const schemaFiles = [
   "mod.ts",
   "nested.ts",
+  "store.ts",
 ] as const;
 
 /** Preact modules vendored into `.lofi/`; kept in lockstep by the manifest test. */

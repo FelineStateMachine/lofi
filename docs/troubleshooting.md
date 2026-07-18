@@ -93,9 +93,12 @@ configuration. Rotate a real credential if it entered source control or an artif
 Set the base URL when running the opt-in example:
 
 ```sh
-LOFI_E2E_BASE_URL=http://127.0.0.1:4321/ \
+LOFI_E2E_BASE_URL=http://localhost:4321/ \
   deno test -A tests/convergence_e2e_test.ts
 ```
+
+The base URL must say `localhost`, not `127.0.0.1`: the convergence gate enrolls a passkey to elect
+sync, and an IP address is not a valid WebAuthn RP ID, so the ceremony never starts.
 
 Install the pinned Chromium runtime if needed:
 

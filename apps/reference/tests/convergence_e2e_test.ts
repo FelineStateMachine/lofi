@@ -9,11 +9,18 @@ import type {
  * clients each add a task while offline, then reconnect and converge on both.
  *
  * This is an opt-in browser gate, not part of `deno task test`:
- *   1. Configure managed sync (JAZZ_APP_ID + JAZZ_SERVER_URL in .env) so two
- *      clients share one synced account, then serve the app — for example
+ *   1. Configure managed sync (JAZZ_APP_ID + JAZZ_SERVER_URL in .env) with the
+ *      schema deployed to that store, then serve the app — for example
  *      `deno task build` followed by `deno task preview`, or `deno task dev`.
- *   2. Point the test at that URL and run it directly:
- *        LOFI_E2E_BASE_URL=http://127.0.0.1:4321/ deno test -A tests/convergence_e2e_test.ts
+ *   2. Point the test at that URL — it must be `localhost`, not `127.0.0.1`,
+ *      because the sync election enrolls a passkey and an IP address is not a
+ *      valid WebAuthn RP ID — and run it directly:
+ *        LOFI_E2E_BASE_URL=http://localhost:4321/ deno test -A tests/convergence_e2e_test.ts
+ *
+ * The primary client performs the real backup-and-sync election (with a
+ * virtual authenticator) before its state is cloned: lofi is local-only by
+ * design until the account opts in, so without the election there is nothing
+ * to converge and the gate would fail for a reason that indicts no one.
  *
  * Without LOFI_E2E_BASE_URL (or without Chromium installed) it skips, so the
  * default suite stays fast and never launches a browser.
@@ -50,10 +57,27 @@ Deno.test("two clients converge on concurrent offline task edits", async () => {
     createTwoClientFixture,
     runConcurrentOfflineConvergence,
     waitForReady,
+    withVirtualAuthenticator,
   } = await import("@nzip/lofi/testing");
 
   const ready = (client: BrowserTestClient) =>
     waitForReady(client.page, taskListReady, undefined, { description: `${client.name} ready` });
+  // The backup-and-sync election, driven through the real account UI. Cloning
+  // afterwards carries the elected, synced account into the second client.
+  const electSync = async (client: BrowserTestClient) => {
+    await withVirtualAuthenticator(client.page);
+    await client.page.getByRole("button", { name: "Back up & enable sync" }).click();
+    await client.page.locator('[aria-label="Recovery phrase"] li').first().waitFor({
+      state: "visible",
+      timeout: 30_000,
+    });
+    await client.page.getByRole("button", { name: "I saved my phrase — enable sync" }).click();
+    await client.page.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
+      state: "visible",
+      timeout: 30_000,
+    });
+    await ready(client);
+  };
   const addTask = async (client: BrowserTestClient, text: string) => {
     await client.page.fill("#new-task", text);
     await client.page.press("#new-task", "Enter");
@@ -68,9 +92,15 @@ Deno.test("two clients converge on concurrent offline task edits", async () => {
   try {
     fixture = await createTwoClientFixture({
       baseURL,
-      // Shared identity clones the first client's device key in memory, so both
-      // browser contexts act as the same synced account.
-      identity: { mode: "shared", preparePrimary: ready },
+      // Shared identity clones the first client's state in memory after the
+      // election, so both browser contexts act as the same synced account.
+      identity: {
+        mode: "shared",
+        preparePrimary: async (client) => {
+          await ready(client);
+          await electSync(client);
+        },
+      },
       artifacts: { directory: "test-results" },
     });
   } catch (error) {

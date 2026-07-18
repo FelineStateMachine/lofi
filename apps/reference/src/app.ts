@@ -14,9 +14,11 @@ export const app = defineLofiApp({
   // `docs/sync-and-recovery.md` guide.
   //
   // Hostnames you have committed to keeping stable, for the optional device-credential
-  // primitive in `@nzip/lofi` (WebAuthn/PRF at-rest encryption). A credential
-  // binds to its origin; left empty, the served origin is trusted. Pin your permanent
-  // hostname(s) here before relying on a credential across a host change.
+  // primitive in `@nzip/lofi` (WebAuthn/PRF at-rest encryption). A credential binds
+  // to its origin: localhost works for development without configuration, but a
+  // deployed origin must be listed here before credentials can enroll on it. An
+  // unlisted host is refused so a preview hostname cannot mint passkeys and
+  // PRF-protected data that strand when the app moves to its production origin.
   credentialOrigins: [] as readonly string[],
   // Pin this to the canonical production hostname before users create recoverable
   // passkeys. Omit it in local development to use the current hostname.

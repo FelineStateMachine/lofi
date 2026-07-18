@@ -12,7 +12,7 @@
   "public/screenshot-narrow.png": "8d11e3779e2e7437ef9e44d07bd382d161570846663338b3ad3f1cdb065b018f",
   "public/screenshot-wide.png": "812786db28f6803d12adc8bd3af5fffefa8e4e20851b61de8a256fcc538c114e",
   "README.md": "10d47c681ae44a3d70b790e3952e0ac361e0eeec4a433f0ff35cfe9db61a7778",
-  "src/app.ts": "4c4c6c3f6ad4123f6cffc7a480965c4ea38442676c2af662d1bbfe082d40194f",
+  "src/app.ts": "0f508004dfb12456d65f3ee2231199b932fe239bef6977405fb93135972c0f33",
   "src/env.d.ts": "b44daed05ec5cdfacfd8d8acf7866974b5f6b8db923ab53bd244419093c719da",
   "src/islands/AccountGate.tsx": "9375e8393fadeb621244cccd14234ede017fbf1f2014f28cbddf55ea412a9094",
   "src/islands/TaskList.tsx": "cf559f8529e3836730abcdafab8184032c8ac662a1e794e20f0879161bee37be",

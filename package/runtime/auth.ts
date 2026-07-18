@@ -83,6 +83,7 @@ export class AuthError extends Error {
     | "unsupported"
     | "prf-unavailable"
     | "credential-missing"
+    | "credential-mismatch"
     | "unknown";
 
   /** Creates a device-credential error without including credential material. */
@@ -107,6 +108,20 @@ function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
+  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+  try {
+    const binary = atob(base64 + "=".repeat((4 - base64.length % 4) % 4));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  } catch {
+    throw new AuthError("credential-mismatch", "The pinned credential id is unreadable.");
+  }
 }
 
 function randomBytes(length = 32): Uint8Array<ArrayBuffer> {
@@ -224,13 +239,13 @@ function currentOrigin(trustedOrigins?: readonly string[]): CredentialOriginRepo
   }
   const url = new URL(location.href);
   const declared = trustedOrigins ?? getLofiApp().credentialOrigins ?? [];
-  // Default trust is the origin you are actually served from: the passkey binds
-  // to this hostname (its RP ID) regardless, so trusting it lets the app work
-  // wherever it is deployed. Pin explicit hosts in `app.ts` `credentialOrigins`
-  // to keep enrollment working across a host change — a passkey silently breaks
-  // if its origin moves.
-  const trusted = declared.length > 0 ? declared : [url.hostname];
-  return classifyCredentialOrigin(url, trusted);
+  // No implicit trust: with an empty `credentialOrigins` allowlist, a deployed
+  // HTTPS host classifies as `unverified` and enrollment refuses. Implicitly
+  // trusting the served hostname made that refusal unreachable — a preview
+  // host could mint credentials (and PRF-protected data) that strand the
+  // moment the app moves to its production hostname. Development on
+  // localhost stays `local-only` and keeps working without configuration.
+  return classifyCredentialOrigin(url, declared);
 }
 
 function requireStableRpId(dependencies: AuthDependencies): string {
@@ -312,17 +327,50 @@ export async function enrollDeviceCredential(
   }
 }
 
-/** Authenticates with a device passkey (discoverable get, user-verifying). */
+/** Options for {@link authenticateDeviceCredential}. */
+export type AuthenticateOptions = AuthDependencies & {
+  /**
+   * The base64url id of the one enrolled credential this ceremony must assert.
+   * When set, the request pins `allowCredentials` to it and the returned
+   * assertion is verified against it — any other credential for the same RP ID
+   * fails with `credential-mismatch` instead of passing as the enrolled one.
+   */
+  credentialId?: string;
+};
+
+/**
+ * Authenticates with a device passkey (user-verifying). Pass `credentialId` to
+ * pin the ceremony to one enrolled credential; without it the request is
+ * discoverable and any resident credential for the RP ID can assert.
+ */
 export async function authenticateDeviceCredential(
-  dependencies: AuthDependencies = {},
+  options: AuthenticateOptions = {},
 ): Promise<DeviceCredential> {
-  const rpId = requireStableRpId(dependencies);
-  const credentials = dependencies.credentials ?? browserCredentials();
+  const rpId = requireStableRpId(options);
+  const credentials = options.credentials ?? browserCredentials();
+  const allowCredentials: PublicKeyCredentialDescriptor[] | undefined = options.credentialId
+    ? [{ type: "public-key", id: fromBase64Url(options.credentialId) }]
+    : undefined;
   try {
     const credential = await credentials.get({
-      publicKey: { rpId, challenge: randomBytes(), userVerification: "required", timeout: 60_000 },
+      publicKey: {
+        rpId,
+        challenge: randomBytes(),
+        userVerification: "required",
+        timeout: 60_000,
+        ...(allowCredentials ? { allowCredentials } : {}),
+      },
     });
-    return { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) };
+    const asserted = { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) };
+    // Verify the assertion even though `allowCredentials` was sent: the browser
+    // allow-list is a request hint, not a caller-side guarantee.
+    if (options.credentialId && asserted.id !== options.credentialId) {
+      throw new AuthError(
+        "credential-mismatch",
+        "The asserting passkey is not the enrolled credential.",
+      );
+    }
+    return asserted;
   } catch (error) {
     throw mapError(error);
   }

@@ -305,7 +305,7 @@ export async function enableSyncBackup(): Promise<Session> {
  * app, or a different sink already declared on this device.
  */
 export async function enrollSyncTicket(ticket: string): Promise<Session> {
-  declareSinkFromTicket(ticket);
+  await declareSinkFromTicket(ticket);
   return await enableSyncBackup();
 }
 

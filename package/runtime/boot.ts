@@ -1,4 +1,5 @@
 // Package-owned browser boot orchestration.
+import { restoreDeclaredSink } from "./data-sink.ts";
 import { registerProductionServiceWorker } from "./pwa.ts";
 
 let booted = false;
@@ -24,6 +25,14 @@ let booted = false;
 export async function bootLofi(): Promise<void> {
   if (booted || typeof document === "undefined") return;
   booted = true;
+  // The sink envelope must be open before lifecycle.ts reads the sync
+  // location at import time. A restore failure degrades to local-only; it
+  // must never brick boot.
+  try {
+    await restoreDeclaredSink();
+  } catch {
+    // Continue local-only; enrollment can re-declare the sink.
+  }
   await import("./lifecycle.ts");
   registerProductionServiceWorker();
   if (import.meta.env.DEV) void import("./probe.ts");

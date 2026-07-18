@@ -1,6 +1,7 @@
-// Package contract tests for the runtime-declared data sink: record
-// round-trip, ticket parsing (the lofi-node `lofisync1.` format contract),
-// declaration guards, and how the active sync location resolves into the
+// Package contract tests for the runtime-declared data sink: sealed-record
+// round-trip, cleartext-record migration, ticket parsing (the lofi-node
+// `lofisync1.` format contract), declaration guards, the no-plaintext-bearer
+// conformance check, and how the active sync location resolves into the
 // session election and database configuration.
 import {
   anchorAppId,
@@ -10,7 +11,9 @@ import {
   isDataSinkError,
   parseSyncTicket,
   readDeclaredSink,
+  restoreDeclaredSink,
 } from "./data-sink.ts";
+import { memoryDeviceKeyStore, parseSealedEnvelope } from "./envelope.ts";
 import {
   activeAppId,
   activeServerUrl,
@@ -41,15 +44,17 @@ const test = (globalThis as unknown as {
 const sinkKey = `lofi:data-sink:${anchorAppId}`;
 const electionKey = `lofi:sync-elected:${appId}`;
 
-function withCleanState(body: () => void): () => void {
-  return () => {
+function withCleanState(body: () => void | Promise<void>): () => Promise<void> {
+  return async () => {
     localStorage.removeItem(sinkKey);
     localStorage.removeItem(electionKey);
+    clearDeclaredSink();
     try {
-      body();
+      await body();
     } finally {
       localStorage.removeItem(sinkKey);
       localStorage.removeItem(electionKey);
+      clearDeclaredSink();
     }
   };
 }
@@ -71,37 +76,134 @@ const validTicket = encodeTicket({
 });
 
 test(
-  "a declared sink round-trips through the versioned record",
-  withCleanState(() => {
+  "a declared sink round-trips through the sealed record and a restore",
+  withCleanState(async () => {
     assert(readDeclaredSink() === null, "a clean device must have no declared sink");
-    declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802", label: "home" });
+    await declareDataSink({
+      appId: ticketAppId,
+      serverUrl: "https://node.example:4802",
+      label: "home",
+    });
     const sink = readDeclaredSink();
     assert(
       sink !== null && sink.appId === ticketAppId &&
         sink.serverUrl === "https://node.example:4802" && sink.label === "home",
       `declared sink read back as ${JSON.stringify(sink)}`,
     );
+    // A fresh boot re-reads storage: the sealed record must open back to the
+    // same declaration.
+    assert(await restoreDeclaredSink() === "restored", "the sealed record must restore");
+    assert(
+      readDeclaredSink()?.serverUrl === "https://node.example:4802",
+      "the restored sink must match the declaration",
+    );
     clearDeclaredSink();
     assert(readDeclaredSink() === null, "clearing must remove the declaration");
+    assert(await restoreDeclaredSink() === "none", "clearing must remove the stored record");
   }),
 );
 
 test(
-  "an unreadable or unversioned sink record reads as absent",
-  withCleanState(() => {
+  "an unreadable or unversioned sink record restores as absent",
+  withCleanState(async () => {
     localStorage.setItem(sinkKey, "not json");
+    assert(await restoreDeclaredSink() === "none", "malformed record must restore as absent");
     assert(readDeclaredSink() === null, "malformed record must read as absent");
     localStorage.setItem(sinkKey, JSON.stringify({ v: 99, sink: { appId: "x", serverUrl: "y" } }));
+    assert(await restoreDeclaredSink() === "none", "unknown record version must restore as absent");
     assert(readDeclaredSink() === null, "unknown record version must read as absent");
   }),
 );
 
 test(
+  "a pre-envelope cleartext record migrates to a sealed one on restore",
+  withCleanState(async () => {
+    const bearerUrl = `http://192.168.1.10:4802/t/${ticketSecret}`;
+    localStorage.setItem(
+      sinkKey,
+      JSON.stringify({ v: 1, sink: { appId: ticketAppId, serverUrl: bearerUrl, label: "phone" } }),
+    );
+    assert(await restoreDeclaredSink() === "migrated", "a v1 record must migrate");
+    assert(readDeclaredSink()?.serverUrl === bearerUrl, "the migrated sink must carry over");
+    const raw = localStorage.getItem(sinkKey) ?? "";
+    assert(!raw.includes(ticketSecret), "migration must remove the bearer secret from storage");
+    const record = JSON.parse(raw) as { v: number; sealed: unknown };
+    assert(
+      record.v === 2 && parseSealedEnvelope(record.sealed) !== null,
+      "migration must persist a sealed envelope",
+    );
+    assert(await restoreDeclaredSink() === "restored", "the migrated record must reopen");
+    assert(readDeclaredSink()?.serverUrl === bearerUrl, "the resealed sink must round-trip");
+  }),
+);
+
+test(
+  "a sealed record without its device key is unopenable, not destroyed",
+  withCleanState(async () => {
+    await declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
+    const stored = localStorage.getItem(sinkKey);
+    assert(stored !== null, "the declaration must persist");
+    // A store that never held the wrapping key models cleared IndexedDB with
+    // surviving localStorage.
+    assert(
+      await restoreDeclaredSink(memoryDeviceKeyStore()) === "unopenable",
+      "a missing device key must report unopenable",
+    );
+    assert(readDeclaredSink() === null, "an unopenable record must read as absent");
+    assert(localStorage.getItem(sinkKey) === stored, "an unopenable record must be left intact");
+    assert(await restoreDeclaredSink() === "restored", "the right key must still open it");
+  }),
+);
+
+test(
+  "no bearer material reaches storage in cleartext or a trivial encoding",
+  withCleanState(async () => {
+    const bearerUrl = `http://192.168.1.10:4802/t/${ticketSecret}`;
+    await declareSinkFromTicket(
+      encodeTicket({ v: 1, appId: ticketAppId, url: bearerUrl, scope: "provision" }),
+    );
+    const base64Url = (text: string) =>
+      btoa(text).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+    const encodings = [
+      ticketSecret,
+      bearerUrl,
+      btoa(ticketSecret),
+      base64Url(ticketSecret),
+      encodeURIComponent(bearerUrl),
+    ];
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      const value = key === null ? null : localStorage.getItem(key);
+      if (!value) continue;
+      for (const encoding of encodings) {
+        assert(
+          !value.includes(encoding),
+          `bearer material found at rest under "${key}" as ${encoding.slice(0, 16)}…`,
+        );
+      }
+    }
+    const record = JSON.parse(localStorage.getItem(sinkKey) ?? "null") as {
+      v: number;
+      sealed: unknown;
+    };
+    assert(
+      record?.v === 2 && parseSealedEnvelope(record.sealed) !== null,
+      "the sink at rest must be a sealed envelope",
+    );
+    assert(await restoreDeclaredSink() === "restored", "the sealed ticket must restore");
+    assert(
+      readDeclaredSink()?.serverUrl === bearerUrl && readDeclaredSink()?.scope === "provision",
+      "the restored declaration must return the exact ticket URL and scope",
+    );
+  }),
+);
+
+test(
   "sink declarations validate the server URL",
-  withCleanState(() => {
+  withCleanState(async () => {
     for (const serverUrl of ["ws://node.example/t/x", "not a url", "ftp://node.example"]) {
       try {
-        declareDataSink({ appId: ticketAppId, serverUrl });
+        await declareDataSink({ appId: ticketAppId, serverUrl });
         throw new Error(`declaration accepted invalid server URL: ${serverUrl}`);
       } catch (error) {
         assert(
@@ -116,10 +218,10 @@ test(
 
 test(
   "declaring over a different sink is refused; the same store updates its label",
-  withCleanState(() => {
-    declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
+  withCleanState(async () => {
+    await declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
     try {
-      declareDataSink({ appId: ticketAppId, serverUrl: "https://other.example:4802" });
+      await declareDataSink({ appId: ticketAppId, serverUrl: "https://other.example:4802" });
       throw new Error("a different sink must not silently replace the declared one");
     } catch (error) {
       assert(
@@ -127,7 +229,7 @@ test(
         `expected sink-already-declared, received ${String(error)}`,
       );
     }
-    declareDataSink({
+    await declareDataSink({
       appId: ticketAppId,
       serverUrl: "https://node.example:4802",
       label: "renamed",
@@ -200,8 +302,8 @@ test("ticket parsing accepts the lofi-node format and rejects everything else", 
 
 test(
   "enrolling a ticket declares its URL verbatim as the sink",
-  withCleanState(() => {
-    const declared = declareSinkFromTicket(validTicket);
+  withCleanState(async () => {
+    const declared = await declareSinkFromTicket(validTicket);
     assert(
       declared.serverUrl === `http://192.168.1.10:4802/t/${ticketSecret}`,
       "the ticket URL must be used verbatim — the secret path is the credential",
@@ -210,7 +312,7 @@ test(
     assert(sink?.appId === ticketAppId && sink.label === "phone", "ticket fields must carry over");
     assert(sink.scope === undefined, "a scopeless ticket declares no explicit scope");
     try {
-      declareSinkFromTicket("lofisync1.nope");
+      await declareSinkFromTicket("lofisync1.nope");
       throw new Error("a malformed ticket must not enroll");
     } catch (error) {
       assert(
@@ -223,14 +325,14 @@ test(
 
 test(
   "the active sink resolves declared over default and gates the election",
-  withCleanState(() => {
+  withCleanState(async () => {
     // This test build compiles no managed app, so the default sink is absent.
     assert(activeSink() === null && !syncAvailable(), "local build must start with no sink");
     assert(activeAppId() === appId, "without a sink the active app id is the anchor");
     setSyncElected(true);
     assert(!syncElected(), "election must be a no-op without a sync location");
 
-    declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
+    await declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
     const sink = activeSink();
     assert(
       sink?.source === "declared" && sink.appId === ticketAppId && syncAvailable(),
@@ -248,8 +350,8 @@ test(
 
 test(
   "databaseConfig keeps the local tier on the anchor and gives managed the sink",
-  withCleanState(() => {
-    declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
+  withCleanState(async () => {
+    await declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
     setSyncElected(true);
 
     const local = databaseConfig("secret", "ns", "local", false);

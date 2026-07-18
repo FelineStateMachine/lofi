@@ -32,6 +32,7 @@ export const runtimeFiles = [
   "diagnostics.ts",
   "durability.ts",
   "env.d.ts",
+  "envelope.ts",
   "foreground-recovery.ts",
   "inspector.ts",
   "lifecycle.ts",

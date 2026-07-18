@@ -6,31 +6,20 @@ sketches under `docs/spikes/`.
 
 ## Start here
 
-```mermaid
-flowchart LR
-    A["Create and run"] --> B["Model data and permissions"]
-    B --> C["Build the Preact UI"]
-    C --> D["Add sync if needed"]
-    D --> E["Test local-first behavior"]
-    E --> F["Build and deploy"]
-    A -. "blocked" .-> G["Troubleshoot"]
-    B -. "blocked" .-> G
-    D -. "blocked" .-> G
-    E -. "blocked" .-> G
-```
+Work through the guides in order; each builds on the project state the previous one leaves behind.
 
-1. [Getting started](getting-started.md) — scaffold an app, verify local persistence, and identify
-   the files you are expected to change.
-2. [Data and UI](data-and-ui.md) — connect a Jazz table to a typed Preact hook and island.
-3. [Permissions](permissions.md) — understand and change the starter's owner-only access policy.
-4. [Sync and recovery](sync-and-recovery.md) — provision managed sync and understand the account
-   lifecycle.
-5. [Testing](testing.md) — run fast tests and the opt-in two-client offline convergence example.
-6. [Deployment](deployment.md) — build, preview, customize, and host the static PWA.
-7. [Application-origin migration](application-origin-migration.md) — move a deployed app across a
-   browser security boundary with explicit recovery, verification, rollback, and retirement.
-8. [Troubleshooting](troubleshooting.md) — diagnose common environment, browser, build, and test
-   failures.
+| Step | Guide                                                           | What you do                                                                                                   |
+| ---- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 1    | [Getting started](getting-started.md)                           | Scaffold an app, verify local persistence, and identify the files you are expected to change.                 |
+| 2    | [Data and UI](data-and-ui.md)                                   | Connect a Jazz table to a typed Preact hook and island.                                                       |
+| 3    | [Permissions](permissions.md)                                   | Understand and change the starter's owner-only access policy.                                                 |
+| 4    | [Sync and recovery](sync-and-recovery.md)                       | Provision managed sync and understand the account lifecycle.                                                  |
+| 5    | [Testing](testing.md)                                           | Run fast tests and the opt-in two-client offline convergence example.                                         |
+| 6    | [Deployment](deployment.md)                                     | Build, preview, customize, and host the static PWA.                                                           |
+| 7    | [Application-origin migration](application-origin-migration.md) | Move a deployed app across a browser security boundary with recovery, verification, rollback, and retirement. |
+
+Blocked at any step — environment, browser, build, or test failures? Go straight to
+[Troubleshooting](troubleshooting.md).
 
 The root [README](https://github.com/FelineStateMachine/lofi/blob/main/README.md) provides the
 shortest product overview and command summary.

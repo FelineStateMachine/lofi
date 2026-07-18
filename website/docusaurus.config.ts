@@ -40,7 +40,20 @@ const config: Config = {
     },
   },
 
-  themes: ["@docusaurus/theme-mermaid"],
+  themes: [
+    "@docusaurus/theme-mermaid",
+    [
+      // fully client-side search over an index built at build time — no
+      // external search service, which suits a local-first framework
+      "@easyops-cn/docusaurus-search-local",
+      {
+        hashed: true,
+        indexBlog: false,
+        docsRouteBasePath: ["docs", "api"],
+        docsDir: ["../docs", "api-gen"],
+      },
+    ],
+  ],
 
   i18n: {
     defaultLocale: "en",

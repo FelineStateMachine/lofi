@@ -60,17 +60,23 @@
     "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium",
     "test:golden": "deno run -A tools/golden.ts --source local",
     "test:golden:registry": "deno run -A tools/golden.ts --source registry",
+    "site:api": "deno run --allow-read --allow-run --allow-write=website/api-gen tools/api_docs.ts",
+    "site:llms": "deno run --allow-read --allow-write=website/static --allow-env=SITE_URL tools/site_llms.ts",
+    "site:build": "deno task site:api && deno task site:llms && npm run build --prefix website",
+    "site:dev": "deno task site:api && deno task site:llms && npm start --prefix website",
     "publish:dry": "deno publish --dry-run"
   },
   "fmt": {
     "lineWidth": 100,
     "semiColons": true,
-    "singleQuote": false
+    "singleQuote": false,
+    "exclude": ["website"]
   },
   "lint": {
     "rules": {
       "tags": ["recommended"]
-    }
+    },
+    "exclude": ["website"]
   },
   "publish": {
     "include": [

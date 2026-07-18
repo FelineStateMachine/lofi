@@ -134,7 +134,6 @@ later makes existing values unreadable — treat it like a column name. Constrai
 - **Account-private only, for now.** The key derives from the account secret, so every device
   holding the account decrypts and nobody else does — including other members of a shared group. A
   row read under a different account throws `EncryptedColumnError` instead of returning garbage.
-  Shared-field keys are tracked in the field-encryption issue.
 - **Not filterable, not policy-visible.** `where` on an encrypted column compares ciphertext and
   matches nothing useful, and a permission policy must not reference one — the server cannot
   evaluate what it cannot read. Filter and gate on plaintext columns beside it.

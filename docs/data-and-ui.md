@@ -206,7 +206,7 @@ export function useWorkspaceRecords(workspaceId: string) {
 Components consume `createRecord` and `archiveRecord`; they do not call `getRuntime`, manage Jazz
 subscriptions, or listen for runtime recreation. The generated task hook is the smallest working
 example. For a complete access-aware composition, see the
-[collaborative list recipe](examples/collaborative-list.md).
+[collaborative list data model](examples/collaborative-list.md).
 
 ## Schema changes and migrations
 

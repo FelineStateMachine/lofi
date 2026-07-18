@@ -33,9 +33,11 @@ shortest product overview and command summary. AI agents can ingest these docs a
 - [Generated project layout](reference/project-layout.md)
 - [Identity and recovery model](auth-identity.md)
 - [Account and access API](reference/access.md)
-- [Shared example](examples/shared.md)
-- [Group example](examples/group.md)
-- [Collaborative list recipe](examples/collaborative-list.md)
+- Access template examples — who may touch which rows
+  - [Direct sharing](examples/shared.md)
+  - [Fixed-role group](examples/group.md)
+- Data modeling examples — how to shape tables and columns
+  - [Collaborative list data model](examples/collaborative-list.md)
 - [Optional installed-app recipes](recipes/README.md)
 - [Advanced device-auth primitive](auth.md)
 

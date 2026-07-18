@@ -26,6 +26,7 @@ const app = s.defineApp({
     required: s.string(),
     note: s.string().optional(),
     label: s.string().default("untitled"),
+    status: s.enum("open", "done", "dropped").default("open"),
     // CONFORMANCE FINDING (alpha.53): `.merge()` returns the untyped builder
     // because the legacy `merge(): this` signature shadows the typed overload,
     // which poisons the whole table's row types. The cast restores the typed
@@ -269,6 +270,16 @@ Deno.test("facade column modifiers (optional, default, counter, g-set) behave th
     assert(
       readBack.label === "untitled",
       `default: omitted column read back as ${describeValue(readBack.label)}`,
+    );
+    assert(
+      readBack.status === "open",
+      `enum default: omitted column read back as ${describeValue(readBack.status)}`,
+    );
+    await db.update(app.modifiers, row.id, { status: "done" }).wait({ tier: "global" });
+    const transitioned = (await db.all(app.modifiers.where({ id: row.id })))[0];
+    assert(
+      transitioned?.status === "done",
+      `enum: update read back ${describeValue(transitioned?.status)}`,
     );
     assert(
       readBack.total === 0,

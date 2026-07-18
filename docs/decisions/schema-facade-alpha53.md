@@ -50,6 +50,9 @@ test.
   against `jazz-tools` and round-trips `defineApp`/`definePermissions` through the facade.
 - `package/schema/merge_sync_test.ts` — concurrent-writer merge semantics (lww, counter, g-set) over
   a real JazzServer with two synced clients and a fresh observer.
+- `package/schema/migration_test.ts` — the schema-evolution surface (`defineSchema`,
+  `defineMigration`, `renameTableFrom`, `add`/`drop`/`renameFrom`) over a real JazzServer: forward
+  and backward lens directions plus the missing-migration deploy guardrail.
 - `apps/reference/tests/author-boundary_test.ts` — rejects `jazz-tools` imports in all author
   source, including `schema.ts` and `permissions.ts`.
 - `deno task check` and `deno task build` pass with the reference app (and therefore the starter,
@@ -72,10 +75,15 @@ boolean, int (within i32), float, timestamp storage, enum, ref, json, array, byt
 payloads observed reliable), `.optional()`, `.default()`, `.transform()` (view type on
 insert/read/update; `where` filters take the stored type), lww merge (the default; concurrent
 conflicts resolve to the last write to reach the server on every replica), counter merge
-(single-session), g-set merge (single-table apps, cross-writer union), and policy conditions over
-typed columns. The three merge strategies (`lww`, `counter`, `g-set`) are the complete
-collaborative-value surface of the pinned alpha — Jazz 2 exports no successor to the 1.x CoValue
-types. Engine and type bugs found and pinned in the suite so an alpha bump surfaces any change:
+(single-session), g-set merge (single-table apps, cross-writer union), policy conditions over typed
+columns with `anyOf` alternatives, `permissionIntrospectionColumns` (`$canRead`/`$canEdit`/
+`$canDelete` selected per row, mirroring the deployed policy), and the full migration surface
+(`defineSchema`, `defineMigration`, `renameTableFrom`, `add`/`drop`/`renameFrom`; forward and
+backward lens directions carry data correctly, and deploying a changed schema without its migration
+reports `status: "missing"` and withholds permissions). The three merge strategies (`lww`,
+`counter`, `g-set`) are the complete collaborative-value surface of the pinned alpha — Jazz 2
+exports no successor to the 1.x CoValue types. Engine and type bugs found and pinned in the suite so
+an alpha bump surfaces any change:
 
 1. **`.merge()` and `.transform()` erase column typing.** The legacy untyped signatures
    (`merge(): this`, `transform(): ColumnBuilder`) shadow the typed overloads, degrading the column

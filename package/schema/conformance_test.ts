@@ -87,7 +87,7 @@ type RuleSet = {
 };
 type TableRules = Record<"allowInsert" | "allowRead" | "allowUpdate" | "allowDelete", RuleSet>;
 
-const permissions = s.definePermissions(app, ({ policy }) => {
+const permissions = s.definePermissions(app, ({ policy, session, anyOf }) => {
   const rules = policy as unknown as Record<string, TableRules>;
   for (const table of allowAllTables) {
     rules[table].allowInsert.always();
@@ -95,11 +95,14 @@ const permissions = s.definePermissions(app, ({ policy }) => {
     rules[table].allowUpdate.always();
     rules[table].allowDelete.always();
   }
-  // Policy conditions must match over a typed column, not only magic columns.
+  // Policy conditions must match over a typed column, not only magic columns,
+  // and anyOf must compose alternatives. Delete is deliberately denied for
+  // visible rows so the permission introspection columns have something to
+  // discriminate.
   policy.gated.allowInsert.always();
-  policy.gated.allowRead.where({ visible: true });
+  policy.gated.allowRead.where(anyOf([{ visible: true }, { $createdBy: session.user_id }]));
   policy.gated.allowUpdate.always();
-  policy.gated.allowDelete.always();
+  policy.gated.allowDelete.where({ visible: false });
 });
 
 type ThrowExpectation = {
@@ -442,11 +445,30 @@ Deno.test("policies filter on typed columns, not only magic columns", async () =
     const db = testApp.as(session("author"));
     await db.insert(app.gated, { visible: true, title: "shown" }).wait({ tier: "global" });
     await db.insert(app.gated, { visible: false, title: "hidden" }).wait({ tier: "global" });
-    const readable = await db.all(app.gated.where({}));
+    // The author matches the $createdBy alternative and sees both rows; a
+    // second identity only matches the typed-column alternative.
+    const authorView = await db.all(app.gated.where({}));
     assert(
-      readable.length === 1 && readable[0].title === "shown",
-      `gated: policy on a boolean column exposed ${readable.length} rows`,
+      authorView.length === 2,
+      `gated: anyOf alternatives exposed ${authorView.length} rows to the author, expected 2`,
     );
+    const viewer = testApp.as(session("viewer"));
+    const viewerView = await viewer.all(app.gated.where({}));
+    assert(
+      viewerView.length === 1 && viewerView[0].title === "shown",
+      `gated: policy on a boolean column exposed ${viewerView.length} rows to a non-author`,
+    );
+
+    const introspected = await db.all(
+      app.gated.select("title", "visible", ...s.permissionIntrospectionColumns).where({}),
+    );
+    for (const row of introspected) {
+      assert(
+        row.$canRead === true && row.$canEdit === true && row.$canDelete === !row.visible,
+        `introspection: permission columns read back ${JSON.stringify(row)}, expected ` +
+          `canDelete to mirror the visible-only delete rule`,
+      );
+    }
   } finally {
     await testApp.shutdown();
   }

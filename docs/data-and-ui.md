@@ -104,7 +104,8 @@ CoValue types (`co.map`, CoText, FileStream). All three are verified with two sy
   conflict resolves to the last write to reach the server, and live replicas and fresh boots agree.
 - **`"g-set"` works**: concurrent writers union their elements and every replica — including a fresh
   boot — converges on the same set. Keep a g-set table in its own single-table app for now; in the
-  pinned alpha a g-set column destabilizes writes to sibling tables in the same app.
+  pinned alpha a g-set column destabilizes writes to sibling tables in the same app. See the
+  [collaborative sets example](examples/collaborative-sets.md).
 - **`"counter"` is not dependable yet**: the server keeps the last causally ordered update value and
   sums only concurrent updates, while live replicas add every update as a delta, so a replica that
   watched the history diverges permanently from what a fresh boot reads. Avoid counter columns until
@@ -212,4 +213,6 @@ example. For a complete access-aware composition, see the
 
 Use `deno task schema:validate` while editing. For existing data, create and review a migration with
 `deno task migrations:create`, then use `migrations:push` and `schema:deploy` only with the intended
-managed configuration. Never put server-only secrets in source or browser code.
+managed configuration. Never put server-only secrets in source or browser code. The
+[schema evolution example](examples/schema-evolution.md) walks through a verified two-version
+migration — add, drop, rename, and table rename — in both directions.

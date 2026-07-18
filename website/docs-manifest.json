@@ -49,13 +49,17 @@
       "label": "Examples: access templates",
       "items": [
         { "id": "examples/shared", "label": "Direct sharing" },
-        { "id": "examples/group", "label": "Fixed-role group" }
+        { "id": "examples/group", "label": "Fixed-role group" },
+        { "id": "examples/policy-conditions", "label": "Policy conditions" }
       ]
     },
     {
       "label": "Examples: data modeling",
       "items": [
-        { "id": "examples/collaborative-list", "label": "Collaborative list data model" }
+        { "id": "examples/collaborative-list", "label": "Collaborative list data model" },
+        { "id": "examples/collaborative-sets", "label": "Collaborative sets" },
+        { "id": "examples/payloads", "label": "Binary and structured payloads" },
+        { "id": "examples/schema-evolution", "label": "Schema evolution" }
       ]
     },
     {

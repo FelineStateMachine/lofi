@@ -18,8 +18,12 @@ rather than degrade silently. Causes, in resolution order:
    needs a `libnode.dll` import library the upstream toolchain ships only for msvc). Windows nodes
    run LAN-only until that resolves.
 
-The compiled binary embeds digest-pinned prebuilts for macOS arm64/x86_64 and Linux x86_64/aarch64;
-a cache extraction that doesn't match its pin fails loudly rather than loading.
+On **arm64 Linux** the limitation sits one layer deeper: the Jazz engine (jazz-napi) publishes no
+linux-arm64-gnu build, so the node cannot start at all there. Release binaries and the container
+image cover macOS arm64 and Linux x86_64 ([platform notes](beyond-the-lan.md)).
+
+The compiled binary embeds digest-pinned prebuilts; a cache extraction that doesn't match its pin
+fails loudly rather than loading.
 
 ## 401 `invalid_ticket`
 

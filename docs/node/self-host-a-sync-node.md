@@ -23,8 +23,9 @@ For a single self-contained binary instead, compile from a checkout of
 deno task compile   # → dist/lofi-node
 ```
 
-Either way, the native transport layer covers macOS arm64/x86_64 and Linux x86_64/aarch64; on
-Windows the node runs LAN-only ([why](troubleshooting.md)).
+Either way, full support covers macOS arm64 and Linux x86_64 (including the
+[container image](beyond-the-lan.md)); on Windows and arm64 Linux the node is limited
+([why](troubleshooting.md)).
 
 ## 2. Initialize and start
 

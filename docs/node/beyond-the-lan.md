@@ -60,14 +60,55 @@ forgoes relay-assisted address discovery, so expect hole-punching to suffer acro
 deno task compile   # → dist/lofi-node
 ```
 
-The compiled binary embeds the prebuilt native transport matrix — macOS arm64 and x86_64, Linux
-x86_64 and aarch64 — and extracts the right library to a version-keyed OS cache on first run.
-Artifact digests are pinned in the source, so an extraction that doesn't match its pin fails loudly.
+The compiled binary embeds the prebuilt native transport layer and extracts it to a version-keyed OS
+cache on first run. Artifact digests are pinned in the source, so an extraction that doesn't match
+its pin fails loudly. Release binaries cover macOS arm64 and Linux x86_64.
 
 **Windows** is a documented gap: the native layer's build path needs a `libnode.dll` import library
 the upstream toolchain doesn't ship for this configuration. On Windows the node runs LAN-only — the
 Jazz server works, `status().mesh` reports `{ state: "unavailable", reason: … }`, and
 `ticket()`/`pair()` throw typed errors rather than degrade silently.
+
+**Linux aarch64** is a second documented gap: the Jazz engine (jazz-napi) publishes no
+linux-arm64-gnu build, so neither a compiled binary nor a native container image can boot on arm64
+Linux. The iroh transport layer is built for the platform already; the target returns when the
+upstream package appears.
+
+## Run it in Docker
+
+The container image wraps the same compiled binary in a minimal glibc base:
+`ghcr.io/felinestatemachine/lofi-node`, published per release, linux/amd64 (per the platform note
+above; Docker Desktop and qemu run it on arm64 hosts under emulation).
+
+```sh
+docker run --rm -v lofi-node-data:/data ghcr.io/felinestatemachine/lofi-node \
+  init --dir /data --port 4802 --public-url https://sync.example.net
+docker run -d --name lofi-node --network host \
+  -v lofi-node-data:/data ghcr.io/felinestatemachine/lofi-node
+```
+
+Everything durable lives in the `/data` volume: `config.json`, the node identity key,
+`tickets.json`, and the SQLite store. CLI verbs run through `docker exec` against the same directory
+and take effect without a restart, exactly as outside a container:
+
+```sh
+docker exec lofi-node lofi-node ticket issue --dir /data --label phone
+```
+
+Two container-specific choices matter:
+
+- **Networking.** Host networking keeps Docker's bridge NAT out of iroh's hole-punching path. A
+  bridge network with a published port (`-p 4802:4802`) serves apps through the gate without issue,
+  but paired nodes behind it are more likely to fall back to relayed traffic
+  ([the relay's role](pair-two-homes.md)). Host networking is a Linux feature; Docker Desktop
+  supports it from version 4.34.
+- **The health check** probes `http://127.0.0.1:4802/health`. A node initialized with a different
+  `--port` needs the check overridden in compose.
+
+The image runs as uid 1000. Named volumes inherit that ownership; a bind mount must be writable by
+uid 1000 (`chown 1000:1000 <dir>`) or the storage probe fails at boot, naming the path. The
+repository's [compose.yaml](https://github.com/FelineStateMachine/lofi-node/blob/main/compose.yaml)
+is the reference deployment.
 
 ## The version invariant
 

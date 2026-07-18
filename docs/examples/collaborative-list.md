@@ -6,7 +6,7 @@ no realtime permission mode and no group-specific query hook.
 ## Schema
 
 ```ts
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 import { groupMembershipTable } from "@nzip/lofi/access";
 
 export const app = s.defineApp({

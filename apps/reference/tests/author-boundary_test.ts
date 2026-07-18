@@ -12,8 +12,8 @@ const authorUiFiles = [
   new URL("../src/islands/use-tasks.ts", import.meta.url),
 ];
 
-// schema.ts and permissions.ts are the starter's two deliberate raw-Jazz
-// surfaces; every other rule still applies to them.
+// schema.ts and permissions.ts declare data through @nzip/lofi/schema; the
+// full rule set applies to them, raw Jazz imports included.
 const schemaSurfaceFiles = [
   new URL("../src/schema.ts", import.meta.url),
   new URL("../src/permissions.ts", import.meta.url),
@@ -32,7 +32,6 @@ const forbidden = [
   { pattern: /workbox/i, name: "Workbox configuration" },
   { pattern: /navigator\.|globalThis\.(?:isSecureContext|SharedWorker)/, name: "browser branch" },
 ];
-const forbiddenOnSchemaSurface = forbidden.filter((rule) => rule.name !== "raw Jazz import");
 
 test("author source consumes public lofi package seams and hides plumbing from product UI", async () => {
   for (
@@ -55,17 +54,9 @@ test("author source consumes public lofi package seams and hides plumbing from p
       throw new Error(`${file.pathname} imports vendored framework code`);
     }
   }
-  for (const file of authorUiFiles) {
+  for (const file of [...authorUiFiles, ...schemaSurfaceFiles]) {
     const source = await Deno.readTextFile(file);
     for (const rule of forbidden) {
-      if (rule.pattern.test(source)) {
-        throw new Error(`${file.pathname} exposes forbidden ${rule.name}`);
-      }
-    }
-  }
-  for (const file of schemaSurfaceFiles) {
-    const source = await Deno.readTextFile(file);
-    for (const rule of forbiddenOnSchemaSurface) {
       if (rule.pattern.test(source)) {
         throw new Error(`${file.pathname} exposes forbidden ${rule.name}`);
       }

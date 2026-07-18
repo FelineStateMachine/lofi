@@ -4,7 +4,7 @@
 // when a new runtime module lands without being added to the manifest
 // (namespace-state.ts and transport-gate.ts shipped exactly that way and
 // broke every generated project's build until vendoring caught up).
-import { accessFiles, preactFiles, recipeFiles, runtimeFiles } from "./mod.ts";
+import { accessFiles, preactFiles, recipeFiles, runtimeFiles, schemaFiles } from "./mod.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -33,6 +33,7 @@ const manifests: ReadonlyArray<[string, readonly string[]]> = [
   ["access", accessFiles],
   ["preact", preactFiles],
   ["recipes", recipeFiles],
+  ["schema", schemaFiles],
 ];
 
 Deno.test("the .lofi vendoring manifests match the package directories", async () => {

@@ -3,7 +3,7 @@
 Define a group, its membership relation, and resources that reference it:
 
 ```ts
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 import { groupMembershipTable } from "@nzip/lofi/access";
 
 export const app = s.defineApp({

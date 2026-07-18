@@ -19,6 +19,7 @@
     "@nzip/lofi/recipes/scope-extension": "../../package/recipes/scope-extension.ts",
     "@nzip/lofi/recipes/web-share": "../../package/recipes/web-share.ts",
     "@nzip/lofi/recipes/window-controls-overlay": "../../package/recipes/window-controls-overlay.ts",
+    "@nzip/lofi/schema": "../../package/schema/mod.ts",
     "@nzip/lofi/test": "../../package/commands/run_tests.ts",
     "@nzip/lofi/testing": "../../package/testing/mod.ts",
     "astro": "npm:astro@7.0.9",

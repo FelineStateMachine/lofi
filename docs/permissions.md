@@ -8,7 +8,7 @@ identity may read or mutate each table; hiding a button in the UI is not a subst
 The generated task app uses creator-owned rows:
 
 ```ts
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 import { app } from "./schema.ts";
 
 export default s.definePermissions(app, ({ policy, session }) => {
@@ -62,10 +62,10 @@ The starter remains private by default. When a resource has a concrete collabora
 | `sharedAccess`  | Creator plus explicit recipients | Creator; recipients with editable grants may update | Required |
 | `groupAccess`   | Group members                    | Determined by the fixed group role                  | Required |
 
-The schema remains raw Jazz:
+The schema stays on the lofi schema surface:
 
 ```ts
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 import { groupMembershipTable, sharedGrantTable } from "@nzip/lofi/access";
 
 const schema = {
@@ -92,9 +92,9 @@ export default defineAccessPolicies(app, [
 ]);
 ```
 
-This is not a general schema facade. Use `s.table()`, `s.defineApp()`, and `s.definePermissions()`
-directly whenever the templates do not fit. `defineAccessPolicies` also accepts a final raw-policy
-callback for a small extension without hiding Jazz.
+The templates do not replace the schema surface. Use `s.table()`, `s.defineApp()`, and
+`s.definePermissions()` directly whenever they do not fit. `defineAccessPolicies` also accepts a
+final raw-policy callback for a small extension without hiding the underlying policy builder.
 
 ## Fixed group roles
 
@@ -107,7 +107,7 @@ callback for a small extension without hiding Jazz.
 
 The helper stores the role label plus fixed capability bits because the pinned Jazz alpha rejects
 role-string comparisons inside relationship policies. Only the four role names are accepted by the
-typed operations; custom roles belong in a raw Jazz policy.
+typed operations; custom roles belong in a raw policy callback.
 
 **The group creator holds a permanent superseat.** Whoever created the group row can always update
 it and — because membership management derives from group-update authority — can always restore

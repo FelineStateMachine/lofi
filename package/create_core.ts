@@ -159,6 +159,7 @@ const lofiImportTargets: Record<string, { subpath: string; localPath: string }> 
     subpath: "recipes/window-controls-overlay",
     localPath: "recipes/window-controls-overlay.ts",
   },
+  "@nzip/lofi/schema": { subpath: "schema", localPath: "schema/mod.ts" },
   "@nzip/lofi/test": { subpath: "test", localPath: "commands/run_tests.ts" },
   "@nzip/lofi/testing": { subpath: "testing", localPath: "testing/mod.ts" },
 };

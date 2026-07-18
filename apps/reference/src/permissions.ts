@@ -1,4 +1,4 @@
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 import { app } from "./schema.ts";
 
 export default s.definePermissions(app, ({ policy, session }) => {

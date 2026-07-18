@@ -1,8 +1,8 @@
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 
-// Author-owned schema. This file and permissions.ts are the starter's two
-// deliberate raw-Jazz surfaces; UI islands consume the schema only through
-// public @nzip/lofi seams (see tests/author-boundary_test.ts).
+// Author-owned schema, declared through the lofi schema surface; UI islands
+// consume it only through public @nzip/lofi seams (see
+// tests/author-boundary_test.ts).
 const schema = {
   tasks: s.table({
     text: s.string(),

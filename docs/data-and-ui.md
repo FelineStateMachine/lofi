@@ -1,11 +1,12 @@
 # Data and UI
 
-Lofi keeps realtime plumbing out of product components. Authors declare Jazz tables and policies,
-build exact typed queries, and compose two package hooks inside a domain hook:
+Lofi keeps realtime plumbing out of product components. Authors declare tables and policies through
+the lofi schema surface, build exact typed queries, and compose two package hooks inside a domain
+hook:
 
 ```mermaid
 flowchart LR
-    Schema["Typed Jazz schema"] --> Policy["Private, Shared, or Group policy"]
+    Schema["Typed app schema"] --> Policy["Private, Shared, or Group policy"]
     Schema --> Query["Typed scoped query"]
     Query --> Live["useLiveQuery"]
     Table["Typed table"] --> Mutations["useTableMutations"]
@@ -20,7 +21,7 @@ errors, and durability tracking. `@nzip/lofi/preact` owns only the Preact lifecy
 ## Declare a table and policy
 
 ```ts
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 
 const schema = {
   records: s.table({
@@ -34,10 +35,12 @@ const schema = {
 export const app = s.defineApp(schema);
 ```
 
-`src/schema.ts` and `src/permissions.ts` are the two deliberate raw-Jazz surfaces in author source.
-UI islands stay on public package seams: derive row types with `RowOf` from `@nzip/lofi`
-(`type Record = RowOf<typeof app.schema.records>`) instead of importing the vendor module, and the
-generated author-boundary test enforces exactly that split.
+`@nzip/lofi/schema` exports the pinned Jazz 2 schema DSL one-to-one — same names, same behavior — so
+`src/schema.ts` and `src/permissions.ts` never import the vendor module and package upgrades absorb
+upstream changes (see [the decision record](decisions/schema-facade-alpha53.md)). UI islands stay on
+public package seams: derive row types with `RowOf` from `@nzip/lofi`
+(`type Record = RowOf<typeof app.schema.records>`), and the generated author-boundary test rejects
+raw `jazz-tools` imports in every author source file.
 
 Every table needs a policy in `src/permissions.ts`. Permissions determine which rows enter a live
 query and which mutations succeed; realtime access is not a separate permission mode. See

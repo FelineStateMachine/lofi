@@ -161,16 +161,24 @@ emitted, the worker falls back to the cached application root.
 
 ### Offline cache policy
 
-The build's precache manifest contains required shell resources only. If any listed response cannot
-be fetched, service-worker installation fails and reports a precache error rather than exposing a
-worker that cannot cold-start the application. Product-specific optional resources do not belong in
-that manifest.
+The build's precache manifest contains required shell resources only. Shell assets are fetched
+bypassing the HTTP cache (matching the manifest's own `no-store` fetch), so a new revision can never
+be populated from stale HTTP-cached responses. If any listed response cannot be fetched,
+service-worker installation fails and reports a precache error rather than exposing a worker that
+cannot cold-start the application. Product-specific optional resources do not belong in that
+manifest.
+
+Cache names carry the registration scope, and lookups consult only the worker's own caches: apps
+served from different base paths on one origin never read, shadow, or delete each other's caches,
+and activation prunes only the current scope's previous revisions. Requests carrying a `Range`
+header are left to the network — a cached complete response cannot answer a partial request.
 
 Runtime caching is a separate, best-effort policy. It accepts only successful, public, same-origin
 responses inside the worker scope for fonts, images, scripts, styles, and workers. Navigation,
 cross-origin requests, partial responses, `private` or `no-store` responses, and `Vary: *` responses
 are not added. The cache retains at most 64 entries, moves refreshed URLs to the end, evicts the
-oldest inserted overflow, and removes previous build revisions during activation.
+oldest inserted overflow, and removes the current scope's previous build revisions during
+activation.
 
 Navigation preload remains disabled: generated routes and their assets are precached, so starting a
 parallel network request before the normal cache-first lookup would spend bandwidth on the expected
@@ -186,9 +194,15 @@ browser offers it; an insecure or unsupported context is reported separately.
 When the app returns to the foreground, restores from the back-forward cache, or reconnects, Lofi
 asks the active service-worker registration to check for an update. Checks share one in-flight
 request, time out, and are rate-limited. Update state moves through `checking`, `installing`,
-`ready`, and `applying`; a waiting worker activates only after the user chooses **Update app**. Only
-that explicit action permits the following controller change to reload the page, so ordinary worker
-changes cannot create a reload loop.
+`ready`, and `applying`; a waiting worker activates only after the user chooses **Update app**. Once
+the new worker takes control, every claimed tab reloads — the new worker prunes the old revision's
+caches, so a document left on the old HTML and module graph would go stale — not only the tab that
+chose the update. The first claim of a previously uncontrolled page does not reload, and a document
+reloads at most once, so ordinary worker changes cannot create a reload loop.
+
+Foreground recovery reconnects managed sync only while the current account has elected sync and the
+development inspector has not paused the transport; a configured server alone is not consent to
+resume replication.
 
 A runtime-cache write error is best-effort and leaves the active worker ready. Registration,
 required precache, and activation failures remain worker failures; update-check failures leave the

@@ -1,7 +1,9 @@
 const serviceWorkerUrl = new URL("./sw.js", import.meta.url);
 const revision = "__LOFI_BUILD_REVISION__";
-const shellCacheName = `lofi-shell-${revision}`;
-const runtimeCacheName = `lofi-runtime-${revision}`;
+// The harness registers at scope https://example.com/app/, so cache names
+// carry the "app" scope key and never collide with sibling base paths.
+const shellCacheName = `lofi-scope-app-shell-${revision}`;
+const runtimeCacheName = `lofi-scope-app-runtime-${revision}`;
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -320,24 +322,99 @@ Deno.test("runtime cache evicts its oldest entry at the fixed size bound", async
   }
 });
 
-Deno.test("activation removes old shell and runtime revisions but preserves unrelated caches", async () => {
+Deno.test("activation prunes only this scope's stale revisions", async () => {
   const harness = await serviceWorkerHarness(() => Promise.resolve(new Response("unused")));
   try {
-    await harness.caches.open("lofi-shell-old");
-    await harness.caches.open("lofi-runtime-old");
+    await harness.caches.open(`lofi-scope-app-shell-old`);
+    await harness.caches.open(`lofi-scope-app-runtime-old`);
     await harness.caches.open(shellCacheName);
     await harness.caches.open(runtimeCacheName);
+    // A sibling lofi app at another base path and a legacy unscoped cache —
+    // neither provably ours, neither may be deleted.
+    await harness.caches.open("lofi-scope-other-shell-old");
+    await harness.caches.open("lofi-shell-legacy");
+    await harness.caches.open("lofi-runtime-legacy");
     await harness.caches.open("product-cache");
     await harness.dispatchLifecycle("activate");
     const names = await harness.caches.keys();
-    assert(!names.includes("lofi-shell-old"), "stale shell cache survived activation");
-    assert(!names.includes("lofi-runtime-old"), "stale runtime cache survived activation");
+    assert(!names.includes("lofi-scope-app-shell-old"), "stale shell revision survived activation");
+    assert(
+      !names.includes("lofi-scope-app-runtime-old"),
+      "stale runtime revision survived activation",
+    );
     assert(
       names.includes(shellCacheName) && names.includes(runtimeCacheName),
       "current caches removed",
     );
+    assert(
+      names.includes("lofi-scope-other-shell-old"),
+      "a sibling app's scoped cache was deleted",
+    );
+    assert(
+      names.includes("lofi-shell-legacy") && names.includes("lofi-runtime-legacy"),
+      "ambiguous legacy caches were deleted",
+    );
     assert(names.includes("product-cache"), "unrelated cache was removed");
     assert(harness.claimed() === 1, "activation did not claim clients");
+  } finally {
+    harness.close();
+  }
+});
+
+Deno.test("lookups never read another cache on the origin", async () => {
+  const harness = await serviceWorkerHarness(() => Promise.resolve(new Response("network")));
+  try {
+    const product = await harness.caches.open("product-cache");
+    await product.put("https://example.com/app/photo.png", new Response("product shadow"));
+    const event = harness.dispatchFetch(
+      fakeRequest("https://example.com/app/photo.png", { destination: "image" }),
+    );
+    assert(event.response, "request was not handled");
+    assert(
+      await (await event.response).text() === "network",
+      "a foreign cache shadowed the worker's own caches",
+    );
+    await Promise.all(event.lifetimes);
+  } finally {
+    harness.close();
+  }
+});
+
+Deno.test("shell precache bypasses the HTTP cache for every asset", async () => {
+  const precacheInputs: Array<RequestInfo | URL> = [];
+  const harness = await serviceWorkerHarness((input) => {
+    const url = requestUrl(input);
+    if (url.endsWith("lofi-precache.json")) return Promise.resolve(Response.json(["./"]));
+    precacheInputs.push(input);
+    return Promise.resolve(new Response("shell"));
+  });
+  try {
+    await harness.dispatchLifecycle("install");
+    assert(precacheInputs.length === 1, "expected one precached shell asset");
+    const request = precacheInputs[0];
+    assert(request instanceof Request, "precache must construct explicit requests");
+    assert(
+      request.cache === "reload",
+      "shell assets must bypass the HTTP cache, matching the manifest's no-store fetch",
+    );
+  } finally {
+    harness.close();
+  }
+});
+
+Deno.test("range requests are left to the network", async () => {
+  const harness = await serviceWorkerHarness(() => Promise.resolve(new Response("full body")));
+  try {
+    const shell = await harness.caches.open(shellCacheName);
+    await shell.put("https://example.com/app/audio.mp3", new Response("cached full"));
+    const event = harness.dispatchFetch({
+      ...fakeRequest("https://example.com/app/audio.mp3", { destination: "" }),
+      headers: { get: (name: string) => name === "range" ? "bytes=0-1023" : null },
+    });
+    assert(
+      event.response === undefined,
+      "a Range request must not be answered with a cached 200",
+    );
   } finally {
     harness.close();
   }

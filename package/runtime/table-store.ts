@@ -22,13 +22,23 @@ export type TableSnapshot<T extends TableRow> = {
 
 type Listener = () => void;
 type MutationHandle = {
+  /** The vendor batch id, used to attribute asynchronous rejections. */
+  batchId?: unknown;
   wait(options: { tier: "local" | "global" }): Promise<unknown>;
 };
 
+// Own-batch attribution keeps a bounded window of recent writes; late
+// rejections older than this are diagnostics-only.
+const MAX_TRACKED_BATCHES = 128;
+
 /** Runtime options controlling durability waits and diagnostics notifications. */
 export type TableStoreOptions = {
-  /** Whether managed sync is configured; gates global-durability waits. */
-  syncConfigured?: boolean;
+  /**
+   * Whether managed sync is configured; gates global-durability waits. Read
+   * live on every write so stores follow sync elections and stops without
+   * being recreated.
+   */
+  syncConfigured?: () => boolean;
   /** Called whenever a diagnostics counter changes. */
   onDiagnosticsChange?: () => void;
 };
@@ -42,10 +52,12 @@ export class TableStore<T extends TableRow, Init> {
   readonly #db: Db;
   readonly #table: TableHandle<T, Init>;
   readonly #diagnostics: RuntimeDiagnostics;
-  readonly #syncConfigured: boolean;
+  readonly #syncConfigured: () => boolean;
   readonly #diagnosticsChanged: () => void;
   readonly #listeners = new Set<Listener>();
   readonly #stopMutationErrors: () => void;
+  readonly #ownBatches = new Set<unknown>();
+  #batchTracking = false;
   #vendorUnsubscribe: (() => void) | null = null;
   #writeGeneration = 0;
   #snapshot: TableSnapshot<T> = {
@@ -65,11 +77,16 @@ export class TableStore<T extends TableRow, Init> {
     this.#db = db;
     this.#table = table;
     this.#diagnostics = diagnostics;
-    this.#syncConfigured = options.syncConfigured ?? false;
+    this.#syncConfigured = options.syncConfigured ?? (() => false);
     this.#diagnosticsChanged = options.onDiagnosticsChange ?? (() => undefined);
     // Asynchronous write rejections that are not tied to an awaited mutation
-    // still have to reach diagnostics and the UI, so the store owns this listener.
-    this.#stopMutationErrors = db.onMutationError((event) => this.reportMutationError(event));
+    // still have to reach diagnostics and the UI, so the store owns this
+    // listener. The vendor event is database-wide, so it is filtered to this
+    // store's own batches — one table's rejection must not mark every store
+    // failed or multiply diagnostics counts.
+    this.#stopMutationErrors = db.onMutationError((event) => {
+      if (this.#ownsBatch(event)) this.reportMutationError(event);
+    });
     this.#diagnostics.activeMutationListeners += 1;
     this.#diagnostics.totalMutationListeners += 1;
     this.#diagnosticsChanged();
@@ -90,7 +107,9 @@ export class TableStore<T extends TableRow, Init> {
     return () => {
       if (!active) return;
       active = false;
-      this.#listeners.delete(subscriber);
+      // After close() the listener set is already empty; a late unsubscribe
+      // must not decrement consumers a second time.
+      if (!this.#listeners.delete(subscriber)) return;
       this.#diagnostics.activeConsumers -= 1;
       this.#diagnosticsChanged();
       if (this.#listeners.size === 0) this.#closeVendorSubscription();
@@ -130,12 +149,36 @@ export class TableStore<T extends TableRow, Init> {
     this.#diagnosticsChanged();
   }
 
+  #ownsBatch(event: MutationErrorEvent): boolean {
+    const batchId = event.batch?.batchId;
+    // Attribution is only possible when the vendor exposes batch ids on both
+    // sides; without them, surface every event rather than silence real errors.
+    if (batchId === undefined || !this.#batchTracking) return true;
+    return this.#ownBatches.has(batchId);
+  }
+
+  #trackBatch(mutation: MutationHandle): void {
+    if (mutation.batchId === undefined) return;
+    this.#batchTracking = true;
+    this.#ownBatches.add(mutation.batchId);
+    if (this.#ownBatches.size > MAX_TRACKED_BATCHES) {
+      this.#ownBatches.delete(this.#ownBatches.values().next().value);
+    }
+  }
+
   async #settle(mutation: MutationHandle): Promise<void> {
     const generation = ++this.#writeGeneration;
     let localPending = true;
+    this.#trackBatch(mutation);
     this.#diagnostics.pendingLocalWrites += 1;
     this.#diagnosticsChanged();
-    this.#set({ status: "ready", durability: "none", error: null });
+    // A store that has not received its first query result stays loading —
+    // a mutation must not present an empty table as ready.
+    this.#set({
+      status: this.#snapshot.status === "loading" ? "loading" : "ready",
+      durability: "none",
+      error: null,
+    });
     try {
       await mutation.wait({ tier: "local" });
       localPending = false;
@@ -145,7 +188,7 @@ export class TableStore<T extends TableRow, Init> {
       if (generation === this.#writeGeneration) {
         this.#set({ durability: "local", error: null });
       }
-      if (this.#syncConfigured) {
+      if (this.#syncConfigured()) {
         this.#diagnostics.pendingGlobalWrites += 1;
         this.#diagnosticsChanged();
         void mutation.wait({ tier: "global" }).then(
@@ -157,7 +200,9 @@ export class TableStore<T extends TableRow, Init> {
           (error) => {
             this.#diagnostics.mutationErrors += 1;
             this.#diagnosticsChanged();
-            this.#fail(error);
+            // Match the success guard: a superseded write's late rejection is
+            // diagnosable but must not overwrite the newer write's durability.
+            if (generation === this.#writeGeneration) this.#fail(error);
           },
         ).finally(() => {
           this.#diagnostics.pendingGlobalWrites -= 1;

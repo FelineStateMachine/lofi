@@ -1,7 +1,14 @@
 const BUILD_REVISION = "__LOFI_BUILD_REVISION__";
 // Package-owned service worker source.
-const SHELL_CACHE_PREFIX = "lofi-shell-";
-const RUNTIME_CACHE_PREFIX = "lofi-runtime-";
+// Cache names carry the registration scope so sibling lofi apps on the same
+// origin never see or delete each other's caches. The `lofi-scope-` family
+// also deliberately escapes the legacy `lofi-shell-`/`lofi-runtime-` prefixes,
+// so a sibling still running a pre-scoped worker cannot prune these caches.
+const SCOPE_KEY = new URL(self.registration.scope).pathname
+  .replace(/[^a-zA-Z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "") || "root";
+const SHELL_CACHE_PREFIX = `lofi-scope-${SCOPE_KEY}-shell-`;
+const RUNTIME_CACHE_PREFIX = `lofi-scope-${SCOPE_KEY}-runtime-`;
 const SHELL_CACHE_NAME = `${SHELL_CACHE_PREFIX}${BUILD_REVISION}`;
 const RUNTIME_CACHE_NAME = `${RUNTIME_CACHE_PREFIX}${BUILD_REVISION}`;
 const MAX_RUNTIME_ENTRIES = 64;
@@ -22,9 +29,17 @@ self.addEventListener("install", (event) => {
       if (!response.ok) throw new Error(`precache manifest failed: ${response.status}`);
       const paths = await response.json();
       // Every emitted path is part of the generated offline shell. Installation
-      // fails as one transaction rather than claiming readiness with a partial shell.
+      // fails as one transaction rather than claiming readiness with a partial
+      // shell. `cache: "reload"` bypasses the HTTP cache for every shell asset,
+      // matching the manifest's no-store fetch — otherwise a new revision's
+      // cache could be populated from stale HTTP-cached responses and serve
+      // them cache-first indefinitely.
       const cache = await caches.open(SHELL_CACHE_NAME);
-      await cache.addAll(paths.map((path) => new URL(path, self.registration.scope)));
+      await cache.addAll(
+        paths.map((path) =>
+          new Request(new URL(path, self.registration.scope), { cache: "reload" })
+        ),
+      );
     } catch (error) {
       await reportFailure(
         "precache",
@@ -41,6 +56,10 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
+    // Prune only this scope's stale revisions. Legacy unscoped
+    // `lofi-shell-*`/`lofi-runtime-*` names are left alone: they are
+    // indistinguishable from a sibling app's caches, and deleting what we
+    // cannot prove is ours is the failure mode this scoping exists to end.
     for (const name of await caches.keys()) {
       const staleShell = name.startsWith(SHELL_CACHE_PREFIX) && name !== SHELL_CACHE_NAME;
       const staleRuntime = name.startsWith(RUNTIME_CACHE_PREFIX) && name !== RUNTIME_CACHE_NAME;
@@ -53,15 +72,26 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-function cachedPrerenderedNavigation(request) {
+// Look up responses only in this worker's own caches. An unscoped
+// caches.match() searches every cache on the origin, letting product or
+// sibling-app caches shadow lofi resources before ours are even consulted.
+async function matchOwnCaches(request, options) {
+  const shell = await caches.open(SHELL_CACHE_NAME);
+  const cached = await shell.match(request, options);
+  if (cached) return cached;
+  const runtime = await caches.open(RUNTIME_CACHE_NAME);
+  return await runtime.match(request, options);
+}
+
+async function cachedPrerenderedNavigation(request) {
   const requestUrl = new URL(request.url);
   const scope = new URL(self.registration.scope);
   if (requestUrl.origin !== scope.origin || !requestUrl.pathname.startsWith(scope.pathname)) {
     return undefined;
   }
   const route = requestUrl.pathname.slice(scope.pathname.length).replace(/^\/+|\/+$/g, "");
-  if (!route) return caches.match(scope);
-  return caches.match(new URL(`${route}/index.html`, scope));
+  if (!route) return await matchOwnCaches(scope);
+  return await matchOwnCaches(new URL(`${route}/index.html`, scope));
 }
 
 function isRuntimeCacheEligible(request) {
@@ -95,7 +125,7 @@ async function writeRuntimeCache(request, response) {
 }
 
 async function routeRequest(request) {
-  const cached = await caches.match(request, {
+  const cached = await matchOwnCaches(request, {
     ignoreSearch: request.mode === "navigate",
   });
   if (cached) return { response: cached };
@@ -111,7 +141,7 @@ async function routeRequest(request) {
     return { response, runtimeWrite };
   } catch (error) {
     if (request.mode === "navigate") {
-      const shell = await caches.match(new URL("./", self.registration.scope));
+      const shell = await matchOwnCaches(new URL("./", self.registration.scope));
       if (shell) return { response: shell };
     }
     throw error;
@@ -120,6 +150,9 @@ async function routeRequest(request) {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  // Cached responses are complete 200s; answering a Range request with one
+  // breaks seeking and Safari media playback. Let the browser go to network.
+  if (event.request.headers?.get?.("range")) return;
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
   const result = routeRequest(event.request);

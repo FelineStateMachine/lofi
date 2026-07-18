@@ -22,7 +22,7 @@ function diagnostics(): RuntimeDiagnostics {
   };
 }
 
-function fakeDb(options: { allowGlobal?: boolean } = {}) {
+function fakeDb(options: { allowGlobal?: boolean; batchIds?: boolean } = {}) {
   let subscriber: ((delta: { all: unknown[] }) => void) | null = null;
   let unsubscribeCalls = 0;
   let rejectNextWrite: Error | null = null;
@@ -31,19 +31,30 @@ function fakeDb(options: { allowGlobal?: boolean } = {}) {
     resolve(): void;
     reject(error: Error): void;
   } | null = null;
+  let deferredNextGlobal: {
+    promise: Promise<void>;
+    resolve(): void;
+    reject(error: Error): void;
+  } | null = null;
   let globalWaitCalls = 0;
+  let batchCounter = 0;
+  const mutationListeners = new Set<(event: MutationErrorEvent) => void>();
   const writes: Array<{ operation: "insert" | "update" | "delete"; value: unknown }> = [];
 
   function handle() {
     const deferredWrite = deferredNextWrite;
     deferredNextWrite = null;
+    const deferredGlobal = deferredNextGlobal;
+    deferredNextGlobal = null;
     return {
+      ...(options.batchIds ? { batchId: `batch-${++batchCounter}` } : {}),
       wait: ({ tier }: { tier: "local" | "global" }) => {
         if (tier === "global") {
           globalWaitCalls += 1;
           if (!options.allowGlobal) {
             return Promise.reject(new Error("unconfigured stores must not request global waits"));
           }
+          if (deferredGlobal) return deferredGlobal.promise;
           return Promise.resolve();
         }
         if (tier === "local" && rejectNextWrite) {
@@ -65,8 +76,9 @@ function fakeDb(options: { allowGlobal?: boolean } = {}) {
         subscriber = null;
       };
     },
-    onMutationError(_callback: (event: MutationErrorEvent) => void) {
-      return () => undefined;
+    onMutationError(callback: (event: MutationErrorEvent) => void) {
+      mutationListeners.add(callback);
+      return () => mutationListeners.delete(callback);
     },
     insert(_collection: unknown, next: unknown) {
       writes.push({ operation: "insert", value: next });
@@ -100,6 +112,20 @@ function fakeDb(options: { allowGlobal?: boolean } = {}) {
       });
       deferredNextWrite = { promise, resolve, reject };
       return deferredNextWrite;
+    },
+    deferNextGlobalWait() {
+      let resolve!: () => void;
+      let reject!: (error: Error) => void;
+      const promise = new Promise<void>((accept, decline) => {
+        resolve = accept;
+        reject = decline;
+      });
+      promise.catch(() => undefined);
+      deferredNextGlobal = { promise, resolve, reject };
+      return deferredNextGlobal;
+    },
+    emitMutationError(event: MutationErrorEvent) {
+      for (const listener of mutationListeners) listener(event);
     },
     writes,
     globalWaitCalls: () => globalWaitCalls,
@@ -194,7 +220,7 @@ test("every mutation exposes pending work and waits for local durability", async
 test("configured sync advances the latest write from local to global durability", async () => {
   const db = fakeDb({ allowGlobal: true });
   const store = createTableStore<Row, RowInit>(db.value, table, diagnostics(), {
-    syncConfigured: true,
+    syncConfigured: () => true,
   });
   await store.insert({ text: "sync after reconnect", completed: false, createdAt: new Date(0) });
   await Promise.resolve();
@@ -271,4 +297,91 @@ test("public mutation errors update observable diagnostics", () => {
   } as MutationErrorEvent);
   assertCount(counts.mutationErrors, 1, "mutation errors must be counted");
   assert(store.getSnapshot().error?.includes("permission denied"), "the reason must reach the UI");
+});
+
+test("stores follow sync elections and stops without being recreated", async () => {
+  const db = fakeDb({ allowGlobal: true });
+  let elected = false;
+  const store = createTableStore<Row, RowInit>(db.value, table, diagnostics(), {
+    syncConfigured: () => elected,
+  });
+  await store.insert({ text: "before election", completed: false, createdAt: new Date(0) });
+  assertCount(db.globalWaitCalls(), 0, "an unelected write must not request global durability");
+  elected = true;
+  await store.insert({ text: "after election", completed: false, createdAt: new Date(0) });
+  await Promise.resolve();
+  assertCount(db.globalWaitCalls(), 1, "a write after election must request global durability");
+  assert(store.getSnapshot().durability === "global", "the elected write must report global");
+  elected = false;
+  await store.insert({ text: "after stop", completed: false, createdAt: new Date(0) });
+  assertCount(db.globalWaitCalls(), 1, "a write after stopping sync must not accumulate waits");
+});
+
+test("a superseded write's late global rejection cannot mask newer global durability", async () => {
+  const db = fakeDb({ allowGlobal: true });
+  const counts = diagnostics();
+  const store = createTableStore<Row, RowInit>(db.value, table, counts, {
+    syncConfigured: () => true,
+  });
+  const staleGlobal = db.deferNextGlobalWait();
+  await store.insert({ text: "older", completed: false, createdAt: new Date(0) });
+  await store.insert({ text: "newer", completed: false, createdAt: new Date(0) });
+  await Promise.resolve();
+  assert(store.getSnapshot().durability === "global", "the newer write must reach global");
+  staleGlobal.reject(new Error("older write rejected late"));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert(
+    store.getSnapshot().durability === "global",
+    "a stale rejection must not overwrite the newer write's durability",
+  );
+  assert(store.getSnapshot().error === null, "a stale rejection must not surface as the error");
+  assertCount(counts.mutationErrors, 1, "the stale rejection must remain diagnosable");
+});
+
+test("asynchronous rejections mark only the store that owns the batch", async () => {
+  const db = fakeDb({ batchIds: true });
+  const counts = diagnostics();
+  const store = createTableStore<Row, RowInit>(db.value, table, counts);
+  await store.insert({ text: "mine", completed: false, createdAt: new Date(0) });
+  db.emitMutationError({
+    code: "WriteRejected",
+    reason: "another table's write",
+    batch: { batchId: "batch-999" },
+  } as unknown as MutationErrorEvent);
+  assert(store.getSnapshot().status !== "error", "a foreign batch must not fail this store");
+  assertCount(counts.mutationErrors, 0, "a foreign batch must not count against this store");
+  db.emitMutationError({
+    code: "WriteRejected",
+    reason: "revoked",
+    batch: { batchId: "batch-1" },
+  } as unknown as MutationErrorEvent);
+  assert(store.getSnapshot().status === "error", "the owning store must surface its rejection");
+  assert(store.getSnapshot().error?.includes("revoked"), "the cause must reach the UI");
+  assertCount(counts.mutationErrors, 1, "the owned rejection must be counted once");
+});
+
+test("an unsubscribe arriving after close cannot drive consumers negative", () => {
+  const counts = diagnostics();
+  const store = createTableStore<Row, RowInit>(fakeDb().value, table, counts);
+  const stop = store.subscribe(() => undefined);
+  store.close();
+  assertCount(counts.activeConsumers, 0, "close must release every consumer");
+  stop();
+  assertCount(counts.activeConsumers, 0, "a late unsubscribe must not double-decrement");
+});
+
+test("a mutation does not present an empty loading table as ready", async () => {
+  const db = fakeDb();
+  const store = createTableStore<Row, RowInit>(db.value, table, diagnostics());
+  const stop = store.subscribe(() => undefined);
+  assert(store.getSnapshot().status === "loading", "a fresh store must report loading");
+  await store.insert({ text: "first", completed: false, createdAt: new Date(0) });
+  assert(
+    store.getSnapshot().status === "loading",
+    "a write before the first query result must not claim the table is ready",
+  );
+  db.publish([{ id: "row-1", text: "first", completed: false, createdAt: new Date(0) }]);
+  assert(store.getSnapshot().status === "ready", "the first query result must end loading");
+  stop();
 });

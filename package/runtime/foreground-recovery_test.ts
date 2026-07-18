@@ -149,3 +149,36 @@ test("disposed lifecycle removes every browser event listener", async () => {
   await Promise.resolve();
   assertCount(reconnects, 0, "disposed lifecycle retained a browser listener");
 });
+
+test("recovery is idle while the live gate withholds consent", async () => {
+  const page = new EventTarget();
+  const document = new EventTarget();
+  let elected = false;
+  let reconnects = 0;
+  const manager = createForegroundRecovery({
+    enabled: true,
+    pageTarget: page,
+    visibilityTarget: document,
+    isVisible: () => true,
+    isOnline: () => true,
+    shouldReconnect: () => elected,
+    reconnect: () => {
+      reconnects += 1;
+      return Promise.resolve();
+    },
+  });
+  // A configured server is not consent: with sync stopped or the transport
+  // paused, foreground signals must not silently resume replication.
+  document.dispatchEvent(event("visibilitychange"));
+  page.dispatchEvent(event("online"));
+  await Promise.resolve();
+  assertCount(reconnects, 0, "recovery reconnected without an election");
+  assert(manager.getState().status === "idle", "a withheld gate must leave recovery idle");
+  assertCount(manager.getState().attempts, 0, "a withheld gate must not count attempts");
+  elected = true;
+  page.dispatchEvent(event("online"));
+  await Promise.resolve();
+  await Promise.resolve();
+  assertCount(reconnects, 1, "an elected account must recover on the next signal");
+  manager.dispose();
+});

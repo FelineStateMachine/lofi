@@ -4,6 +4,7 @@ import { readDeviceCapabilityReport } from "./device-capabilities.ts";
 import { type InspectorAdapter, type InspectorSnapshot, mountInspector } from "./inspector.ts";
 import { getForegroundRecoveryState, subscribeForegroundRecovery } from "./lifecycle.ts";
 import { getRuntime, getRuntimeDiagnostics, subscribeRuntimeDiagnostics } from "./runtime.ts";
+import { isTransportPausedByInspector, setTransportPausedByInspector } from "./transport-gate.ts";
 
 export type LofiDevelopmentBridge = InspectorAdapter;
 
@@ -12,7 +13,6 @@ type LofiDevelopmentGlobal = typeof globalThis & {
 };
 
 const stateListeners = new Set<() => void>();
-let transportPaused = false;
 
 function reloadBrowserClient(): Promise<void> {
   globalThis.location.reload();
@@ -59,7 +59,7 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
     sync: {
       mode: serverUrl ? "managed configured" : "local-only",
       transport: serverUrl
-        ? transportPaused ? "paused by inspector" : "live detail unavailable"
+        ? isTransportPausedByInspector() ? "paused by inspector" : "live detail unavailable"
         : "not configured",
       pendingLocalWrites: diagnostics.pendingLocalWrites,
       pendingGlobalWrites: diagnostics.pendingGlobalWrites,
@@ -103,9 +103,16 @@ const bridge: LofiDevelopmentBridge = {
       throw new Error("Cloud transport pause is unavailable in local-only mode");
     }
     const runtime = await getRuntime();
-    if (paused) await runtime.db.disconnect();
-    else await runtime.db.reconnect();
-    transportPaused = paused;
+    // Record the pause before touching the transport so foreground recovery
+    // cannot race a reconnect in between and silently override the inspector.
+    setTransportPausedByInspector(paused);
+    try {
+      if (paused) await runtime.db.disconnect();
+      else await runtime.db.reconnect();
+    } catch (error) {
+      setTransportPausedByInspector(!paused);
+      throw error;
+    }
     notifyState();
   },
   restartClient() {

@@ -293,6 +293,41 @@ test("waiting-worker update activation posts skip-waiting and reloads on control
   if (reloaded) throw new Error("one update action caused a reload loop");
 });
 
+test("a controlled tab reloads on an update another tab initiated", async () => {
+  // The new worker prunes the old revision's caches, so every claimed tab
+  // must leave the old HTML/module graph — not only the tab that clicked.
+  const container = new FakeContainer();
+  container.controller = asServiceWorker(new FakeServiceWorker("activated"));
+  container.registration.active = asServiceWorker(new FakeServiceWorker("activated"));
+  let reloaded = 0;
+  const controller = testController({
+    container,
+    production: true,
+    reload: () => reloaded += 1,
+  });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  container.dispatchEvent(new Event("controllerchange"));
+  if (reloaded !== 1) throw new Error("a bystander tab kept the stale document after an update");
+  container.dispatchEvent(new Event("controllerchange"));
+  if (reloaded !== 1) throw new Error("a document must reload at most once per lifetime");
+});
+
+test("the first claim of an uncontrolled page never reloads", async () => {
+  const container = new FakeContainer();
+  container.registration.active = asServiceWorker(new FakeServiceWorker("activated"));
+  let reloaded = false;
+  const controller = testController({
+    container,
+    production: true,
+    reload: () => reloaded = true,
+  });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  container.dispatchEvent(new Event("controllerchange"));
+  if (reloaded) throw new Error("clients.claim() on first visit must not reload the page");
+});
+
 test("foreground update checks are single-flight and rate-limited", async () => {
   const target = new EventTarget();
   const visibility = new EventTarget();

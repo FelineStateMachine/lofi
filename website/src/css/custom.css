@@ -57,3 +57,12 @@
 .navbar-sidebar .menu__link {
   color: #f3faf6;
 }
+
+/* the footer wears the brand forest, like the navbar */
+.footer--dark {
+  --ifm-footer-background-color: #18231f;
+  --ifm-footer-color: #8fae9f;
+  --ifm-footer-link-color: #f3faf6;
+  --ifm-footer-link-hover-color: #d5f26a;
+  --ifm-footer-title-color: #99e5bd;
+}

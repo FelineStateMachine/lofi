@@ -1,6 +1,7 @@
 import type { Db, MutationErrorEvent, QueryBuilder, TableProxy } from "jazz-tools";
 // Package-owned reactive table store.
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
+import { settleDurableWrite } from "./durability.ts";
 
 /** The minimum shape every persisted row exposes to the framework. */
 export type TableRow = { id: string };
@@ -173,12 +174,14 @@ export class TableStore<T extends TableRow, Init> {
     }
   }
 
+  #updateDiagnostics = (update: (diagnostics: RuntimeDiagnostics) => void): void => {
+    update(this.#diagnostics);
+    this.#diagnosticsChanged();
+  };
+
   async #settle(mutation: MutationHandle): Promise<void> {
     const generation = ++this.#writeGeneration;
-    let localPending = true;
     this.#trackBatch(mutation);
-    this.#diagnostics.pendingLocalWrites += 1;
-    this.#diagnosticsChanged();
     // A store that has not received its first query result stays loading —
     // a mutation must not present an empty table as ready.
     this.#set({
@@ -187,39 +190,29 @@ export class TableStore<T extends TableRow, Init> {
       error: null,
     });
     try {
-      await mutation.wait({ tier: "local" });
-      localPending = false;
-      this.#diagnostics.pendingLocalWrites -= 1;
-      this.#diagnostics.localWaitCalls += 1;
-      this.#diagnosticsChanged();
-      if (generation === this.#writeGeneration) {
-        this.#set({ durability: "local", error: null });
-      }
-      if (this.#syncConfigured()) {
-        this.#diagnostics.pendingGlobalWrites += 1;
-        this.#diagnosticsChanged();
-        void mutation.wait({ tier: "global" }).then(
-          () => {
+      // Generation guards keep a superseded write's late outcome — success or
+      // rejection — diagnosable without overwriting the newer write's state.
+      await settleDurableWrite(
+        mutation,
+        this.#updateDiagnostics,
+        this.#syncConfigured() ? "background" : "none",
+        {
+          onLocal: () => {
+            if (generation === this.#writeGeneration) {
+              this.#set({ durability: "local", error: null });
+            }
+          },
+          onGlobal: () => {
             if (generation === this.#writeGeneration) {
               this.#set({ durability: "global", error: null });
             }
           },
-          (error) => {
-            this.#diagnostics.mutationErrors += 1;
-            this.#diagnosticsChanged();
-            // Match the success guard: a superseded write's late rejection is
-            // diagnosable but must not overwrite the newer write's durability.
+          onGlobalError: (error) => {
             if (generation === this.#writeGeneration) this.#fail(error);
           },
-        ).finally(() => {
-          this.#diagnostics.pendingGlobalWrites -= 1;
-          this.#diagnosticsChanged();
-        });
-      }
+        },
+      );
     } catch (error) {
-      if (localPending) this.#diagnostics.pendingLocalWrites -= 1;
-      this.#diagnostics.mutationErrors += 1;
-      this.#diagnosticsChanged();
       this.#fail(error);
       throw error;
     }

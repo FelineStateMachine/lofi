@@ -1,5 +1,6 @@
 import type { QueryBuilder, TableProxy } from "jazz-tools";
 import { syncing } from "../runtime/config.ts";
+import { type DurableWrite, settleDurableWrite } from "../runtime/durability.ts";
 import { getRuntime, updateRuntimeDiagnostics } from "../runtime/runtime.ts";
 import { AccessError } from "./errors.ts";
 import { decodeSharingIdentity, type SharingIdentity } from "./identity.ts";
@@ -27,8 +28,6 @@ export type GroupMembershipRow = Identified & {
   can_manage: boolean;
 };
 
-type DurableWrite<T> = { wait(options: { tier: "local" | "global" }): Promise<T> };
-
 function requireSync(operation: string): void {
   if (!syncing()) {
     throw new AccessError(
@@ -38,33 +37,19 @@ function requireSync(operation: string): void {
   }
 }
 
-// Share and membership writes settle through the same runtime diagnostics as
-// table mutations, so access operations stay visible to the inspector instead
-// of bypassing pending-write and error counters entirely.
+// Share and membership writes settle through the shared runtime settlement
+// core, so access operations use the same diagnostics accounting as table
+// mutations and stay visible to the inspector. Access writes await the global
+// tier inline: a share is not "done" until the server accepted it.
 async function settle<T>(write: DurableWrite<T>): Promise<T> {
-  updateRuntimeDiagnostics((diagnostics) => diagnostics.pendingLocalWrites += 1);
-  let localSettled = false;
   try {
-    await write.wait({ tier: "local" });
-    localSettled = true;
-    updateRuntimeDiagnostics((diagnostics) => {
-      diagnostics.pendingLocalWrites -= 1;
-      diagnostics.localWaitCalls += 1;
-      diagnostics.pendingGlobalWrites += 1;
-    });
-    const result = await write.wait({ tier: "global" });
-    updateRuntimeDiagnostics((diagnostics) => {
-      diagnostics.pendingGlobalWrites -= 1;
-      diagnostics.lastWriteDurability = "global";
+    const result = await settleDurableWrite(write, updateRuntimeDiagnostics, "await", {
+      onGlobal: () =>
+        updateRuntimeDiagnostics((diagnostics) => diagnostics.lastWriteDurability = "global"),
     });
     return result;
   } catch (cause) {
-    updateRuntimeDiagnostics((diagnostics) => {
-      if (localSettled) diagnostics.pendingGlobalWrites -= 1;
-      else diagnostics.pendingLocalWrites -= 1;
-      diagnostics.mutationErrors += 1;
-      diagnostics.lastWriteDurability = "failed";
-    });
+    updateRuntimeDiagnostics((diagnostics) => diagnostics.lastWriteDurability = "failed");
     throw new AccessError(
       "mutation-rejected",
       "Jazz rejected the access change. Refresh permissions and membership, then try again.",

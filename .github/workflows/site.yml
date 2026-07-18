@@ -11,6 +11,7 @@ on:
       - "package/**"
       - "tools/api_docs.ts"
       - "tools/site_llms.ts"
+      - "tools/node_docs.ts"
       - "tools/entrypoints.ts"
       - "deno.json"
       - ".github/workflows/site.yml"
@@ -18,11 +19,25 @@ on:
 permissions:
   contents: read
 
+# The /node section renders from a PINNED lofi-node checkout so site builds are
+# reproducible; content changes there ride an explicit bump of this ref.
+# Bump procedure: point LOFI_NODE_REF at the new lofi-node commit SHA in the
+# same PR that reviews the resulting /node pages.
+env:
+  LOFI_NODE_REF: 1f83f723ce3cac025800407806aa5c4f51bc8a23
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      LOFI_NODE_DIR: lofi-node-checkout
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: FelineStateMachine/lofi-node
+          ref: ${{ env.LOFI_NODE_REF }}
+          path: lofi-node-checkout
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -31,10 +46,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: website/package-lock.json
-      - name: Generate API reference from JSDoc
-        run: deno task site:api
-      - name: Generate llms.txt and llms-full.txt
-        run: deno task site:llms
+      - name: Generate API references, /node docs, and llms.txt pairs
+        run: deno task site:gen
       - name: Install site dependencies
         run: npm ci --prefix website
       - name: Build site (fails on broken links)

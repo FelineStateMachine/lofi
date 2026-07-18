@@ -5,7 +5,13 @@ import { useReducer, useRef, useState } from "react";
 // devices. Offline writes queue in an outbox; reconnect merges. Ported from
 // the original vanilla implementation in the lofi-site landing page.
 
-type Task = { id: string; text: string; done: boolean; ts: number; origin: DeviceId };
+type Task = {
+  id: string;
+  text: string;
+  done: boolean;
+  ts: number;
+  origin: DeviceId;
+};
 type DeviceId = "A" | "B";
 type Device = { store: Map<string, Task>; outbox: string[] };
 type Rig = { seq: number; online: boolean; dev: Record<DeviceId, Device> };
@@ -27,7 +33,13 @@ function seedRig(): Rig {
     ["Order more perlite", false],
   ];
   for (const [text, done] of seeds) {
-    const task: Task = { id: `seed-${rig.seq}`, text, done, ts: rig.seq++, origin: "A" };
+    const task: Task = {
+      id: `seed-${rig.seq}`,
+      text,
+      done,
+      ts: rig.seq++,
+      origin: "A",
+    };
     rig.dev.A.store.set(task.id, { ...task });
     rig.dev.B.store.set(task.id, { ...task });
   }
@@ -72,12 +84,18 @@ function DeviceFrame(props: {
               }
             }}
           />
-          <button type="button" aria-label={`Add task on ${name.toLowerCase()}`} onClick={submit}>
+          <button
+            type="button"
+            aria-label={`Add task on ${name.toLowerCase()}`}
+            onClick={submit}
+          >
             <span>+</span>
           </button>
         </div>
         <ul className="tasks">
-          {tasks.length === 0 && <li className="tasks-empty">Nothing here yet.</li>}
+          {tasks.length === 0 && (
+            <li className="tasks-empty">Nothing here yet.</li>
+          )}
           {tasks.map((task) => (
             <li
               key={task.id}
@@ -90,7 +108,9 @@ function DeviceFrame(props: {
                 type="button"
                 className="tick"
                 aria-pressed={task.done}
-                aria-label={`${task.done ? "Mark not done" : "Mark done"}: ${task.text}`}
+                aria-label={`${
+                  task.done ? "Mark not done" : "Mark done"
+                }: ${task.text}`}
                 onClick={() => onToggle(which, task)}
               >
                 <svg viewBox="0 0 10 10" aria-hidden="true">
@@ -126,7 +146,9 @@ export default function SyncDemo(): ReactNode {
 
   const apply = (target: DeviceId, rec: Task) => {
     const have = rig.dev[target].store.get(rec.id);
-    if (!have || rec.ts > have.ts) rig.dev[target].store.set(rec.id, { ...rec });
+    if (!have || rec.ts > have.ts) {
+      rig.dev[target].store.set(rec.id, { ...rec });
+    }
   };
 
   const pulse = () => {
@@ -204,11 +226,21 @@ export default function SyncDemo(): ReactNode {
       </div>
 
       <div className="rig">
-        <DeviceFrame which="A" name="This phone" rig={rig} onAdd={onAdd} onToggle={onToggle} />
+        <DeviceFrame
+          which="A"
+          name="This phone"
+          rig={rig}
+          onAdd={onAdd}
+          onToggle={onToggle}
+        />
         <div className="wire" ref={wireRef} aria-hidden="true">
           <div className="wire-line" />
           <div className="wire-flow" />
-          <div className={`wire-badge${!rig.online && pending > 0 ? " is-on" : ""}`}>
+          <div
+            className={`wire-badge${
+              !rig.online && pending > 0 ? " is-on" : ""
+            }`}
+          >
             {pending} {pending === 1 ? "change waiting" : "changes waiting"}
           </div>
         </div>
@@ -222,9 +254,9 @@ export default function SyncDemo(): ReactNode {
       </div>
 
       <p className="demo-foot">
-        A simulation, drawn to the same model (not a live Jazz session). For the real one, and for
-        the part where you close the laptop and it is all still there tomorrow:{" "}
-        <code>deno task dev</code>.
+        A simulation, drawn to the same model (not a live Jazz session). For the
+        real one, and for the part where you close the laptop and it is all
+        still there tomorrow: <code>deno task dev</code>.
       </p>
     </div>
   );

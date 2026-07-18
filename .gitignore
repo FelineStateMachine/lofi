@@ -18,5 +18,8 @@ test-results/
 website/build/
 website/.docusaurus/
 website/api-gen/
+website/node-api-gen/
+website/node-docs-gen/
 website/static/llms.txt
 website/static/llms-full.txt
+website/static/node/

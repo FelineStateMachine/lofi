@@ -159,6 +159,10 @@ Every prerendered route is included in the shell precache. While offline, a dire
 as `/field-notes/settings/` resolves its cached `settings/index.html`; if that route was not
 emitted, the worker falls back to the cached application root.
 
+The app is the only thing that needs hosting: sync is optional infrastructure the user can point at
+a managed Jazz app or at [a self-hosted sync node](/node) they run themselves — the deployment does
+not change either way.
+
 ### Offline cache policy
 
 The build's precache manifest contains required shell resources only. Shell assets are fetched

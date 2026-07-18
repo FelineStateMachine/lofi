@@ -1,0 +1,90 @@
+{
+  "siteUrl": "https://lofi.host",
+  "checkoutRepo": "FelineStateMachine/lofi-node",
+  "sections": [
+    {
+      "label": null,
+      "items": [
+        { "id": "README", "label": "Overview", "source": "docs/node/README.md" }
+      ]
+    },
+    {
+      "label": "Tutorials",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "self-host-a-sync-node",
+          "label": "Self-host your first sync node",
+          "source": "docs/node/self-host-a-sync-node.md"
+        },
+        {
+          "id": "pair-two-homes",
+          "label": "Pair two homes",
+          "source": "docs/node/pair-two-homes.md"
+        },
+        {
+          "id": "provision-a-store",
+          "label": "Provision a store",
+          "source": "docs/node/provision-a-store.md"
+        }
+      ]
+    },
+    {
+      "label": "Guides",
+      "collapsed": false,
+      "items": [
+        {
+          "id": "sliceable-apps-and-shared-stores",
+          "label": "Sliceable apps and shared stores",
+          "source": "docs/node/sliceable-apps-and-shared-stores.md"
+        },
+        {
+          "id": "tickets-explained",
+          "label": "Tickets explained",
+          "source": "docs/node/tickets-explained.md"
+        },
+        {
+          "id": "storage-choices",
+          "label": "Storage choices",
+          "source": "docs/node/storage-choices.md"
+        },
+        {
+          "id": "beyond-the-lan",
+          "label": "Deploying beyond the LAN",
+          "source": "docs/node/beyond-the-lan.md"
+        }
+      ]
+    },
+    {
+      "label": "Reference",
+      "items": [
+        { "id": "cli", "label": "CLI", "source": "docs/node/cli.md" },
+        {
+          "id": "configuration",
+          "label": "Configuration",
+          "source": "docs/node/configuration.md"
+        },
+        {
+          "id": "app-ticket",
+          "label": "App-ticket contract",
+          "source": "lofi-node:docs/app-ticket.md"
+        },
+        {
+          "id": "http-surface",
+          "label": "HTTP surface",
+          "source": "docs/node/http-surface.md"
+        },
+        {
+          "id": "architecture",
+          "label": "Architecture and provenance",
+          "source": "docs/node/architecture.md"
+        },
+        {
+          "id": "troubleshooting",
+          "label": "Troubleshooting and compatibility",
+          "source": "docs/node/troubleshooting.md"
+        }
+      ]
+    }
+  ]
+}

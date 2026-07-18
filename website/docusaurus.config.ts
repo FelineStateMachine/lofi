@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { themes as prismThemes } from "prism-react-renderer";
 import type { Config } from "@docusaurus/types";
 import type * as Preset from "@docusaurus/preset-classic";
@@ -8,6 +9,32 @@ import type * as Preset from "@docusaurus/preset-classic";
 const denoJson = JSON.parse(
   readFileSync(new URL("../deno.json", import.meta.url), "utf8"),
 ) as { version: string; description: string };
+
+// The /node landing shows the lofi-node version from the same pinned checkout
+// the docs render from (LOFI_NODE_DIR, default ../lofi-node); "alpha" when the
+// checkout is absent so a docs-only environment still builds.
+let lofiNodeVersion = "alpha";
+try {
+  const nodeDir = process.env.LOFI_NODE_DIR ?? "../lofi-node";
+  lofiNodeVersion = (JSON.parse(
+    readFileSync(new URL(`../${nodeDir}/deno.json`, import.meta.url), "utf8"),
+  ) as { version: string }).version;
+} catch {
+  // Keep the fallback label.
+}
+
+// Fonts must ship as files, not base64 in the render-blocking stylesheet —
+// webpack's default inline threshold would bloat styles.css by hundreds of KB.
+function noInlineFontsPlugin() {
+  return {
+    name: "lofi-no-inline-fonts",
+    configureWebpack: () => ({
+      module: {
+        rules: [{ test: /\.(?:woff2?|eot|ttf|otf)$/i, type: "asset/resource" }],
+      },
+    }),
+  };
+}
 
 const config: Config = {
   title: "lofi",
@@ -28,6 +55,7 @@ const config: Config = {
   customFields: {
     lofiVersion: denoJson.version,
     lofiDescription: denoJson.description,
+    lofiNodeVersion,
   },
 
   markdown: {
@@ -49,8 +77,8 @@ const config: Config = {
       {
         hashed: true,
         indexBlog: false,
-        docsRouteBasePath: ["docs", "api"],
-        docsDir: ["../docs", "api-gen"],
+        docsRouteBasePath: ["docs", "api", "node/docs", "node/api"],
+        docsDir: ["../docs", "api-gen", "node-docs-gen", "node-api-gen"],
       },
     ],
   ],
@@ -60,25 +88,46 @@ const config: Config = {
     locales: ["en"],
   },
 
-  headTags: [
-    {
-      tagName: "link",
-      attributes: { rel: "preconnect", href: "https://fonts.googleapis.com" },
-    },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossorigin: "anonymous",
-      },
-    },
-  ],
-  stylesheets: [
-    "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Nunito:wght@800;900&family=Karla:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap",
-  ],
+  // Fonts are self-hosted via Fontsource imports in src/css/custom.css, so
+  // the docs work offline with their real faces and no third-party requests.
 
   plugins: [
+    noInlineFontsPlugin,
+    [
+      // The docs for the offline-first framework install and read offline.
+      // Precaching is opt-in (installed PWA / standalone / ?offlineMode) so
+      // drive-by visitors are not handed the whole corpus.
+      "@docusaurus/plugin-pwa",
+      {
+        // trailingSlash:false emits routes as <path>.html, which the default
+        // worker never checks; see src/sw-custom.js.
+        swCustom: fileURLToPath(new URL("./src/sw-custom.js", import.meta.url)),
+        offlineModeActivationStrategies: [
+          "appInstalled",
+          "standalone",
+          "queryString",
+        ],
+        pwaHead: [
+          { tagName: "link", rel: "manifest", href: "/manifest.json" },
+          { tagName: "meta", name: "theme-color", content: "#18231f" },
+          {
+            tagName: "meta",
+            name: "apple-mobile-web-app-capable",
+            content: "yes",
+          },
+          {
+            tagName: "meta",
+            name: "apple-mobile-web-app-status-bar-style",
+            content: "black-translucent",
+          },
+          {
+            tagName: "link",
+            rel: "apple-touch-icon",
+            href: "/img/pwa/icon-192.png",
+          },
+        ],
+      },
+    ],
     [
       "@docusaurus/plugin-content-docs",
       {
@@ -86,6 +135,29 @@ const config: Config = {
         path: "api-gen",
         routeBasePath: "api",
         sidebarPath: "./sidebars-api.ts",
+        editUrl: undefined,
+      },
+    ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        // Assembled by tools/node_docs.ts from docs/node/ plus contract pages
+        // rendered out of the pinned lofi-node checkout; no edit URL because
+        // pages have two possible homes — each page names its source.
+        id: "node",
+        path: "node-docs-gen",
+        routeBasePath: "node/docs",
+        sidebarPath: "./sidebars-node.ts",
+        editUrl: undefined,
+      },
+    ],
+    [
+      "@docusaurus/plugin-content-docs",
+      {
+        id: "node-api",
+        path: "node-api-gen",
+        routeBasePath: "node/api",
+        sidebarPath: "./sidebars-node-api.ts",
         editUrl: undefined,
       },
     ],
@@ -106,6 +178,8 @@ const config: Config = {
             "devx-contract.md",
             "seed.md",
             "assets/**",
+            // Served under /node/docs by the "node" plugin instance instead.
+            "node/**",
             "**/_*.{js,jsx,ts,tsx,md,mdx}",
             "**/_*/**",
           ],
@@ -169,50 +243,65 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
+      // Two trees, no wordmark: the site now fronts two products, and each
+      // product's own dropdown carries its links (so no top-level GitHub/JSR).
       logo: {
         alt: "lofi",
-        src: "img/lofi-wordmark.svg",
-        // intrinsic dimensions (800x360 viewBox at the navbar's 1.7rem height)
-        // so the image never contributes layout shift
-        width: 60,
-        height: 27,
+        src: "img/two-trees.svg",
+        // square intrinsic dimensions at the navbar's 1.7rem height so the
+        // image never contributes layout shift
+        width: 30,
+        height: 30,
       },
       items: [
-        { type: "docSidebar", sidebarId: "docs", position: "left", label: "Docs" },
-        { to: "/api", label: "API", position: "left" },
-        { href: "https://jsr.io/@nzip/lofi", label: "JSR", position: "right" },
         {
-          href: "https://github.com/FelineStateMachine/lofi",
-          label: "GitHub",
-          position: "right",
+          type: "dropdown",
+          label: "lofi",
+          position: "left",
+          to: "/",
+          items: [
+            { label: "docs", to: "/docs" },
+            { label: "api", to: "/api" },
+            { label: "github", href: "https://github.com/FelineStateMachine/lofi" },
+            { label: "jsr", href: "https://jsr.io/@nzip/lofi" },
+          ],
+        },
+        {
+          type: "dropdown",
+          label: "lofi-node",
+          position: "left",
+          to: "/node",
+          items: [
+            { label: "docs", to: "/node/docs" },
+            { label: "api", to: "/node/api" },
+            { label: "github", href: "https://github.com/FelineStateMachine/lofi-node" },
+            { label: "jsr", href: "https://jsr.io/@nzip/lofi-node" },
+          ],
         },
       ],
     },
     footer: {
       style: "dark",
+      // One column per product, parallel structure, lowercase like the nav.
       links: [
         {
-          title: "Start",
+          title: "lofi",
           items: [
-            { label: "Getting started", to: "/docs/getting-started" },
-            { label: "Data and UI", to: "/docs/data-and-ui" },
-            { label: "Testing", to: "/docs/testing" },
-          ],
-        },
-        {
-          title: "Deeper",
-          items: [
-            { label: "Permissions", to: "/docs/permissions" },
-            { label: "Sync and recovery", to: "/docs/sync-and-recovery" },
-            { label: "API reference", to: "/api" },
-          ],
-        },
-        {
-          title: "Repo",
-          items: [
-            { label: "GitHub", href: "https://github.com/FelineStateMachine/lofi" },
-            { label: "JSR", href: "https://jsr.io/@nzip/lofi" },
+            { label: "docs", to: "/docs" },
+            { label: "api", to: "/api" },
+            { label: "github", href: "https://github.com/FelineStateMachine/lofi" },
+            { label: "jsr", href: "https://jsr.io/@nzip/lofi" },
             { label: "llms.txt", to: "/llms.txt", target: "_blank" },
+          ],
+        },
+        {
+          title: "lofi-node",
+          items: [
+            { label: "docs", to: "/node/docs" },
+            { label: "api", to: "/node/api" },
+            { label: "github", href: "https://github.com/FelineStateMachine/lofi-node" },
+            { label: "jsr", href: "https://jsr.io/@nzip/lofi-node" },
+            { label: "llms.txt", to: "/node/llms.txt", target: "_blank" },
           ],
         },
       ],

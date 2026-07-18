@@ -27,6 +27,7 @@ export const runtimeFiles = [
   "auth.ts",
   "boot.ts",
   "config.ts",
+  "data-sink.ts",
   "device-capabilities.ts",
   "diagnostics.ts",
   "durability.ts",

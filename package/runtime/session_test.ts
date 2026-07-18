@@ -25,8 +25,8 @@ const electionKeys = [
   `lofi:sync-elected:${appId}`,
 ];
 
-test("enabling sync without a managed Jazz app is the documented no-op", async () => {
-  assert(!syncAvailable, "this contract test requires the unconfigured local build");
+test("enabling sync without a sync location is the documented no-op", async () => {
+  assert(!syncAvailable(), "this contract test requires the unconfigured local build");
   for (const key of electionKeys) localStorage.removeItem(key);
   try {
     const session = await enableSyncBackup();

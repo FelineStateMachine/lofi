@@ -150,6 +150,51 @@ export function precacheUrls(
   return expectedPrecacheUrls(paths, presentationPaths);
 }
 
+/**
+ * Byte-identical groups among build-emitted assets (`_astro/`). The same
+ * payload under two names means two build contexts disagreed on an asset
+ * naming template, and every copy ships and precaches. User-authored files
+ * outside `_astro/` are copied verbatim and are not the build's to judge.
+ */
+export async function duplicateBuildAssets(
+  paths: readonly string[],
+  root = "dist",
+): Promise<string[][]> {
+  const bySize = new Map<number, string[]>();
+  for (const path of paths) {
+    const portable = path.replaceAll("\\", "/");
+    if (!portable.startsWith("_astro/")) continue;
+    const { size } = await Deno.stat(join(root, path));
+    bySize.set(size, [...(bySize.get(size) ?? []), portable]);
+  }
+  const groups: string[][] = [];
+  for (const candidates of bySize.values()) {
+    if (candidates.length < 2) continue;
+    const byDigest = new Map<string, string[]>();
+    for (const path of candidates) {
+      const digest = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", await Deno.readFile(join(root, path))),
+      );
+      const key = Array.from(digest).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      byDigest.set(key, [...(byDigest.get(key) ?? []), path]);
+    }
+    for (const group of byDigest.values()) {
+      if (group.length > 1) groups.push(group.sort());
+    }
+  }
+  return groups.sort((left, right) => left[0].localeCompare(right[0]));
+}
+
+/** Total bytes a fresh install downloads for the app shell (the precached set). */
+export async function shellWeightBytes(
+  paths: readonly string[],
+  root = "dist",
+): Promise<number> {
+  let total = 0;
+  for (const path of paths) total += (await Deno.stat(join(root, path))).size;
+  return total;
+}
+
 function contains(haystack: Uint8Array, needle: Uint8Array): boolean {
   if (needle.length === 0 || haystack.length < needle.length) return false;
   outer:

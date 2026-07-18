@@ -12,10 +12,31 @@ import { extname, join, relative } from "node:path";
 import { LOFI_VERSION } from "../version.ts";
 import { prepareLofiAstroConfig } from "../astro/mod.ts";
 import { loadEnvironment, serverEnvironmentNames } from "../tooling/environment.ts";
-import { precacheUrls, scanSecrets, sourceFingerprint, walkFiles } from "../tooling/project.ts";
-import { productionPwaIssues, screenshotAssetPaths } from "../tooling/pwa-validation.ts";
+import {
+  duplicateBuildAssets,
+  precacheUrls,
+  scanSecrets,
+  shellWeightBytes,
+  sourceFingerprint,
+  walkFiles,
+} from "../tooling/project.ts";
+import {
+  precachePaths,
+  productionPwaIssues,
+  screenshotAssetPaths,
+} from "../tooling/pwa-validation.ts";
 import { runDeno } from "../tooling/process.ts";
 import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
+
+// A fresh install downloads the whole precache, so every build reports the
+// shell's weight, and an unusually heavy shell (the lofi runtime with the Jazz
+// WASM engine accounts for ~10 MB of it) earns a warning. How much an app
+// ships is the author's call — the warning is information, not a gate.
+const shellWeightNoticeBytes = 20 * 1024 * 1024;
+
+function megabytes(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
 
 const environment = await validatedCommandEnvironment();
 environment.LOFI_SKIP_JAZZ_MANAGED = "1";
@@ -60,12 +81,33 @@ await Deno.writeTextFile(
   serviceWorker.replace("__LOFI_BUILD_REVISION__", sourceHash),
 );
 const productionManifest = JSON.parse(await Deno.readTextFile("dist/manifest.webmanifest"));
-// One walk serves both the precache manifest and the route count below.
+// One walk serves the precache manifest, the shell checks, and the route
+// count below.
 const distFiles = await walkFiles("dist", { includeDist: true });
-const precache = precacheUrls(
-  distFiles,
-  screenshotAssetPaths(productionManifest, environment.LOFI_BASE_PATH),
-);
+const screenshotPaths = screenshotAssetPaths(productionManifest, environment.LOFI_BASE_PATH);
+const shellPaths = precachePaths(distFiles, screenshotPaths);
+
+const duplicateAssets = await duplicateBuildAssets(shellPaths);
+if (duplicateAssets.length > 0) {
+  for (const group of duplicateAssets) {
+    console.error(`error: byte-identical build assets: ${group.join(", ")}`);
+  }
+  console.error(
+    "error: two build contexts emitted the same payload under different names and every copy is precached; unify the asset naming, then rerun `deno task build`",
+  );
+  Deno.exit(1);
+}
+
+const shellBytes = await shellWeightBytes(shellPaths);
+if (shellBytes > shellWeightNoticeBytes) {
+  console.warn(
+    `warning: the app shell weighs ${
+      megabytes(shellBytes)
+    } MB; a fresh install downloads every precached byte, so heavy assets may belong outside the precache (served on demand instead)`,
+  );
+}
+
+const precache = precacheUrls(distFiles, screenshotPaths);
 await Deno.writeTextFile("dist/lofi-precache.json", `${JSON.stringify(precache.sort())}\n`);
 
 const pwaIssues = await productionPwaIssues(Deno.cwd(), environment.LOFI_BASE_PATH);
@@ -92,5 +134,7 @@ if (secretResult.leaks.length > 0) {
 
 const routes = distFiles.filter((path) => extname(path) === ".html").length;
 console.log(
-  `lofi build: ${join(Deno.cwd(), "dist")} (${routes} routes, ${sourceHash}, secret scan passed)`,
+  `lofi build: ${join(Deno.cwd(), "dist")} (${routes} routes, ${sourceHash}, ${
+    megabytes(shellBytes)
+  } MB shell, secret scan passed)`,
 );

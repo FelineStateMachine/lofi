@@ -942,8 +942,8 @@ export function screenshotAssetPaths(manifest: unknown, deploymentBase = "/"): s
   ].sort();
 }
 
-/** Map build output paths to portable URLs expected in the service-worker precache. */
-export function expectedPrecacheUrls(
+/** Build output paths that belong to the app shell (the precached set). */
+export function precachePaths(
   paths: readonly string[],
   presentationPaths: readonly string[] = [],
 ): string[] {
@@ -951,6 +951,15 @@ export function expectedPrecacheUrls(
   return paths
     .map((path) => path.replaceAll("\\", "/"))
     .filter((path) => !precacheExcludedPaths.has(path) && !presentation.has(path))
+    .sort();
+}
+
+/** Map build output paths to portable URLs expected in the service-worker precache. */
+export function expectedPrecacheUrls(
+  paths: readonly string[],
+  presentationPaths: readonly string[] = [],
+): string[] {
+  return precachePaths(paths, presentationPaths)
     .map((path) => path === "index.html" ? "./" : `./${path}`)
     .sort();
 }

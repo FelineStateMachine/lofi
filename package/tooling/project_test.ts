@@ -1,5 +1,12 @@
 import { join } from "node:path";
-import { precacheUrls, scanSecrets, sourceFingerprint, walkFiles } from "./project.ts";
+import {
+  duplicateBuildAssets,
+  precacheUrls,
+  scanSecrets,
+  shellWeightBytes,
+  sourceFingerprint,
+  walkFiles,
+} from "./project.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -115,6 +122,45 @@ Deno.test("secret scan ignores the local env source but catches source and build
     const result = await scanSecrets({ BACKEND_SECRET: secret }, root);
     assert(result.leaks.length === 1, `expected one build leak, received ${result.leaks.length}`);
     assert(result.leaks[0].path === "dist/client.js", "secret scan reported the wrong file");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("duplicate build assets are grouped by content and scoped to _astro", async () => {
+  const root = await makeTestRoot();
+  try {
+    await Deno.mkdir(join(root, "_astro"));
+    await Deno.writeTextFile(join(root, "_astro", "engine_bg.HASH.wasm"), "same payload");
+    await Deno.writeTextFile(join(root, "_astro", "engine_bg-HASH.wasm"), "same payload");
+    await Deno.writeTextFile(join(root, "_astro", "one.js"), "payload one");
+    await Deno.writeTextFile(join(root, "_astro", "two.js"), "payload two");
+    await Deno.writeTextFile(join(root, "copy.txt"), "same payload");
+    const groups = await duplicateBuildAssets([
+      "_astro/engine_bg.HASH.wasm",
+      "_astro/engine_bg-HASH.wasm",
+      "_astro/one.js",
+      "_astro/two.js",
+      "copy.txt",
+    ], root);
+    assert(groups.length === 1, `expected one duplicate group, received ${groups.length}`);
+    assert(
+      groups[0].join(", ") === "_astro/engine_bg-HASH.wasm, _astro/engine_bg.HASH.wasm",
+      `same-size files were grouped by name, not content: ${groups[0].join(", ")}`,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("shell weight sums the bytes of the precached set", async () => {
+  const root = await makeTestRoot();
+  try {
+    await Deno.writeTextFile(join(root, "index.html"), "12345");
+    await Deno.mkdir(join(root, "_astro"));
+    await Deno.writeTextFile(join(root, "_astro", "client.js"), "1234567");
+    const total = await shellWeightBytes(["index.html", "_astro/client.js"], root);
+    assert(total === 12, `expected 12 bytes, received ${total}`);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

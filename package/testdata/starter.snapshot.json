@@ -1,7 +1,7 @@
 {
   ".env.example": "0cfad81a3ba6442ac15d7cbe44a00374bf4dbf8af68ca412e54fb100241ddeab",
   ".gitignore": "9b9fa4b95f8f728ce80e93fc224d430328786b620096b80f067a3190c410a00e",
-  "deno.json": "45eda461a1f4abdecebedd019be66c54029057cec7f6fe425444cae2d652ab99",
+  "deno.json": "fa0b7dc7e8c5e39e31b3d8c38621b8b6290dff8a0e5278519d91b66f6d9897e8",
   "public/apple-touch-icon.png": "be2b77066d9681709210388413ddcd94318906799ddd6645934b789a04bd4a61",
   "public/favicon.svg": "35b92ad48231c470b348eaebe6d6fe14acf2ec4a86e6726a03ccb130328a0d85",
   "public/icon-192.png": "6ee711f9ec990ec55f789d7943813c5193973bf2ca9199078ee85d285317e07c",

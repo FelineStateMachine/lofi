@@ -111,6 +111,33 @@ CoValue types (`co.map`, CoText, FileStream). All three are verified with two sy
   watched the history diverges permanently from what a fresh boot reads. Avoid counter columns until
   an alpha bump clears the pins (see [the decision record](decisions/schema-facade-alpha53.md)).
 
+### Encrypted columns
+
+`s.encryptedText(label)` and `s.encryptedJson<T>(label)` seal a field on the client before it enters
+Jazz: the sync store holds versioned ciphertext (XChaCha20-Poly1305, a per-column subkey derived
+from the account secret), so the store operator sees that the column exists — sizes, writers,
+timestamps — but never its content. The runtime installs the key at boot; touching an encrypted
+column before then fails closed rather than writing plaintext.
+
+```ts
+notes: s.table({
+  title: s.string(),
+  body: s.encryptedText("notes.body"),
+  attachments: s.encryptedJson<{ name: string; size: number }[]>("notes.attachments"),
+}),
+```
+
+The `label` is the column's cryptographic identity, conventionally `"table.column"`: it binds the
+ciphertext to the column (a value replayed into another column refuses to open) and changing it
+later makes existing values unreadable — treat it like a column name. Constraints to design around:
+
+- **Account-private only, for now.** The key derives from the account secret, so every device
+  holding the account decrypts and nobody else does — including other members of a shared group. A
+  row read under a different account throws `EncryptedColumnError` instead of returning garbage.
+- **Not filterable, not policy-visible.** `where` on an encrypted column compares ciphertext and
+  matches nothing useful, and a permission policy must not reference one — the server cannot
+  evaluate what it cannot read. Filter and gate on plaintext columns beside it.
+
 ## Bind an exact typed query
 
 ```ts

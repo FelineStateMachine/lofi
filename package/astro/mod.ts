@@ -66,6 +66,7 @@ export const accessFiles = [
 
 /** Schema facade modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
 export const schemaFiles = [
+  "encrypted.ts",
   "mod.ts",
   "nested.ts",
   "store.ts",

@@ -60,8 +60,10 @@ await Deno.writeTextFile(
   serviceWorker.replace("__LOFI_BUILD_REVISION__", sourceHash),
 );
 const productionManifest = JSON.parse(await Deno.readTextFile("dist/manifest.webmanifest"));
+// One walk serves both the precache manifest and the route count below.
+const distFiles = await walkFiles("dist", { includeDist: true });
 const precache = precacheUrls(
-  await walkFiles("dist", { includeDist: true }),
+  distFiles,
   screenshotAssetPaths(productionManifest, environment.LOFI_BASE_PATH),
 );
 await Deno.writeTextFile("dist/lofi-precache.json", `${JSON.stringify(precache.sort())}\n`);
@@ -88,8 +90,7 @@ if (secretResult.leaks.length > 0) {
   Deno.exit(1);
 }
 
-const routes = (await walkFiles("dist", { includeDist: true }))
-  .filter((path) => extname(path) === ".html").length;
+const routes = distFiles.filter((path) => extname(path) === ".html").length;
 console.log(
   `lofi build: ${join(Deno.cwd(), "dist")} (${routes} routes, ${sourceHash}, secret scan passed)`,
 );

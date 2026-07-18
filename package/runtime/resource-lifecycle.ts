@@ -38,13 +38,14 @@ export function getResource<T>(
   return tracked;
 }
 
-export function recreateResource<T>(
+function swapResource<T>(
   state: SerializedResourceState<T>,
+  prepare: (() => Promise<void>) | null,
   create: () => Promise<T>,
   destroy: (value: T) => Promise<void>,
 ): Promise<T> {
-  if (state.recreation) return state.recreation;
   const recreation = enqueue(state, async () => {
+    if (prepare) await prepare();
     const previous = state.value;
     state.value = null;
     state.promise = null;
@@ -65,6 +66,15 @@ export function recreateResource<T>(
   return tracked;
 }
 
+export function recreateResource<T>(
+  state: SerializedResourceState<T>,
+  create: () => Promise<T>,
+  destroy: (value: T) => Promise<void>,
+): Promise<T> {
+  if (state.recreation) return state.recreation;
+  return swapResource(state, null, create, destroy);
+}
+
 /**
  * Replaces a serialized resource after an async preparation step. Unlike
  * {@link recreateResource}, replacement carries a payload (the preparation),
@@ -77,23 +87,7 @@ export function replaceResource<T>(
   create: () => Promise<T>,
   destroy: (value: T) => Promise<void>,
 ): Promise<T> {
-  const recreation = enqueue(state, async () => {
-    await prepare();
-    const previous = state.value;
-    state.value = null;
-    state.promise = null;
-    if (previous) await destroy(previous);
-    if (previous) await new Promise((resolve) => setTimeout(resolve, 50));
-    const value = await create();
-    state.value = value;
-    state.promise = Promise.resolve(value);
-    return value;
-  });
-  const tracked = recreation.finally(() => {
-    if (state.recreation === tracked) state.recreation = null;
-  });
-  state.recreation = tracked;
-  return tracked;
+  return swapResource(state, prepare, create, destroy);
 }
 
 export function shutdownResource<T>(

@@ -111,7 +111,11 @@ function runtimeTables(): RuntimeTable[] {
 
 async function awaitLocalReady(db: Db): Promise<void> {
   const firstTable = runtimeTables()[0];
-  if (firstTable) await db.all(firstTable.where({}) as never, { tier: "local" });
+  if (!firstTable) return;
+  // One row proves the persistent bridge is attached; materializing the whole
+  // first table on every open pays row-count-proportional startup cost.
+  const query = firstTable.where({}) as { limit?: (n: number) => unknown };
+  await db.all((query.limit?.(1) ?? query) as never, { tier: "local" });
 }
 
 async function migrateLocalRows(
@@ -201,16 +205,9 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
   }, record);
 }
 
+// Shutdown deliberately avoids `logout()`, which would clear local account
+// state that must carry forward into a restored or sync-enabled runtime.
 async function destroyClient(state: RuntimeSlot, db: Db): Promise<void> {
-  await db.shutdown();
-  state.diagnostics.activeClients -= 1;
-  notifyDiagnostics(state);
-}
-
-async function replaceClient(state: RuntimeSlot, db: Db): Promise<void> {
-  // The secret store was updated before this point. Shut down the old worker and
-  // client without `logout()`, which would clear local account state that must
-  // carry forward into the restored/sync-enabled runtime.
   await db.shutdown();
   state.diagnostics.activeClients -= 1;
   notifyDiagnostics(state);
@@ -367,7 +364,7 @@ export function replaceRuntimePrincipal(
       state.client,
       saveSecret,
       () => createClient(state),
-      (current) => replaceClient(state, current),
+      (current) => destroyClient(state, current),
     );
     return await adapter.get(() => Promise.resolve(db), (current) => attachRuntime(state, current));
   })();

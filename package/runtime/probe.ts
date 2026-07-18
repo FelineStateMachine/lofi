@@ -3,7 +3,12 @@ import { serverUrl, syncing } from "./config.ts";
 import { readDeviceCapabilityReport } from "./device-capabilities.ts";
 import { type InspectorAdapter, type InspectorSnapshot, mountInspector } from "./inspector.ts";
 import { getForegroundRecoveryState, subscribeForegroundRecovery } from "./lifecycle.ts";
-import { getRuntime, getRuntimeDiagnostics, subscribeRuntimeDiagnostics } from "./runtime.ts";
+import {
+  getRuntime,
+  getRuntimeDiagnostics,
+  reloadBrowserRuntime,
+  subscribeRuntimeDiagnostics,
+} from "./runtime.ts";
 import { isTransportPausedByInspector, setTransportPausedByInspector } from "./transport-gate.ts";
 
 export type LofiDevelopmentBridge = InspectorAdapter;
@@ -13,13 +18,6 @@ type LofiDevelopmentGlobal = typeof globalThis & {
 };
 
 const stateListeners = new Set<() => void>();
-
-function reloadBrowserClient(): Promise<void> {
-  globalThis.location.reload();
-  // The current document must not report completion while its replacement is
-  // still booting. Navigation destroys this pending promise with the page.
-  return new Promise(() => undefined);
-}
 
 function notifyState(): void {
   for (const listener of stateListeners) listener();
@@ -116,12 +114,15 @@ const bridge: LofiDevelopmentBridge = {
     notifyState();
   },
   restartClient() {
-    return reloadBrowserClient();
+    // The shutdown-then-navigate boundary is the supported clean-runtime path
+    // for the pinned Jazz alpha; reloading without it leaves the persistent
+    // worker attached during navigation.
+    return reloadBrowserRuntime();
   },
   async clearLocalReplica() {
     const runtime = await getRuntime();
     await runtime.db.deleteClientStorage();
-    return await reloadBrowserClient();
+    return await reloadBrowserRuntime();
   },
 };
 

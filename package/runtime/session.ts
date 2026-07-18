@@ -65,20 +65,48 @@ export type Session = {
 const phraseGuardKey = `lofi:phrase-passkey:${appId}`;
 const recoverablePasskeyKey = `lofi:recoverable-passkey:${appId}`;
 
-function phraseGuarded(): boolean {
-  if (typeof localStorage === "undefined") return false;
+// The guard record pins the enrolled credential's id so the reveal ceremony
+// accepts only that passkey. Legacy records stored the bare flag "1" — those
+// devices stay guarded but unpinned until the guard is re-enrolled.
+type PhraseGuard = { guarded: boolean; credentialId: string | null };
+
+function readPhraseGuard(): PhraseGuard {
+  if (typeof localStorage === "undefined") return { guarded: false, credentialId: null };
   try {
-    return localStorage.getItem(phraseGuardKey) === "1";
+    const raw = localStorage.getItem(phraseGuardKey);
+    if (!raw) return { guarded: false, credentialId: null };
+    if (raw === "1") return { guarded: true, credentialId: null };
+    try {
+      const value = JSON.parse(raw) as { id?: unknown };
+      return {
+        guarded: true,
+        credentialId: typeof value.id === "string" && value.id ? value.id : null,
+      };
+    } catch {
+      return { guarded: true, credentialId: null };
+    }
   } catch {
-    return false;
+    return { guarded: false, credentialId: null };
   }
 }
 
-function setPhraseGuarded(guarded: boolean): void {
+function phraseGuarded(): boolean {
+  return readPhraseGuard().guarded;
+}
+
+function setPhraseGuard(credentialId: string): void {
   if (typeof localStorage === "undefined") return;
   try {
-    if (guarded) localStorage.setItem(phraseGuardKey, "1");
-    else localStorage.removeItem(phraseGuardKey);
+    localStorage.setItem(phraseGuardKey, JSON.stringify({ id: credentialId }));
+  } catch {
+    // A private-mode storage failure must not break the ceremony itself.
+  }
+}
+
+function clearPhraseGuard(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(phraseGuardKey);
   } catch {
     // A private-mode storage failure must not break the ceremony itself.
   }
@@ -138,15 +166,19 @@ async function currentSecret(): Promise<string> {
  */
 export async function createBackupPasskey(label?: string): Promise<boolean> {
   try {
-    await enrollDeviceCredential(label ? { label } : {});
-    setPhraseGuarded(true);
+    const credential = await enrollDeviceCredential(label ? { label } : {});
+    setPhraseGuard(credential.id);
     return true;
   } catch (error) {
     if (
       error instanceof AuthError &&
       (error.code === "unsupported" || error.code === "origin-rejected")
     ) {
-      setPhraseGuarded(false);
+      // A failed re-enrollment must not remove a guard that already stands:
+      // the existing credential still protects the reveal, so report the
+      // device as guarded rather than silently downgrading it.
+      if (readPhraseGuard().guarded) return true;
+      clearPhraseGuard();
       return false;
     }
     throw error;
@@ -181,12 +213,18 @@ export async function createRecoverablePasskeyBackup(
 
 /**
  * Runs the user-verifying passkey ceremony that must precede revealing the phrase
- * on a guarded device. A no-op when the device is not guarded. Throws `cancelled`
- * if the user dismisses the prompt — the phrase is then not revealed.
+ * on a guarded device. The ceremony is pinned to the enrolled credential, so no
+ * other passkey for the same RP ID can satisfy it (guards enrolled before pinning
+ * remain discoverable until re-enrolled). A no-op when the device is not guarded.
+ * Throws `cancelled` if the user dismisses the prompt — the phrase is then not
+ * revealed.
  */
 export async function confirmPhraseAccess(): Promise<void> {
-  if (!phraseGuarded()) return;
-  await authenticateDeviceCredential();
+  const guard = readPhraseGuard();
+  if (!guard.guarded) return;
+  await authenticateDeviceCredential(
+    guard.credentialId ? { credentialId: guard.credentialId } : {},
+  );
 }
 
 /**
@@ -261,17 +299,20 @@ export class AccountReplacementError extends Error {
 async function replaceAccountSecret(
   secret: string,
   options: AccountReplacementOptions,
+  onConfirmed?: () => void,
 ): Promise<Session> {
   const current = await currentSecret();
   if (current === secret) {
     // The device already holds this account; there is no principal to replace.
     // Electing backup and sync is the whole remaining intent, and the election
     // path migrates a never-synced device's local rows instead of hiding them.
+    onConfirmed?.();
     return await enableSyncBackup();
   }
   if (!syncElected() && !options.confirmLocalReplacement) {
     throw new AccountReplacementError();
   }
+  onConfirmed?.();
   await replaceRuntimePrincipal(secret, {
     onSecretSaved: () => {
       // Commit election only after the restored secret is durably saved: a
@@ -303,8 +344,10 @@ export async function restoreFromPasskey(
   options: AccountReplacementOptions = {},
 ): Promise<Session> {
   const secret = await restoreSecretWithPasskey(createPasskeyBackupAdapter());
-  setPasskeyRecoverable(true);
-  return await replaceAccountSecret(secret, options);
+  // Recoverability is recorded only once replacement is confirmed: an aborted
+  // restore must not leave metadata claiming this device's account is backed
+  // up by the passkey that was merely asserted.
+  return await replaceAccountSecret(secret, options, () => setPasskeyRecoverable(true));
 }
 
 /** True when an error is a recovery-phrase problem the user can fix and retry. */

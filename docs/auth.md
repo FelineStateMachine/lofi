@@ -21,9 +21,15 @@ The runtime lives at `package/runtime/auth.ts` and is exposed through `@nzip/lof
 - **Enrollment is gated on a stable origin.** A passkey binds to its origin hostname (its RP-ID); if
   that origin later changes, the credential silently breaks. `classifyCredentialOrigin` reports the
   current origin as `stable`, `local-only`, `unverified`, or `blocked`, and enrollment refuses
-  anything but `stable`. Authors declare their committed hostnames in `src/app.ts`
-  `credentialOrigins` (exact, or a `*.` suffix pattern). `localhost` and `127.0.0.1` are
+  anything but `stable` or `local-only`. Authors declare their committed hostnames in `src/app.ts`
+  `credentialOrigins` (exact, or a `*.` suffix pattern); a deployed host that is not listed is
+  `unverified` and refused — there is no implicit trust of the served hostname, so a preview origin
+  cannot mint credentials that strand on the production one. `localhost` and `127.0.0.1` are
   `local-only` — useful for development, never a shipping RP-ID.
+- **The phrase-guard ceremony is pinned to its enrolled credential.** Authentication passes
+  `allowCredentials` for the enrolled credential id and verifies the asserting credential against
+  it, failing with `credential-mismatch` otherwise — another resident passkey for the same RP-ID
+  cannot satisfy the guard. Guards enrolled before pinning remain discoverable until re-enrolled.
 - **PRF derives an at-rest key, and is never faked.** The WebAuthn PRF extension yields a 32-byte
   secret bound to the credential, from which `deriveAtRestKey` produces an AES-GCM key via
   HKDF-SHA-256. PRF support is feature-detected (`getAuthCapability`); if the client or

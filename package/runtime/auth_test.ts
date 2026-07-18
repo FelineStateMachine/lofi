@@ -8,6 +8,7 @@ import {
   derivePrfSecret,
   encryptAtRest,
   enrollDeviceCredential,
+  getAuthCapability,
 } from "./auth.ts";
 import { defineLofiApp } from "./app.ts";
 import { assert } from "./test-assert.ts";
@@ -140,6 +141,69 @@ test("authenticateDeviceCredential returns the DeviceCredential from a get resul
   const credential = await authenticateDeviceCredential({ credentials, rpId: "app.example.com" });
   assert(credential.id === "AQIDBA", "the authenticated id must be the base64url rawId");
   assert(credential.rpId === "app.example.com", "the credential must carry the rpId");
+});
+
+test("authenticateDeviceCredential pins the ceremony to the supplied credential id", async () => {
+  let captured: PublicKeyCredentialRequestOptions | undefined;
+  const credentials = fakeCredentials({
+    get: (options) => {
+      captured = options.publicKey;
+      return Promise.resolve({ rawId: rawIdBuffer() } as unknown as Credential);
+    },
+  });
+  const credential = await authenticateDeviceCredential({
+    credentials,
+    rpId: "app.example.com",
+    credentialId: "AQIDBA",
+  });
+  assert(credential.id === "AQIDBA", "the pinned assertion must return the enrolled id");
+  const allowed = captured?.allowCredentials;
+  assert(allowed?.length === 1, "the request must carry exactly the enrolled credential");
+  const allowedBytes = allowed[0].id as Uint8Array;
+  assert(
+    allowedBytes.length === 4 &&
+      [1, 2, 3, 4].every((byte, index) => allowedBytes[index] === byte),
+    "allowCredentials must contain the decoded enrolled credential id",
+  );
+});
+
+test("authenticateDeviceCredential rejects an assertion from a different credential", async () => {
+  // The RP has other resident credentials; the guard must not accept them.
+  const credentials = fakeCredentials({
+    get: () =>
+      Promise.resolve(
+        { rawId: new Uint8Array([9, 9, 9, 9]).buffer } as unknown as Credential,
+      ),
+  });
+  await expectAuthError(
+    () =>
+      authenticateDeviceCredential({
+        credentials,
+        rpId: "app.example.com",
+        credentialId: "AQIDBA",
+      }),
+    "credential-mismatch",
+  );
+});
+
+test("a deployed origin outside credentialOrigins is refused, never implicitly trusted", async () => {
+  (globalThis as { location?: unknown }).location = { href: "https://preview.example.com/" };
+  try {
+    const capability = await getAuthCapability();
+    assert(
+      capability.origin.status === "unverified",
+      "an unlisted deployed host must report unverified, not stable",
+    );
+    const credentials = fakeCredentials({
+      create: () => Promise.reject(new Error("create must not be reached")),
+    });
+    await expectAuthError(() => enrollDeviceCredential({ credentials }), "origin-rejected");
+
+    const pinned = await getAuthCapability({ trustedOrigins: ["preview.example.com"] });
+    assert(pinned.origin.status === "stable", "a listed hostname must classify as stable");
+  } finally {
+    delete (globalThis as { location?: unknown }).location;
+  }
 });
 
 test("derivePrfSecret returns the PRF result bytes", async () => {

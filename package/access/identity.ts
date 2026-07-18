@@ -9,16 +9,24 @@ const prefix = "lofi1";
 
 /** Encodes a raw Jazz principal as a versioned identity scoped to the current app. */
 export function encodeSharingIdentity(userId: string): SharingIdentity {
-  if (!userId.trim() || userId.includes(":")) {
+  if (!userId || /[\s:]/.test(userId)) {
     throw new AccessError("invalid-identity", "Jazz returned an invalid sharing identity.");
   }
   return `${prefix}:${appId}:${userId}` as SharingIdentity;
 }
 
-/** Validates an app-scoped sharing identity and returns its raw Jazz principal. */
+/**
+ * Validates an app-scoped sharing identity and returns its raw Jazz principal.
+ * Surrounding whitespace from copy/paste is tolerated; whitespace inside the
+ * principal is rejected — a grant for a padded principal would look active to
+ * the owner while never matching the recipient's actual account.
+ */
 export function decodeSharingIdentity(identity: string): string {
-  const [version, identityAppId, userId, extra] = identity.split(":");
-  if (version !== prefix || identityAppId !== appId || !userId || extra !== undefined) {
+  const [version, identityAppId, userId, extra] = identity.trim().split(":");
+  if (
+    version !== prefix || identityAppId !== appId || !userId || /\s/.test(userId) ||
+    extra !== undefined
+  ) {
     throw new AccessError(
       "invalid-identity",
       "That sharing identity belongs to another app or is malformed. Ask the recipient to copy it again from this app.",

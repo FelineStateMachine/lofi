@@ -8,6 +8,7 @@ lofi-node — self-hostable sync node for lofi apps
 Usage:
   lofi-node init   [--dir <dataDir>] [--app-id <id>] [--port <n>]
                    [--public-url <base>] [--open] [--storage-path <path>] [--memory]
+                   [--relay <url[,url…]>] [--no-relay]
   lofi-node start  [--dir <dataDir>]
   lofi-node pair   <node-ticket> [--dir <dataDir>]
   lofi-node ticket issue  [--label <s>] [--url <base>] [--provision] [--dir <dataDir>]
@@ -30,6 +31,8 @@ Creates the data directory and writes [`config.json`](configuration.md): a gener
 | `--open`                | Opt out of ticket gating — anyone who can reach the port can sync. CLI inits default to **ticket-gated**. |
 | `--storage-path <path>` | SQLite store on any mounted location; probed writable at boot.                                            |
 | `--memory`              | Ephemeral in-memory store.                                                                                |
+| `--relay <url[,url…]>`  | Use your own iroh relay(s) instead of the public n0 servers ([why](beyond-the-lan.md)). Repeatable.       |
+| `--no-relay`            | No relays at all: direct connections only.                                                                |
 
 ## start
 
@@ -58,5 +61,6 @@ connections with close code 4001 — no restart, no IPC.
 
 ## status
 
-Prints configuration and live state without changing anything: access mode, storage, issued tickets,
-upstream election, and mesh state (up with connection stats, off, or unavailable with the reason).
+Prints configuration and live state without changing anything: access mode, storage, relay election,
+issued tickets, upstream election, and mesh state (up with connection stats, off, or unavailable
+with the reason).

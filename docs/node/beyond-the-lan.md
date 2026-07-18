@@ -4,8 +4,8 @@
      deno.json compile task, src/native/loader.ts. -->
 
 A node on a trusted LAN needs nothing beyond the tutorial. Leaving the LAN — a VPS, a reachable home
-server, tickets that travel — adds three concerns: the address you pin into tickets, TLS, and the
-binary you actually run.
+server, tickets that travel — adds four concerns: the address you pin into tickets, TLS, the relay
+your mesh rides, and the binary you actually run.
 
 ## Pin the public URL
 
@@ -28,6 +28,31 @@ secure origin, so an app enrolled over plain http may work in a tab and fail as 
 Note what TLS does **not** change: the ticket still gates access, revocation still works the same,
 and the WebSocket upgrade still rides the same URL — the browser client derives its endpoints from
 the http(s) base.
+
+## Bring your own relay
+
+Paired nodes hole-punch direct connections wherever possible; an
+[iroh relay](https://docs.iroh.computer/concepts/relays) assists that hole-punching and carries the
+traffic that cannot go direct. Out of the box a node uses n0-computer's **public relays**: shared by
+every iroh developer, rate-limited, no uptime guarantees. That default exists so the tutorial works
+in thirty seconds; n0 blesses it for development and testing, and a production mesh should not lean
+on it.
+
+```sh
+lofi-node init --relay https://relay.example.net
+```
+
+The relay is part of what you self-host, and it fits the machine you already have: `iroh-relay` is a
+single open-source binary with built-in Let's Encrypt support, cheap to run because it only carries
+the non-direct residue of your own mesh's traffic. The publicly reachable machine hosting your root
+node is its natural home. Each node elects its **own** relay (`relay` in
+[config.json](configuration.md)), and the election travels inside that node's pairing tickets, so
+nothing has to be coordinated across the mesh — no lofi-run infrastructure, no shared choke point.
+Your mesh's availability depends only on machines you operate.
+
+`--relay` accepts several URLs (comma-separated or repeated) for failover. `--no-relay` opts out
+entirely; defensible for nodes that are all mutually reachable (static IPs, a VPN), but it also
+forgoes relay-assisted address discovery, so expect hole-punching to suffer across NATs.
 
 ## One binary
 

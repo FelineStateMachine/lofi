@@ -19,6 +19,7 @@ variables. Both files are owned by the node; edit `config.json` only with the da
   "storage": { "type": "sqlite", "path": "/mnt/nas/lofi" }, // or { "type": "memory" }
   "publicUrl": "http://192.168.1.10:4802", // base embedded in issued tickets
   "upstream": "none", // "none" | { "url": "wss://…" } | { "peer": "endpoint…" }
+  "relay": "n0", // "n0" (default when absent) | { "urls": ["https://…"] } | "disabled"
   "allowLocalFirstAuth": true
 }
 ```
@@ -30,6 +31,12 @@ variables. Both files are owned by the node; edit `config.json` only with the da
   boot) or memory. See [storage choices](storage-choices.md).
 - **`upstream`** — `"none"` for a root node; `{ "peer": … }` for an iroh-paired leaf
   ([pairing](pair-two-homes.md)); `{ "url": … }` for a plain HTTP(S) upstream Jazz server.
+- **`relay`** — which relay servers the node's iroh endpoint uses for hole-punching assistance and
+  as a fallback path when a direct connection cannot be established. `"n0"` (the default when
+  absent) uses the public n0-computer relays: rate-limited, no SLA, meant for development and
+  testing. `{ "urls": […] }` points at relays you run ([bring your own relay](beyond-the-lan.md));
+  `"disabled"` forgoes relays entirely, including relay-assisted address discovery. The elected
+  relay travels inside this node's pairing tickets, so peers need no matching configuration.
 - **Secrets** stay in this file and never transit issued tickets; a provision-scoped ticket causes
   the gate to inject `adminSecret` server-side rather than revealing it.
 

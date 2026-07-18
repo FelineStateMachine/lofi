@@ -47,6 +47,15 @@ two states are honest degradations: `{ state: "off" }` when the mesh is disabled
 `{ state: "unavailable", reason }` when the native layer could not load — the Jazz server still runs
 LAN-only, and `ticket()`/`pair()` throw `MeshUnavailableError` rather than pretending.
 
+## The relay's role
+
+Relays assist that hole-punching (address discovery) and carry traffic only for the connections that
+cannot go direct; in practice the large majority of iroh connections are direct. The relay is a
+**per-node election** (`relay` in [config.json](configuration.md)): whichever relay a node elects
+travels inside its pairing ticket, so the dialing side needs no matching configuration. The default
+is n0-computer's public relays, which are rate-limited and meant for development. For a production
+mesh, [bring your own](beyond-the-lan.md).
+
 ## Choosing a root
 
 The root holds the authoritative store; leaves relay to it. Put the root on the machine with the

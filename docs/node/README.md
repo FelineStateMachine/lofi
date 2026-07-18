@@ -18,7 +18,8 @@ What the node gives you:
   string; possession is transport access, revocation is one command. A provision-scoped ticket
   additionally administers the store, with the admin secret never leaving the node.
 - **Node-to-node replication over iroh.** Two homes converge by pairing tickets: dialed by public
-  key, hole-punched, no static IPs, no cloud dependency.
+  key, hole-punched, no static IPs, no cloud dependency — down to
+  [the relay itself, which you can run](beyond-the-lan.md).
 - **No silent degradation.** If the native transport layer can't load, the Jazz server still runs
   LAN-only and `status()` says exactly why pairing is off.
 

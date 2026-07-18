@@ -1,9 +1,5 @@
 name: Generated app release gate
 
-# Runs on every pull request to main. This gate previously fired only for
-# PRs targeting a dev branch that is no longer used, so PRs merged to main
-# shipped without the reference build or the generated-app golden journey —
-# which is how a vendoring-manifest break survived five merges undetected.
 on:
   pull_request:
     branches:

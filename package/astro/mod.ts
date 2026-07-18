@@ -176,6 +176,16 @@ export default defineConfig({
   vite: {
     plugins: [jazzPlugin({ schemaDir, inspector: false, server: managedJazzServer })],
     server: { fs: { allow: [projectRoot] } },
+    // The worker sub-build falls back to Vite's default asset template
+    // ("[name]-[hash][extname]") while Astro names client assets
+    // "[name].[hash][extname]", so the Jazz WASM binary — imported by both the
+    // runtime and the jazz worker — lands in dist twice under two names.
+    // Matching Astro's template collapses the copies into one file.
+    worker: {
+      rollupOptions: {
+        output: { assetFileNames: "_astro/[name].[hash][extname]" },
+      },
+    },
     define: {
       __LOFI_JAZZ_APP_ID__: JSON.stringify(cloudAppId ?? ""),
       __LOFI_JAZZ_SERVER_URL__: JSON.stringify(cloudServerUrl ?? ""),

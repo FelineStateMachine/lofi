@@ -113,7 +113,7 @@ export default function Home(): ReactNode {
             <div>
               <p className="eyebrow">
                 <span>@nzip/lofi · local-first meta-framework</span>
-                <span className="pill">v{version} · pre-1.0 · MIT</span>
+                <span className="pill">v{version} · alpha · MIT</span>
               </p>
               <h1 className="hero-title">
                 Put down <span data-ink="roots">roots</span>. Skip the spinner.
@@ -330,7 +330,7 @@ export default function Home(): ReactNode {
                 </p>
                 <ul className="limits">
                   <li>
-                    <b>It is an early, pre-1.0 release.</b> Expect the surface to move.
+                    <b>It is an early alpha release.</b> Expect the surface to move.
                   </li>
                   <li>
                     <b>The data layer is Jazz 2 alpha</b>, deliberately pinned to a reviewed

@@ -42,6 +42,7 @@ shortest product overview and command summary. AI agents can ingest these docs a
   - [Collaborative sets](examples/collaborative-sets.md)
   - [Binary and structured payloads](examples/payloads.md)
   - [Schema evolution](examples/schema-evolution.md)
+  - [Nested app namespaces](examples/nested-namespaces.md)
 - [Optional installed-app recipes](recipes/README.md)
 - [Advanced device-auth primitive](auth.md)
 

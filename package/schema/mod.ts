@@ -23,48 +23,83 @@
  * @module
  */
 import { schema } from "jazz-tools";
+import {
+  defineNestedApp,
+  defineNestedPermissions,
+  flattenNestedSchema,
+  mergeNestedPermissions,
+} from "./nested.ts";
 
 /**
- * The curated schema DSL type: every member is the pinned Jazz 2 original,
- * unchanged. Deprecated members (`rename`) and surface lofi does not yet
- * exercise (`defineSliceableApp`) are omitted; everything else re-exports
- * one-to-one.
+ * The curated schema DSL type. Every Jazz member is the pinned Jazz 2
+ * original, unchanged; deprecated members (`rename`) are omitted, and
+ * everything else re-exports one-to-one. The nested-namespace members
+ * (`defineNestedApp`, `defineNestedPermissions`, `mergeNestedPermissions`,
+ * `flattenNestedSchema`) are lofi-owned: a naming layer over the pinned
+ * `defineSliceableApp`, not part of the Jazz DSL.
  */
-export type SchemaDsl = Pick<
-  typeof schema,
-  // Column constructors.
-  | "string"
-  | "boolean"
-  | "int"
-  | "float"
-  | "timestamp"
-  | "bytes"
-  | "json"
-  | "enum"
-  | "ref"
-  | "array"
-  // Column migration operations.
-  | "add"
-  | "drop"
-  | "renameFrom"
-  // Tables, schemas, and apps.
-  | "table"
-  | "defineSchema"
-  | "defineApp"
-  // Schema migrations.
-  | "defineMigration"
-  | "renameTableFrom"
-  // Permissions.
-  | "definePermissions"
-  | "permissionIntrospectionColumns"
->;
+export type SchemaDsl =
+  & Pick<
+    typeof schema,
+    // Column constructors.
+    | "string"
+    | "boolean"
+    | "int"
+    | "float"
+    | "timestamp"
+    | "bytes"
+    | "json"
+    | "enum"
+    | "ref"
+    | "array"
+    // Column migration operations.
+    | "add"
+    | "drop"
+    | "renameFrom"
+    // Tables, schemas, and apps.
+    | "table"
+    | "defineSchema"
+    | "defineApp"
+    | "defineSliceableApp"
+    // Schema migrations.
+    | "defineMigration"
+    | "renameTableFrom"
+    // Permissions.
+    | "definePermissions"
+    | "permissionIntrospectionColumns"
+  >
+  & {
+    defineNestedApp: typeof defineNestedApp;
+    defineNestedPermissions: typeof defineNestedPermissions;
+    mergeNestedPermissions: typeof mergeNestedPermissions;
+    flattenNestedSchema: typeof flattenNestedSchema;
+  };
 
 /**
  * The lofi schema surface. Use in `src/schema.ts` and `src/permissions.ts` in
- * place of a raw `jazz-tools` import; member names and behavior are identical
- * to the pinned Jazz 2 DSL.
+ * place of a raw `jazz-tools` import; Jazz member names and behavior are
+ * identical to the pinned Jazz 2 DSL, and the nested-namespace members are
+ * the lofi naming layer documented on {@link defineNestedApp}.
  */
-export const s: SchemaDsl = schema;
+export const s: SchemaDsl = {
+  ...schema,
+  defineNestedApp,
+  defineNestedPermissions,
+  mergeNestedPermissions,
+  flattenNestedSchema,
+};
+
+export {
+  defineNestedApp,
+  defineNestedPermissions,
+  flattenNestedSchema,
+  mergeNestedPermissions,
+  NESTED_SEPARATOR,
+  type NestedApp,
+  nestedAppDeployTarget,
+  nestedAppTables,
+  type NestedSchemaDefinition,
+} from "./nested.ts";
 
 /**
  * Schema-authoring types re-exported from the pinned Jazz 2 DSL for use in

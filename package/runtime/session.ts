@@ -27,7 +27,8 @@ import {
   syncElected,
   syncing,
 } from "./config.ts";
-import { declareSinkFromTicket } from "./data-sink.ts";
+import { declareSinkFromTicket, splitTicketForEnrollment } from "./data-sink.ts";
+import { holdProvisionCapability } from "./provision.ts";
 import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
 import { authenticateDeviceCredential, AuthError, enrollDeviceCredential } from "./auth.ts";
 import {
@@ -296,6 +297,12 @@ export async function enableSyncBackup(): Promise<Session> {
   return readSession();
 }
 
+/** Options for {@link enrollSyncTicket}. */
+export type EnrollSyncTicketOptions = {
+  /** Fetch implementation for the scope-down exchange (tests inject one). */
+  fetcher?: typeof fetch;
+};
+
 /**
  * Enrolls a `lofisync1.` app-connect ticket as this device's sync location and
  * elects to back up and sync in one step: the ticket's URL becomes the sync
@@ -303,9 +310,21 @@ export async function enableSyncBackup(): Promise<Session> {
  * reflects the declared sink. Throws `DataSinkError` (see `data-sink.ts`) for
  * malformed tickets, ws URLs, an app id that contradicts a compiled-in managed
  * app, or a different sink already declared on this device.
+ *
+ * A `provision`-scoped ticket is split before anything persists: the node's
+ * scope-down exchange mints a derived sync ticket, that becomes the declared
+ * sink, and the provision capability is only *held* in memory (see
+ * `provision.ts` — sealing it behind a passkey is a separate, explicit
+ * ceremony). Against a node without the exchange, the ticket enrolls as
+ * pasted, exactly as before.
  */
-export async function enrollSyncTicket(ticket: string): Promise<Session> {
-  await declareSinkFromTicket(ticket);
+export async function enrollSyncTicket(
+  ticket: string,
+  options: EnrollSyncTicketOptions = {},
+): Promise<Session> {
+  const split = await splitTicketForEnrollment(ticket, options.fetcher);
+  await declareSinkFromTicket(split.sinkTicket);
+  if (split.provisionUrl !== null) holdProvisionCapability(split.provisionUrl);
   return await enableSyncBackup();
 }
 

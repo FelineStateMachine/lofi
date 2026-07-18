@@ -16,6 +16,7 @@ export { defineLofiApp, type LofiAppConfig, LofiConfigurationError } from "./app
 export {
   type AuthCapability,
   type AuthDependencies,
+  authenticateAndDerivePrfSecret,
   authenticateDeviceCredential,
   AuthError,
   classifyCredentialOrigin,
@@ -31,6 +32,16 @@ export {
   type PrfSupport,
 } from "./auth.ts";
 export { bootLofi } from "./boot.ts";
+export {
+  clearProvisionCapability,
+  heldProvisionCapability,
+  holdProvisionCapability,
+  lockProvisionCapability,
+  type ProvisionCapabilityStatus,
+  provisionCapabilityStatus,
+  sealProvisionCapability,
+  unlockProvisionCapability,
+} from "./provision.ts";
 export {
   assertDurableBrowser,
   type DeviceCapabilityReport,
@@ -97,6 +108,7 @@ export {
   createRecoverablePasskeyBackup,
   enableSyncBackup,
   enrollSyncTicket,
+  type EnrollSyncTicketOptions,
   isAccountReplacementError,
   isAuthError,
   isRecoverablePasskeyError,
@@ -121,7 +133,9 @@ export {
   readDeclaredSink,
   restoreDeclaredSink,
   type SinkRestoreOutcome,
+  splitTicketForEnrollment,
   type SyncTicket,
+  type TicketSplit,
 } from "./data-sink.ts";
 export { RecoveryError } from "./recovery.ts";
 export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";

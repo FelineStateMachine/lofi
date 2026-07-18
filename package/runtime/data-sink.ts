@@ -358,3 +358,55 @@ export async function declareSinkFromTicket(
 export function isDataSinkError(error: unknown): error is DataSinkError {
   return error instanceof DataSinkError;
 }
+
+/**
+ * How a pasted ticket resolves for enrollment: what to declare as the sink,
+ * and the provision bearer URL to hold in memory when the capability was
+ * split off (see `provision.ts` for its custody).
+ */
+export type TicketSplit = {
+  /** The ticket to declare as this device's sink. */
+  sinkTicket: string;
+  /** The provision bearer URL when the exchange split it off, else `null`. */
+  provisionUrl: string | null;
+};
+
+/**
+ * Splits a `provision`-scoped ticket before anything persists: the node's
+ * scope-down exchange (`POST <ticket-url>/derive-sync-ticket`) mints a
+ * derived sync ticket to declare as the sink, and the provision URL is
+ * returned separately for in-memory custody. Any exchange failure — a node
+ * predating the endpoint, a network error, an unusable response — falls back
+ * to enrolling the ticket exactly as pasted. Sync-scoped and malformed
+ * tickets pass through unchanged (declaration is where malformed input
+ * rejects).
+ */
+export async function splitTicketForEnrollment(
+  ticket: string,
+  fetcher: typeof fetch = fetch,
+): Promise<TicketSplit> {
+  const parsed = parseSyncTicket(ticket);
+  if (parsed?.scope !== "provision") return { sinkTicket: ticket, provisionUrl: null };
+  let derived: string | null = null;
+  try {
+    const response = await fetcher(`${parsed.url}/derive-sync-ticket`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (response.ok) {
+      const body = await response.json() as { ticket?: unknown };
+      if (typeof body.ticket === "string") derived = body.ticket;
+    }
+  } catch {
+    // Fall back to the ticket as pasted.
+  }
+  const derivedParsed = derived === null ? null : parseSyncTicket(derived);
+  if (
+    derived !== null && derivedParsed !== null && derivedParsed.appId === parsed.appId &&
+    (derivedParsed.scope ?? "sync") === "sync"
+  ) {
+    return { sinkTicket: derived, provisionUrl: parsed.url };
+  }
+  return { sinkTicket: ticket, provisionUrl: null };
+}

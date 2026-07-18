@@ -12,6 +12,7 @@ import {
   parseSyncTicket,
   readDeclaredSink,
   restoreDeclaredSink,
+  splitTicketForEnrollment,
 } from "./data-sink.ts";
 import { memoryDeviceKeyStore, parseSealedEnvelope } from "./envelope.ts";
 import {
@@ -376,3 +377,99 @@ test(
     );
   }),
 );
+
+// The scope-down exchange: a provision ticket splits into a derived sync
+// ticket (declared) and the provision URL (held in memory by session.ts).
+const provisionTicket = encodeTicket({
+  v: 1,
+  appId: ticketAppId,
+  url: `http://192.168.1.10:4802/t/${ticketSecret}`,
+  scope: "provision",
+  label: "phone",
+});
+const derivedSecret = "d".repeat(43);
+const derivedTicket = encodeTicket({
+  v: 1,
+  appId: ticketAppId,
+  url: `http://192.168.1.10:4802/t/${derivedSecret}`,
+  scope: "sync",
+  label: "phone (sync)",
+});
+
+function fetcherReturning(status: number, body: unknown): typeof fetch {
+  return () => Promise.resolve(new Response(JSON.stringify(body), { status }));
+}
+
+test("a provision ticket splits into the derived sync ticket and the held URL", async () => {
+  const requests: string[] = [];
+  const fetcher: typeof fetch = (input, init) => {
+    requests.push(`${init?.method} ${String(input)}`);
+    return Promise.resolve(
+      new Response(JSON.stringify({ v: 1, id: "abc", ticket: derivedTicket }), { status: 200 }),
+    );
+  };
+  const split = await splitTicketForEnrollment(provisionTicket, fetcher);
+  assert(split.sinkTicket === derivedTicket, "the derived sync ticket must become the sink");
+  assert(
+    split.provisionUrl === `http://192.168.1.10:4802/t/${ticketSecret}`,
+    "the provision URL must be returned for in-memory custody",
+  );
+  assert(
+    requests.length === 1 &&
+      requests[0] === `POST http://192.168.1.10:4802/t/${ticketSecret}/derive-sync-ticket`,
+    `the exchange must POST the derive endpoint once, sent: ${requests.join("; ")}`,
+  );
+});
+
+test("exchange failures fall back to enrolling the ticket as pasted", async () => {
+  const fallbacks: Array<typeof fetch> = [
+    fetcherReturning(401, { error: "invalid_ticket" }),
+    fetcherReturning(404, "not found"),
+    fetcherReturning(200, { ticket: 7 }),
+    fetcherReturning(200, { v: 1, id: "abc", ticket: "lofisync1.nope" }),
+    fetcherReturning(200, {
+      v: 1,
+      id: "abc",
+      ticket: encodeTicket({
+        v: 1,
+        appId: "11111111-2222-3333-4444-555555555555",
+        url: `http://h/t/${derivedSecret}`,
+        scope: "sync",
+      }),
+    }),
+    fetcherReturning(200, {
+      v: 1,
+      id: "abc",
+      ticket: encodeTicket({
+        v: 1,
+        appId: ticketAppId,
+        url: `http://h/t/${derivedSecret}`,
+        scope: "provision",
+      }),
+    }),
+    () => Promise.reject(new Error("network down")),
+  ];
+  for (const fetcher of fallbacks) {
+    const split = await splitTicketForEnrollment(provisionTicket, fetcher);
+    assert(
+      split.sinkTicket === provisionTicket && split.provisionUrl === null,
+      "an unusable exchange must fall back to the pasted ticket",
+    );
+  }
+});
+
+test("sync-scoped and malformed tickets never touch the exchange", async () => {
+  let calls = 0;
+  const fetcher: typeof fetch = () => {
+    calls++;
+    return Promise.resolve(new Response("{}", { status: 200 }));
+  };
+  for (const ticket of [validTicket, "lofisync1.nope", "not a ticket"]) {
+    const split = await splitTicketForEnrollment(ticket, fetcher);
+    assert(
+      split.sinkTicket === ticket && split.provisionUrl === null,
+      "a non-provision paste must pass through unchanged",
+    );
+  }
+  assert(calls === 0, "the exchange endpoint must not be called for non-provision tickets");
+});

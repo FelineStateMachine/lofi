@@ -376,6 +376,57 @@ export async function authenticateDeviceCredential(
   }
 }
 
+/**
+ * Authenticates and derives the PRF secret in one user-verifying ceremony:
+ * the PRF evaluation rides the assertion's extensions, so a flow that needs
+ * both the asserted credential and a credential-bound key costs one prompt,
+ * not two. Pass `credentialId` to pin the ceremony to one enrolled
+ * credential. Throws `prf-unavailable` when the client or authenticator
+ * returns no PRF result — the secret is never faked — and
+ * `credential-mismatch` when a different credential asserts than the one
+ * pinned.
+ */
+export async function authenticateAndDerivePrfSecret(
+  salt: BufferSource,
+  options: AuthenticateOptions = {},
+): Promise<{ credential: DeviceCredential; secret: Uint8Array }> {
+  const rpId = requireStableRpId(options);
+  const credentials = options.credentials ?? browserCredentials();
+  const allowCredentials: PublicKeyCredentialDescriptor[] | undefined = options.credentialId
+    ? [{ type: "public-key", id: fromBase64Url(options.credentialId) }]
+    : undefined;
+  try {
+    const credential = await credentials.get({
+      publicKey: {
+        rpId,
+        challenge: randomBytes(),
+        userVerification: "required",
+        timeout: 60_000,
+        ...(allowCredentials ? { allowCredentials } : {}),
+        extensions: { prf: { eval: { first: salt } } } as RequestExtensions,
+      },
+    });
+    const asserted = { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) };
+    // Verify the assertion even though `allowCredentials` was sent: the browser
+    // allow-list is a request hint, not a caller-side guarantee.
+    if (options.credentialId && asserted.id !== options.credentialId) {
+      throw new AuthError(
+        "credential-mismatch",
+        "The asserting passkey is not the enrolled credential.",
+      );
+    }
+    const results =
+      (credential as (Credential & { getClientExtensionResults?: () => { prf?: PrfResults } }))
+        .getClientExtensionResults?.().prf?.results;
+    if (!results?.first) throw new AuthError("prf-unavailable");
+    // A copy, not a view: callers zero the secret after deriving from it, and
+    // that must never reach through to the extension-result buffer.
+    return { credential: asserted, secret: new Uint8Array(results.first.slice(0)) };
+  } catch (error) {
+    throw mapError(error);
+  }
+}
+
 // --- PRF-derived at-rest key --------------------------------------------------
 
 /**

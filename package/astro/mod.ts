@@ -41,6 +41,7 @@ export const runtimeFiles = [
   "namespace-state.ts",
   "passkey-recovery.ts",
   "probe.ts",
+  "provision.ts",
   "pwa.ts",
   "recovery.ts",
   "resource-lifecycle.ts",
@@ -77,6 +78,7 @@ export const preactFiles = [
   "mod.ts",
   "PwaActions.tsx",
   "RuntimeRecovery.tsx",
+  "TicketEnrollForm.tsx",
   "use-device-capabilities.ts",
 ] as const;
 

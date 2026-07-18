@@ -25,14 +25,26 @@ try {
 
 // Fonts must ship as files, not base64 in the render-blocking stylesheet —
 // webpack's default inline threshold would bloat styles.css by hundreds of KB.
+// Rewrites Docusaurus's own font rule in place: appending a second rule makes
+// webpack run both, and the asset/resource pass emits the url-loader's JS
+// module source as the .woff2 the CSS points at — a 127-byte stub, no font.
 function noInlineFontsPlugin() {
   return {
     name: "lofi-no-inline-fonts",
-    configureWebpack: () => ({
-      module: {
-        rules: [{ test: /\.(?:woff2?|eot|ttf|otf)$/i, type: "asset/resource" }],
-      },
-    }),
+    configureWebpack: (config: { module?: { rules?: unknown[] } }) => {
+      for (const rule of config.module?.rules ?? []) {
+        if (
+          rule && typeof rule === "object" && "test" in rule &&
+          rule.test instanceof RegExp && rule.test.test("x.woff2")
+        ) {
+          const fontRule = rule as Record<string, unknown>;
+          delete fontRule.use;
+          fontRule.type = "asset/resource";
+          fontRule.generator = { filename: "assets/fonts/[name]-[hash][ext]" };
+        }
+      }
+      return {};
+    },
   };
 }
 

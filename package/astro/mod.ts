@@ -29,6 +29,7 @@ export const runtimeFiles = [
   "config.ts",
   "device-capabilities.ts",
   "diagnostics.ts",
+  "durability.ts",
   "env.d.ts",
   "foreground-recovery.ts",
   "inspector.ts",

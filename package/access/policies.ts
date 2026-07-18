@@ -27,12 +27,43 @@ export type GroupAccessTemplate = {
 /** Any built-in access policy template accepted by {@link defineAccessPolicies}. */
 export type AccessTemplate = PrivateAccessTemplate | SharedAccessTemplate | GroupAccessTemplate;
 
-/** Declares owner-only read and mutation policy for one resource table. */
+/**
+ * Declares owner-only read and mutation policy for one resource table.
+ *
+ * @example
+ * ```ts
+ * import { defineAccessPolicies, privateAccess } from "@nzip/lofi/access";
+ * import { app } from "./schema.ts";
+ *
+ * export default defineAccessPolicies(app, [privateAccess({ resource: app.notes })]);
+ * ```
+ *
+ * @param config The resource table whose rows are visible and mutable only to their creator.
+ * @returns A template for {@link defineAccessPolicies}.
+ */
 export function privateAccess(config: { resource: AccessTable }): PrivateAccessTemplate {
   return { kind: "private", ...config };
 }
 
-/** Declares owner plus explicit read/edit grants for one resource table. */
+/**
+ * Declares owner plus explicit read/edit grants for one resource table.
+ *
+ * The grant table must be declared with the `sharedGrantTable` helper (or match
+ * its column shape) and reference the resource table.
+ *
+ * @example
+ * ```ts
+ * import { defineAccessPolicies, sharedAccess } from "@nzip/lofi/access";
+ * import { app } from "./schema.ts";
+ *
+ * export default defineAccessPolicies(app, [
+ *   sharedAccess({ resource: app.notes, grants: app.noteGrants }),
+ * ]);
+ * ```
+ *
+ * @param config The shared resource table and its grant table.
+ * @returns A template for {@link defineAccessPolicies}.
+ */
 export function sharedAccess(config: {
   resource: AccessTable;
   grants: AccessTable;
@@ -40,7 +71,30 @@ export function sharedAccess(config: {
   return { kind: "shared", ...config };
 }
 
-/** Declares fixed-role membership policy for one or more group-owned resources. */
+/**
+ * Declares fixed-role membership policy for one or more group-owned resources.
+ *
+ * The membership table must be declared with the `groupMembershipTable` helper
+ * (or match its column shape), and each resource table must carry the `groupId`
+ * column referencing the group table.
+ *
+ * @example
+ * ```ts
+ * import { defineAccessPolicies, groupAccess } from "@nzip/lofi/access";
+ * import { app } from "./schema.ts";
+ *
+ * export default defineAccessPolicies(app, [groupAccess({
+ *   groups: app.workspaces,
+ *   members: app.workspaceMembers,
+ *   resources: app.documents,
+ *   groupId: "workspaceId",
+ * })]);
+ * ```
+ *
+ * @param config The group table, membership table, group-owned resource table(s), and the
+ * resource column that references the group.
+ * @returns A template for {@link defineAccessPolicies}.
+ */
 export function groupAccess(config: {
   groups: AccessTable;
   members: AccessTable;
@@ -133,6 +187,28 @@ export type RawAccessPolicyExtension = (context: RawAccessPolicyContext) => void
 /**
  * Compiles the three narrow templates through Jazz's own policy builder. The
  * optional callback is the raw Jazz-policy escape hatch for app-specific rules.
+ *
+ * @example
+ * ```ts
+ * import { defineAccessPolicies, groupAccess, sharedAccess } from "@nzip/lofi/access";
+ * import { app } from "./schema.ts";
+ *
+ * export default defineAccessPolicies(app, [
+ *   sharedAccess({ resource: app.notes, grants: app.noteGrants }),
+ *   groupAccess({
+ *     groups: app.workspaces,
+ *     members: app.workspaceMembers,
+ *     resources: app.documents,
+ *     groupId: "workspaceId",
+ *   }),
+ * ]);
+ * ```
+ *
+ * @param app The raw Jazz app returned by `s.defineApp`.
+ * @param templates At least one {@link privateAccess}, {@link sharedAccess}, or
+ * {@link groupAccess} template; every table needs a policy.
+ * @param raw Optional raw-policy callback for app-specific rules beyond the templates.
+ * @returns Compiled permissions suitable as the app's default policy export.
  */
 export function defineAccessPolicies<TApp extends object>(
   app: TApp,

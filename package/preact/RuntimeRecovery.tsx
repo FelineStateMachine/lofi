@@ -10,7 +10,19 @@ export type RuntimeRecoveryProps = {
   reload?: () => void;
 };
 
-/** Renders recovery only when another tab is running an incompatible broker version. */
+/**
+ * Renders recovery only when another tab is running an incompatible broker version.
+ *
+ * @example
+ * ```tsx
+ * import { RuntimeRecovery } from "@nzip/lofi/preact";
+ *
+ * <RuntimeRecovery failure={startupFailure} />;
+ * ```
+ *
+ * @param props The startup failure to inspect and an optional reload override.
+ * @returns The recovery prompt, or `null` when no incompatible-broker failure is present.
+ */
 export function RuntimeRecovery({ failure, reload }: RuntimeRecoveryProps): JSX.Element | null {
   if (failure?.code !== "broker-incompatible") return null;
   return (

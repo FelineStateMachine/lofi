@@ -380,6 +380,24 @@ export class TwoClientFixture {
  * Launch (or reuse) a browser and build a {@link TwoClientFixture}: opens both
  * clients at `baseURL`, applies the chosen identity mode with state kept in
  * memory, and starts recording. Cleans up on any setup failure.
+ *
+ * @example
+ * ```ts
+ * const fixture = await createTwoClientFixture({
+ *   baseURL,
+ *   identity: { mode: "shared", preparePrimary: (client) => ready(client) },
+ *   artifacts: { directory: "test-results" },
+ * });
+ * try {
+ *   await fixture.goOffline();
+ *   // ...apply edits on fixture.first and fixture.second, then converge...
+ * } finally {
+ *   await fixture.close();
+ * }
+ * ```
+ *
+ * @param options The base URL, identity mode, and optional browser, context, and artifact settings.
+ * @returns A ready fixture whose two clients are open at `baseURL` with identity applied.
  */
 export async function createTwoClientFixture(
   options: TwoClientFixtureOptions,

@@ -33,7 +33,20 @@ function Row({ label, value }: { label: string; value: string }): JSX.Element {
 
 const available = (present: boolean) => (present ? "available" : "missing");
 
-/** Renders live storage, sync, auth, and PWA capability diagnostics. */
+/**
+ * Renders live storage, sync, auth, and PWA capability diagnostics.
+ *
+ * @example
+ * ```tsx
+ * import { DeviceStatus } from "@nzip/lofi/preact";
+ *
+ * export function SettingsPage() {
+ *   return <DeviceStatus />;
+ * }
+ * ```
+ *
+ * @returns The device diagnostics panel, grouped by owning subsystem.
+ */
 export default function DeviceStatus(): VNode {
   const { report, requestPersistence } = useDeviceCapabilities();
   const [pwa, setPwa] = useState<PwaState>(getPwaState());

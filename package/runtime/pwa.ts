@@ -104,7 +104,6 @@ export type PwaControllerDependencies = {
   /** Absolute URL of the configured deployment base, independent of the current route. */
   readonly deploymentBaseUrl?: () => string;
   /** @deprecated Supply deploymentBaseUrl when injecting browser location in tests. */
-  readonly documentBaseURI?: () => string;
   readonly reload?: () => void;
   readonly exposeState?: (state: PwaState) => void;
 };
@@ -411,12 +410,8 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
       if (dependencies.reload) dependencies.reload();
       else location.reload();
     });
-    const deploymentBaseUrl = dependencies.deploymentBaseUrl?.() ?? (() => {
-      const locationOrigin = dependencies.documentBaseURI
-        ? new URL(dependencies.documentBaseURI()).origin
-        : document.location.origin;
-      return new URL(import.meta.env.BASE_URL, locationOrigin).href;
-    })();
+    const deploymentBaseUrl = dependencies.deploymentBaseUrl?.() ??
+      new URL(import.meta.env.BASE_URL, document.location.origin).href;
     const { workerUrl, scope } = resolvePwaResources(deploymentBaseUrl);
     void (async () => {
       const registration = await container.register(workerUrl, {

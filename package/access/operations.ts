@@ -1,6 +1,6 @@
 import type { QueryBuilder, TableProxy } from "jazz-tools";
 import { syncing } from "../runtime/config.ts";
-import { getRuntime } from "../runtime/runtime.ts";
+import { getRuntime, updateRuntimeDiagnostics } from "../runtime/runtime.ts";
 import { AccessError } from "./errors.ts";
 import { decodeSharingIdentity, type SharingIdentity } from "./identity.ts";
 import { type GroupRole, groupRoleCapabilities, groupRoles } from "./schema.ts";
@@ -38,11 +38,33 @@ function requireSync(operation: string): void {
   }
 }
 
+// Share and membership writes settle through the same runtime diagnostics as
+// table mutations, so access operations stay visible to the inspector instead
+// of bypassing pending-write and error counters entirely.
 async function settle<T>(write: DurableWrite<T>): Promise<T> {
+  updateRuntimeDiagnostics((diagnostics) => diagnostics.pendingLocalWrites += 1);
+  let localSettled = false;
   try {
     await write.wait({ tier: "local" });
-    return await write.wait({ tier: "global" });
+    localSettled = true;
+    updateRuntimeDiagnostics((diagnostics) => {
+      diagnostics.pendingLocalWrites -= 1;
+      diagnostics.localWaitCalls += 1;
+      diagnostics.pendingGlobalWrites += 1;
+    });
+    const result = await write.wait({ tier: "global" });
+    updateRuntimeDiagnostics((diagnostics) => {
+      diagnostics.pendingGlobalWrites -= 1;
+      diagnostics.lastWriteDurability = "global";
+    });
+    return result;
   } catch (cause) {
+    updateRuntimeDiagnostics((diagnostics) => {
+      if (localSettled) diagnostics.pendingGlobalWrites -= 1;
+      else diagnostics.pendingLocalWrites -= 1;
+      diagnostics.mutationErrors += 1;
+      diagnostics.lastWriteDurability = "failed";
+    });
     throw new AccessError(
       "mutation-rejected",
       "Jazz rejected the access change. Refresh permissions and membership, then try again.",

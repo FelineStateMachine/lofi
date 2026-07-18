@@ -241,8 +241,13 @@ async function assertNoSymlinkPath(cwd: string, segments: readonly string[]): Pr
 }
 
 async function writeTemplate(destination: string): Promise<void> {
-  for (const relativePath of STARTER_FILES) {
-    const content = await readStarterFile(relativePath);
+  // Fetch concurrently: remote creation (jsr:) otherwise pays one network
+  // round trip per starter file.
+  const files = await Promise.all(STARTER_FILES.map(async (relativePath) => ({
+    relativePath,
+    content: await readStarterFile(relativePath),
+  })));
+  for (const { relativePath, content } of files) {
     const path = join(destination, relativePath);
     await Deno.mkdir(dirname(path), { recursive: true });
     await Deno.writeFile(path, content);

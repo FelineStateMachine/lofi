@@ -502,3 +502,53 @@ Deno.test("production preview maps install-critical content types", () => {
   );
   assert(productionContentType("icon.webp") === "image/webp", "WebP MIME drifted");
 });
+
+Deno.test("a truncated PNG reports not decodable instead of throwing", async () => {
+  const { root, project } = await makeProject();
+  try {
+    // A valid PNG signature and IHDR tag, truncated before the dimension bytes.
+    const truncated = new Uint8Array([
+      137,
+      80,
+      78,
+      71,
+      13,
+      10,
+      26,
+      10,
+      0,
+      0,
+      0,
+      13,
+      73,
+      72,
+      68,
+      82,
+    ]);
+    await Deno.writeFile(join(project, "public", "icon-192.png"), truncated);
+    const issues = await sourcePwaIssues(project);
+    assert(
+      hasIssue(issues, "not decodable as image/png"),
+      "a truncated image must produce the documented diagnostic, not a RangeError",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("encoded backslashes cannot escape the deployment scope", async () => {
+  const { root, project } = await makeProject();
+  try {
+    const manifest = await readManifest(project);
+    const icons = manifest.icons as Array<Record<string, unknown>>;
+    icons[0] = { ...icons[0], src: "..%5C..%5Cicon-192.png" };
+    await writeManifest(project, manifest);
+    const issues = await sourcePwaIssues(project);
+    assert(
+      hasIssue(issues, "must stay inside deployment scope"),
+      "an encoded-backslash path must be rejected as out of scope",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});

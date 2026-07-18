@@ -207,11 +207,34 @@ export function mountInspector(
     if (confirmed) void runAction("Local replica clear", adapter.clearLocalReplica);
   });
 
-  const unsubscribe = adapter.subscribe(() => void refresh());
-  void refresh().catch(() => {
+  // Diagnostics ticks arrive faster than snapshots resolve; coalesce bursts
+  // into one in-flight snapshot plus at most one queued follow-up, and keep
+  // every recurring rejection handled — previously only the initial refresh
+  // was caught, so a runtime startup failure produced repeated unhandled
+  // rejections in development.
+  let refreshRunning = false;
+  let refreshQueued = false;
+  const reportRefreshFailure = () => {
     status.textContent =
       "Inspector snapshot failed. Run deno task doctor, apply the first action, then reload.";
-  });
+  };
+  const scheduleRefresh = () => {
+    if (!active) return;
+    if (refreshRunning) {
+      refreshQueued = true;
+      return;
+    }
+    refreshRunning = true;
+    void refresh().catch(reportRefreshFailure).finally(() => {
+      refreshRunning = false;
+      if (refreshQueued) {
+        refreshQueued = false;
+        if (active) scheduleRefresh();
+      }
+    });
+  };
+  const unsubscribe = adapter.subscribe(scheduleRefresh);
+  scheduleRefresh();
   return {
     element: host,
     dispose() {

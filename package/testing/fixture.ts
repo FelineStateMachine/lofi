@@ -196,7 +196,8 @@ export class BrowserTestClient {
     }
     await this.#discardTrace();
     await this.#context.close();
-    this.#context = await this.createContext(state ? structuredClone(state) : undefined);
+    // createContext clones defensively; cloning again here doubled the work.
+    this.#context = await this.createContext(state);
     state = undefined;
     this.#page = await this.#context.newPage();
     this.#offline = false;
@@ -428,9 +429,7 @@ export async function createTwoClientFixture(
       await options.identity.prepare(first);
     }
 
-    const secondContext = await createContext(
-      sharedState ? structuredClone(sharedState) : undefined,
-    );
+    const secondContext = await createContext(sharedState);
     sharedState = undefined;
     const secondPage = await secondContext.newPage();
     second = new BrowserTestClient(

@@ -378,13 +378,17 @@ export async function authenticateDeviceCredential(
 
 // --- PRF-derived at-rest key --------------------------------------------------
 
-// Runs a single user-verifying `get()` with the PRF extension and returns both
-// the PRF secret and the asserting credential's identity, so a caller can derive
-// the account and report which key unlocked it from one ceremony (one prompt).
-async function prfAssertion(
+/**
+ * Derives a credential-bound secret from the passkey via the WebAuthn PRF
+ * extension in one user-verifying `get()`. The same `salt` on the same
+ * authenticator yields the same 32-byte secret; it never leaves the device.
+ * Throws `prf-unavailable` if the client or authenticator does not return a
+ * PRF result — the secret is never faked.
+ */
+export async function derivePrfSecret(
   salt: BufferSource,
-  dependencies: AuthDependencies,
-): Promise<{ prfSecret: Uint8Array; credential: DeviceCredential }> {
+  dependencies: AuthDependencies = {},
+): Promise<Uint8Array> {
   const rpId = requireStableRpId(dependencies);
   const credentials = dependencies.credentials ?? browserCredentials();
   try {
@@ -401,26 +405,10 @@ async function prfAssertion(
       (credential as (Credential & { getClientExtensionResults?: () => { prf?: PrfResults } }))
         .getClientExtensionResults?.().prf?.results;
     if (!results?.first) throw new AuthError("prf-unavailable");
-    return {
-      prfSecret: new Uint8Array(results.first),
-      credential: { id: toBase64Url(rawId(credential)), rpId, portable: isPortable(credential) },
-    };
+    return new Uint8Array(results.first);
   } catch (error) {
     throw mapError(error);
   }
-}
-
-/**
- * Derives a credential-bound secret from the passkey via the WebAuthn PRF
- * extension. The same `salt` on the same authenticator yields the same 32-byte
- * secret; it never leaves the device. Throws `prf-unavailable` if the client or
- * authenticator does not return a PRF result — the secret is never faked.
- */
-export async function derivePrfSecret(
-  salt: BufferSource,
-  dependencies: AuthDependencies = {},
-): Promise<Uint8Array> {
-  return (await prfAssertion(salt, dependencies)).prfSecret;
 }
 
 /**

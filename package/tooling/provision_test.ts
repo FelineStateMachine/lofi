@@ -136,3 +136,21 @@ Deno.test("provisionJazzApp replaces a configured app when forced", async () => 
   assert(written.includes(`JAZZ_APP_ID=${sampleApp.appId}`), "the app id is overwritten");
   assert(written.includes("OTHER=keep"), "unrelated keys survive a forced replace");
 });
+
+Deno.test("mergeEnv rewrites every duplicate so the parsed value can never go stale", () => {
+  // parseDotenv treats the LAST occurrence as authoritative; updating only the
+  // first duplicate reported success while commands kept the old value.
+  const existing = [
+    "JAZZ_APP_ID=old-first",
+    "# duplicate below wins during parsing",
+    "JAZZ_APP_ID=old-last",
+    "",
+  ].join("\n");
+  const merged = mergeEnv(existing, { JAZZ_APP_ID: "fresh" });
+  const values = merged.split("\n").filter((line) => line.startsWith("JAZZ_APP_ID="));
+  assert(values.length === 2, "both duplicate assignments must remain in place");
+  assert(
+    values.every((line) => line === "JAZZ_APP_ID=fresh"),
+    "every duplicate assignment must carry the new value",
+  );
+});

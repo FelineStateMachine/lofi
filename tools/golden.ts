@@ -635,16 +635,28 @@ async function selectVirtualCredential(page: Page, credentialId: string): Promis
   }, credentialId);
 }
 
+// Every golden-recipe installer patches the same authored manifest; one
+// helper owns the read/patch/write cycle so the seven installers cannot
+// drift in how they load or serialize it.
+async function patchManifest(
+  projectRoot: string,
+  // deno-lint-ignore no-explicit-any
+  patch: (manifest: any) => void,
+): Promise<void> {
+  await patchManifest(projectRoot, (manifest) => {
+    patch(manifest);
+  });
+}
+
 async function installWebShareRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.share_target = {
-    action: "./share/",
-    method: "GET",
-    enctype: "application/x-www-form-urlencoded",
-    params: { title: "title", text: "text", url: "url" },
-  };
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.share_target = {
+      action: "./share/",
+      method: "GET",
+      enctype: "application/x-www-form-urlencoded",
+      params: { title: "title", text: "text", url: "url" },
+    };
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "share.astro"),
     `---
@@ -702,10 +714,9 @@ export default function ShareReceiver() {
 }
 
 async function installLaunchHandlerRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.launch_handler = { client_mode: ["focus-existing", "auto"] };
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.launch_handler = { client_mode: ["focus-existing", "auto"] };
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "launch.astro"),
     `---
@@ -760,13 +771,12 @@ export default function LaunchReceiver() {
 }
 
 async function installFileHandlerRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.file_handlers = [{
-    action: "./import/",
-    accept: { "application/json": [".json"] },
-  }];
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.file_handlers = [{
+      action: "./import/",
+      accept: { "application/json": [".json"] },
+    }];
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "import.astro"),
     `---
@@ -854,10 +864,9 @@ export default function FileImport() {
 }
 
 async function installProtocolHandlerRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.protocol_handlers = [{ protocol: "web+lofi", url: "./open-item/?url=%s" }];
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.protocol_handlers = [{ protocol: "web+lofi", url: "./open-item/?url=%s" }];
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "open-item.astro"),
     `---
@@ -915,15 +924,14 @@ export default function ProtocolItem() {
 }
 
 async function installRelatedAppDiscoveryRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.prefer_related_applications = false;
-  manifest.related_applications = [{
-    platform: "play",
-    id: "com.example.companion",
-    url: "https://play.google.com/store/apps/details?id=com.example.companion",
-  }];
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.prefer_related_applications = false;
+    manifest.related_applications = [{
+      platform: "play",
+      id: "com.example.companion",
+      url: "https://play.google.com/store/apps/details?id=com.example.companion",
+    }];
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "companion.astro"),
     `---
@@ -950,10 +958,9 @@ export default function CompanionDiscovery() {
 }
 
 async function installScopeExtensionRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.scope_extensions = [{ type: "origin", origin: "https://help.example.com" }];
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.scope_extensions = [{ type: "origin", origin: "https://help.example.com" }];
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "scope-extension.astro"),
     `---
@@ -982,10 +989,9 @@ const verified = verifyWebAppOriginAssociation(association, expected);
 }
 
 async function installWindowControlsOverlayRecipe(projectRoot: string) {
-  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
-  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
-  manifest.display_override = ["window-controls-overlay"];
-  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await patchManifest(projectRoot, (manifest) => {
+    manifest.display_override = ["window-controls-overlay"];
+  });
   await Deno.writeTextFile(
     join(projectRoot, "src", "pages", "desktop-titlebar.astro"),
     `---

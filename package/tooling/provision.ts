@@ -114,24 +114,28 @@ export function environmentForApp(
 
 /**
  * Merges `values` into the text of a `.env` file, updating existing assignments
- * in place and appending any that are absent. Every other line — comments,
- * blank lines, unrelated keys — is preserved verbatim.
+ * in place and appending any that are absent. Every duplicate assignment of a
+ * key is rewritten — dotenv parsing treats the last occurrence as
+ * authoritative, so leaving a later duplicate stale would make provisioning
+ * report success while commands keep reading the old value. Every other line —
+ * comments, blank lines, unrelated keys — is preserved verbatim.
  */
 export function mergeEnv(existing: string, values: Record<string, string>): string {
-  const remaining = new Map(Object.entries(values));
+  const replacements = new Map(Object.entries(values));
+  const written = new Set<string>();
   const lines = existing.length === 0 ? [] : existing.split("\n");
   const updated = lines.map((line) => {
     const match = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=)/.exec(line);
     if (!match) return line;
     const name = match[2];
-    if (!remaining.has(name)) return line;
-    const value = remaining.get(name)!;
-    remaining.delete(name);
-    return `${match[1]}${name}=${value}`;
+    if (!replacements.has(name)) return line;
+    written.add(name);
+    return `${match[1]}${name}=${replacements.get(name)!}`;
   });
-  if (remaining.size > 0) {
+  const missing = [...replacements].filter(([name]) => !written.has(name));
+  if (missing.length > 0) {
     if (updated.length > 0 && updated[updated.length - 1].trim() !== "") updated.push("");
-    for (const [name, value] of remaining) updated.push(`${name}=${value}`);
+    for (const [name, value] of missing) updated.push(`${name}=${value}`);
   }
   return `${updated.join("\n").replace(/\n+$/, "")}\n`;
 }

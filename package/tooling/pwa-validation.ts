@@ -1,5 +1,9 @@
 import { extname, join, relative } from "node:path";
 import { normalizeDeploymentBase } from "./base-path.ts";
+import {
+  isBoundedManifestString,
+  relatedApplicationPlatforms,
+} from "../recipes/related-app-discovery.ts";
 
 export type PwaValidationIssue = {
   detail: string;
@@ -30,15 +34,9 @@ const launchClientModes = new Set([
   "navigate-existing",
   "navigate-new",
 ]);
-const relatedApplicationPlatforms = new Set([
-  "amazon",
-  "chrome_web_store",
-  "chromeos_play",
-  "f-droid",
-  "play",
-  "webapp",
-  "windows",
-]);
+// `relatedApplicationPlatforms` and `isBoundedManifestString` come from the
+// runtime recipe so validation can never accept a declaration the recipe
+// rejects (the two grammars had already diverged once).
 const imageTypes = new Map([
   ["image/jpeg", new Set([".jpeg", ".jpg"])],
   ["image/png", new Set([".png"])],
@@ -75,6 +73,52 @@ function withinScope(target: URL, scope: URL): boolean {
   return target.origin === scope.origin && target.pathname.startsWith(scope.pathname);
 }
 
+// One shared rule for every manifest action/URL member that must resolve to a
+// clean route inside manifest scope (file handlers, share targets, ...).
+function validateScopedActionUrl(
+  issues: PwaValidationIssue[],
+  label: string,
+  action: unknown,
+  manifestUrl: URL,
+  scope: URL,
+  remediation: string,
+): void {
+  if (!nonEmptyString(action)) {
+    issues.push(issue(`${label} must be a non-empty URL`, remediation));
+    return;
+  }
+  try {
+    const url = new URL(action, manifestUrl);
+    if (!withinScope(url, scope)) {
+      issues.push(issue(`${label} must stay inside manifest scope`, remediation));
+    }
+    if (url.search || url.hash) {
+      issues.push(issue(`${label} must not contain a query or fragment`, remediation));
+    }
+  } catch {
+    issues.push(issue(`${label} is not a valid URL`, remediation));
+  }
+}
+
+// One shared rule for every manifest entry point that must cold-start offline.
+function requireEmittedRoute(
+  issues: PwaValidationIssue[],
+  htmlFiles: readonly string[],
+  basePath: string,
+  label: string,
+  remediation: string,
+  resolveUrl: () => URL,
+): void {
+  try {
+    const route = emittedRoutePath(resolveUrl(), basePath);
+    if (!route || !htmlFiles.includes(route)) {
+      issues.push(issue(`${label} has no emitted offline route`, remediation));
+    }
+  } catch {
+    // Source validation already reports the malformed URL.
+  }
+}
+
 function assetPath(url: URL, basePath: string): string | undefined {
   if (url.origin !== syntheticOrigin || !url.pathname.startsWith(basePath)) return undefined;
   let path: string;
@@ -83,13 +127,18 @@ function assetPath(url: URL, basePath: string): string | undefined {
   } catch {
     return undefined;
   }
-  if (!path || path.startsWith("/") || path.split("/").some((part) => part === "..")) {
-    return undefined;
-  }
+  // Percent-encoded backslashes survive URL parsing and act as separators
+  // under Windows path semantics, so they are rejected outright rather than
+  // treated as ordinary characters a `/`-split traversal check would miss.
+  if (!path || path.startsWith("/") || path.includes("\\")) return undefined;
+  if (path.split("/").some((part) => part === "." || part === "..")) return undefined;
   return path;
 }
 
 function pngDimensions(bytes: Uint8Array): { width: number; height: number } | undefined {
+  // A truncated file with a valid signature/IHDR prefix must report "not
+  // decodable" like any other malformed image, not throw a RangeError.
+  if (bytes.length < 24) return undefined;
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
   if (!signature.every((byte, index) => bytes[index] === byte)) return undefined;
   if (new TextDecoder().decode(bytes.subarray(12, 16)) !== "IHDR") return undefined;
@@ -370,8 +419,8 @@ async function parseAndValidateManifest(
         if (!nonEmptyString(raw.platform) || !relatedApplicationPlatforms.has(raw.platform)) {
           issues.push(issue(`${label}.platform is not supported by this recipe`, remediation));
         }
-        const hasId = nonEmptyString(raw.id) && raw.id.length <= 512;
-        const hasUrl = nonEmptyString(raw.url) && raw.url.length <= 512;
+        const hasId = isBoundedManifestString(raw.id);
+        const hasUrl = isBoundedManifestString(raw.url);
         if (!hasId && !hasUrl) {
           issues.push(issue(`${label} needs a bounded id or HTTPS url`, remediation));
         }
@@ -643,23 +692,14 @@ async function parseAndValidateManifest(
           if (unknown.length > 0) {
             issues.push(issue(`${label} contains unsupported members`, remediation));
           }
-          if (!nonEmptyString(raw.action)) {
-            issues.push(issue(`${label}.action must be a non-empty URL`, remediation));
-          } else {
-            try {
-              const action = new URL(raw.action, manifestUrl);
-              if (!withinScope(action, scope)) {
-                issues.push(issue(`${label}.action must stay inside manifest scope`, remediation));
-              }
-              if (action.search || action.hash) {
-                issues.push(
-                  issue(`${label}.action must not contain a query or fragment`, remediation),
-                );
-              }
-            } catch {
-              issues.push(issue(`${label}.action is not a valid URL`, remediation));
-            }
-          }
+          validateScopedActionUrl(
+            issues,
+            `${label}.action`,
+            raw.action,
+            manifestUrl,
+            scope,
+            remediation,
+          );
           if (!isObject(raw.accept) || Object.keys(raw.accept).length === 0) {
             issues.push(issue(`${label}.accept must be a non-empty object`, remediation));
           } else {
@@ -775,23 +815,14 @@ async function parseAndValidateManifest(
       if (!isObject(target)) {
         issues.push(issue(`${label} must be an object`, remediation));
       } else {
-        if (!nonEmptyString(target.action)) {
-          issues.push(issue(`${label}.action must be a non-empty URL`, remediation));
-        } else {
-          try {
-            const action = new URL(target.action, manifestUrl);
-            if (!withinScope(action, scope)) {
-              issues.push(issue(`${label}.action must stay inside manifest scope`, remediation));
-            }
-            if (action.search || action.hash) {
-              issues.push(
-                issue(`${label}.action must not contain a query or fragment`, remediation),
-              );
-            }
-          } catch {
-            issues.push(issue(`${label}.action is not a valid URL`, remediation));
-          }
-        }
+        validateScopedActionUrl(
+          issues,
+          `${label}.action`,
+          target.action,
+          manifestUrl,
+          scope,
+          remediation,
+        );
         if (target.method !== undefined && target.method !== "GET") {
           issues.push(
             issue(
@@ -982,76 +1013,56 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
     const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
     for (const [index, raw] of result.manifest.shortcuts.entries()) {
       if (!isObject(raw) || !nonEmptyString(raw.url)) continue;
-      try {
-        const route = emittedRoutePath(new URL(raw.url, manifestUrl), basePath);
-        if (!route || !htmlFiles.includes(route)) {
-          issues.push(
-            issue(
-              `dist/${manifestFile}: shortcuts[${index}].url has no emitted offline route`,
-              remediation,
-            ),
-          );
-        }
-      } catch {
-        // Source validation already reports malformed shortcut URLs.
-      }
+      requireEmittedRoute(
+        issues,
+        htmlFiles,
+        basePath,
+        `dist/${manifestFile}: shortcuts[${index}].url`,
+        remediation,
+        () => new URL(raw.url as string, manifestUrl),
+      );
     }
   }
   if (isObject(result.manifest?.share_target)) {
     const target = result.manifest.share_target;
     if (nonEmptyString(target.action)) {
       const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
-      try {
-        const route = emittedRoutePath(new URL(target.action, manifestUrl), basePath);
-        if (!route || !htmlFiles.includes(route)) {
-          issues.push(
-            issue(
-              `dist/${manifestFile}: share_target.action has no emitted offline route`,
-              remediation,
-            ),
-          );
-        }
-      } catch {
-        // Source validation already reports malformed action URLs.
-      }
+      requireEmittedRoute(
+        issues,
+        htmlFiles,
+        basePath,
+        `dist/${manifestFile}: share_target.action`,
+        remediation,
+        () => new URL(target.action as string, manifestUrl),
+      );
     }
   }
   if (Array.isArray(result.manifest?.file_handlers)) {
     const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
     for (const [index, raw] of result.manifest.file_handlers.entries()) {
       if (!isObject(raw) || !nonEmptyString(raw.action)) continue;
-      try {
-        const route = emittedRoutePath(new URL(raw.action, manifestUrl), basePath);
-        if (!route || !htmlFiles.includes(route)) {
-          issues.push(
-            issue(
-              `dist/${manifestFile}: file_handlers[${index}].action has no emitted offline route`,
-              remediation,
-            ),
-          );
-        }
-      } catch {
-        // Source validation already reports malformed action URLs.
-      }
+      requireEmittedRoute(
+        issues,
+        htmlFiles,
+        basePath,
+        `dist/${manifestFile}: file_handlers[${index}].action`,
+        remediation,
+        () => new URL(raw.action as string, manifestUrl),
+      );
     }
   }
   if (Array.isArray(result.manifest?.protocol_handlers)) {
     const manifestUrl = new URL(`${syntheticOrigin}${basePath}${manifestFile}`);
     for (const [index, raw] of result.manifest.protocol_handlers.entries()) {
       if (!isObject(raw) || !nonEmptyString(raw.url) || !raw.url.includes("%s")) continue;
-      try {
-        const route = emittedRoutePath(protocolHandlerUrl(raw.url, manifestUrl), basePath);
-        if (!route || !htmlFiles.includes(route)) {
-          issues.push(
-            issue(
-              `dist/${manifestFile}: protocol_handlers[${index}].url has no emitted offline route`,
-              remediation,
-            ),
-          );
-        }
-      } catch {
-        // Source validation already reports malformed handler URL templates.
-      }
+      requireEmittedRoute(
+        issues,
+        htmlFiles,
+        basePath,
+        `dist/${manifestFile}: protocol_handlers[${index}].url`,
+        remediation,
+        () => protocolHandlerUrl(raw.url as string, manifestUrl),
+      );
     }
   }
   const expectedManifest = new URL(`${syntheticOrigin}${basePath}${manifestFile}`).href;

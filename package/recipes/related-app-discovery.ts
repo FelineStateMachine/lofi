@@ -29,7 +29,11 @@ export type DiscoverRelatedApplicationsOptions = {
   client?: RelatedApplicationClient;
 };
 
-const platforms = new Set([
+/**
+ * The one shared `related_applications` grammar: manifest validation imports
+ * these so the validator can never accept a declaration this recipe rejects.
+ */
+export const relatedApplicationPlatforms: ReadonlySet<string> = new Set([
   "amazon",
   "chrome_web_store",
   "chromeos_play",
@@ -39,13 +43,17 @@ const platforms = new Set([
   "windows",
 ]);
 
-function nonEmptyBounded(value: unknown): value is string {
+/** Bounded, trimmed, control-character-free manifest string field. */
+export function isBoundedManifestString(value: unknown): value is string {
   return typeof value === "string" && value.trim() === value && value.length > 0 &&
     value.length <= 512 && ![...value].some((character) => {
       const code = character.codePointAt(0)!;
       return code <= 0x1f || code === 0x7f;
     });
 }
+
+const platforms = relatedApplicationPlatforms;
+const nonEmptyBounded = isBoundedManifestString;
 
 function normalizeDeclaration(value: VerifiedRelatedApplication): VerifiedRelatedApplication {
   if (!platforms.has(value.platform) || !nonEmptyBounded(value.id) && !nonEmptyBounded(value.url)) {

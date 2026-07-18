@@ -159,16 +159,38 @@ const childEnvironmentAllowlist = [
   "TEMP",
   "TMP",
   "TMPDIR",
+  // Windows process bootstrap. Children run with a cleared environment, and
+  // without these Windows cannot load system DLLs, resolve executables, or
+  // locate per-user state.
+  "APPDATA",
+  "COMSPEC",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LOCALAPPDATA",
+  "PATHEXT",
+  "PROGRAMDATA",
+  "SYSTEMDRIVE",
+  "SYSTEMROOT",
+  "USERPROFILE",
+  "WINDIR",
 ] as const;
+
+const childEnvironmentAllowedUpper = new Set<string>(
+  childEnvironmentAllowlist.map((name) => name.toUpperCase()),
+);
 
 export function childEnvironment(
   validation: Exclude<EnvironmentValidation, { ok: false }>,
   source: Record<string, string> = Deno.env.toObject(),
 ): Record<string, string> {
   const environment: Record<string, string> = {};
-  for (const name of childEnvironmentAllowlist) {
-    const value = source[name];
-    if (value) environment[name] = value;
+  // Windows environment names are case-insensitive and arrive with arbitrary
+  // casing ("Path", "SystemRoot"); match case-insensitively and preserve the
+  // source casing so the child sees the variables the platform expects.
+  for (const [name, value] of Object.entries(source)) {
+    if (value && childEnvironmentAllowedUpper.has(name.toUpperCase())) {
+      environment[name] = value;
+    }
   }
   if (validation.mode === "cloud-configured") {
     environment.JAZZ_APP_ID = validation.client.JAZZ_APP_ID;

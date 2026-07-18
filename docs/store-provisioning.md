@@ -7,7 +7,10 @@ of such a store — as an explicit user opt-in, never as part of normal sync.
 Two principles govern it:
 
 1. **Store changes are opt-in.** Enrolling a sync ticket attaches transport only. Creating or
-   updating the store's schema requires the store's **admin secret** — supplying it is the opt-in.
+   updating the store's schema requires store administration: either the store's **admin secret**,
+   or a **provision-scoped app-connect ticket** (`ticket issue --provision` on lofi-node), whose
+   gate injects the node's admin secret itself — the secret never transits the client, and
+   possession of the ticket is the opt-in.
 2. **An app may only touch its own namespaces.** A nested app (`s.defineNestedApp`) declares
    namespaces, and every change provisioning generates is confined to tables under them. Sibling
    tables and their policies carry through a merge byte-for-byte. This keeps apps honest: many apps
@@ -17,10 +20,24 @@ Two principles govern it:
 
 ## Classify before you connect
 
+With store administration (admin secret, or a provision-scoped ticket URL as `serverUrl` with
+`adminSecret` omitted):
+
 ```ts
 import { readStoreStatus } from "@nzip/lofi/schema";
 
 const status = await readStoreStatus(root, { serverUrl, appId, adminSecret });
+```
+
+Without it — any valid sync ticket may call the node's metadata-only preflight, which is how a
+sync-only client learns `no_schema` before ever attaching sync:
+
+```ts
+import { readTicketStoreStatus } from "@nzip/lofi/schema";
+
+const preflight = await readTicketStoreStatus(ticketUrl);
+// → { state: "deployed", appId, headHash } | { state: "no_schema", appId }
+//   | { state: "store_unavailable" } | { state: "ticket_rejected" } | { state: "unsupported" }
 ```
 
 | State                | Meaning                                                          | Remedy               |
@@ -75,7 +92,8 @@ any request is made.
 - `readStoreStatus` compares structurally; it does not verify migration connectivity. A
   `provisionStore` run (even an `unchanged` one) establishes the connectivity edge for this app's
   schema, so run it once per app version as part of the opt-in.
-- The admin secret grants full store administration; the namespace confinement is a framework
-  honesty boundary, not a defense against a hostile secret holder. Ticket-scoped provisioning (no
-  raw secret pasting) is tracked on the node side
-  ([lofi-node#2](https://github.com/FelineStateMachine/lofi-node/issues/2)).
+- Store administration (the admin secret, or a provision ticket) grants full control; the namespace
+  confinement is a framework honesty boundary, not a defense against a hostile administrator.
+  Provision-scoped tickets and the store-status preflight are the node-side contract from
+  [lofi-node#2](https://github.com/FelineStateMachine/lofi-node/issues/2), shipped in lofi-node's
+  `docs/app-ticket.md`.

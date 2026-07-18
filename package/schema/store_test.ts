@@ -233,3 +233,44 @@ Deno.test("the app slice derives from the deploy target's compiled schema", () =
       "form against the stored schema",
   );
 });
+
+Deno.test("the ticket store-status preflight maps every documented gate response", async () => {
+  // A stub of the lofi-node gate's store-status endpoint (the contract in its
+  // docs/app-ticket.md): 200 with metadata, 502 store_unavailable, 401
+  // invalid_ticket, and 404 for nodes without the endpoint.
+  const responses: Record<string, () => Response> = {
+    "/t/deployed/store-status": () =>
+      Response.json({
+        v: 1,
+        appId: "a-app",
+        schema: { deployed: true, headHash: "ff85", permissionsHead: "0195" },
+      }),
+    "/t/fresh/store-status": () =>
+      Response.json({ v: 1, appId: "a-app", schema: { deployed: false } }),
+    "/t/down/store-status": () => Response.json({ error: "store_unavailable" }, { status: 502 }),
+    "/t/revoked/store-status": () => Response.json({ error: "invalid_ticket" }, { status: 401 }),
+  };
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen: () => {} },
+    (request) => responses[new URL(request.url).pathname]?.() ?? new Response("", { status: 404 }),
+  );
+  const base = `http://127.0.0.1:${server.addr.port}`;
+  try {
+    const { readTicketStoreStatus } = await import("./store.ts");
+    const deployed = await readTicketStoreStatus(`${base}/t/deployed`);
+    assert(
+      deployed.state === "deployed" && deployed.headHash === "ff85" && deployed.appId === "a-app",
+      `deployed store mapped to ${JSON.stringify(deployed)}`,
+    );
+    const fresh = await readTicketStoreStatus(`${base}/t/fresh`);
+    assert(fresh.state === "no_schema", `fresh store mapped to ${JSON.stringify(fresh)}`);
+    const down = await readTicketStoreStatus(`${base}/t/down`);
+    assert(down.state === "store_unavailable", `502 mapped to ${JSON.stringify(down)}`);
+    const revoked = await readTicketStoreStatus(`${base}/t/revoked`);
+    assert(revoked.state === "ticket_rejected", `401 mapped to ${JSON.stringify(revoked)}`);
+    const open = await readTicketStoreStatus(`${base}/t/missing`);
+    assert(open.state === "unsupported", `404 mapped to ${JSON.stringify(open)}`);
+  } finally {
+    await server.shutdown();
+  }
+});

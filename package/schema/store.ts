@@ -12,8 +12,11 @@
  * published: an app may only create tables under its own declared namespaces,
  * and any generated change naming a table outside them is a hard error.
  *
- * Every operation needs the store's admin secret — supplying it is the user's
- * opt-in. Nothing in the normal sync path calls this module.
+ * Every operation needs store administration — supplying the admin secret,
+ * or holding a provision-scoped app-connect ticket whose gate injects it, is
+ * the user's opt-in. Nothing in the normal sync path calls this module; the
+ * one exception is {@link readTicketStoreStatus}, the metadata-only preflight
+ * any valid ticket may call.
  *
  * @module
  */
@@ -26,8 +29,14 @@ export type StoreTarget = {
   serverUrl: string;
   /** The Jazz app id of the store. */
   appId: string;
-  /** The store's admin secret — administration rides on top of transport access. */
-  adminSecret: string;
+  /**
+   * The store's admin secret — administration rides on top of transport
+   * access. Omit it when `serverUrl` is a provision-scoped app-connect
+   * ticket URL: the node's gate injects its own admin secret for such
+   * requests (and strips any inbound one), so the secret never transits the
+   * client.
+   */
+  adminSecret?: string;
 };
 
 /** How a store's deployed schema relates to this app's slice. */
@@ -278,7 +287,7 @@ async function adminFetch(
   const response = await fetch(`${base}/apps/${target.appId}/${path}`, {
     method: init?.method ?? "GET",
     headers: {
-      "X-Jazz-Admin-Secret": target.adminSecret,
+      ...(target.adminSecret ? { "X-Jazz-Admin-Secret": target.adminSecret } : {}),
       ...(init ? { "Content-Type": "application/json" } : {}),
     },
     ...(init ? { body: JSON.stringify(init.body) } : {}),
@@ -541,4 +550,60 @@ export async function provisionStore(options: {
   });
   await ensureSliceConnectivity(options.target, slice, published.hash, union);
   return { status: "updated", headHash: published.hash };
+}
+
+/** The result of the ticket-scoped store-status preflight. */
+export type TicketStoreStatus =
+  /** A schema is deployed; `headHash` is the newest stored schema hash. */
+  | { state: "deployed"; appId: string; headHash: string }
+  /** Nothing is deployed — writes would hang; surface the provisioning opt-in. */
+  | { state: "no_schema"; appId: string }
+  /** The node is reachable but its store is not (gate answered 502). */
+  | { state: "store_unavailable" }
+  /** The ticket was revoked or is unknown — treat the stored sink as dead. */
+  | { state: "ticket_rejected" }
+  /** The endpoint does not exist here (open-mode node or plain Jazz server). */
+  | { state: "unsupported" };
+
+/**
+ * The metadata-only store preflight any valid app-connect ticket may call —
+ * no admin capability required. A self-hosted node answers
+ * `GET <ticket.url>/store-status` from its own loopback store, which is what
+ * lets a sync-only client learn `no_schema` (where writes hang) before ever
+ * attaching sync, and prompt toward the provisioning opt-in instead.
+ */
+export async function readTicketStoreStatus(ticketUrl: string): Promise<TicketStoreStatus> {
+  let response: Response;
+  try {
+    response = await fetch(`${ticketUrl.replace(/\/+$/, "")}/store-status`);
+  } catch {
+    return { state: "store_unavailable" };
+  }
+  if (response.status === 401) {
+    await response.body?.cancel();
+    return { state: "ticket_rejected" };
+  }
+  if (response.status === 502) {
+    await response.body?.cancel();
+    return { state: "store_unavailable" };
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    return { state: "unsupported" };
+  }
+  try {
+    const body = await response.json() as {
+      v?: number;
+      appId?: string;
+      schema?: { deployed?: boolean; headHash?: string };
+    };
+    if (body.v !== 1 || typeof body.appId !== "string" || !body.schema) {
+      return { state: "unsupported" };
+    }
+    return body.schema.deployed && typeof body.schema.headHash === "string"
+      ? { state: "deployed", appId: body.appId, headHash: body.schema.headHash }
+      : { state: "no_schema", appId: body.appId };
+  } catch {
+    return { state: "unsupported" };
+  }
 }

@@ -104,10 +104,12 @@ export {
 export {
   provisionStore,
   readStoreStatus,
+  readTicketStoreStatus,
   StoreProvisionError,
   type StoreProvisionResult,
   type StoreStatus,
   type StoreTarget,
+  type TicketStoreStatus,
 } from "./store.ts";
 
 /**

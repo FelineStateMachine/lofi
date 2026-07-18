@@ -122,7 +122,48 @@ const config: Config = {
   themeConfig: {
     image: "img/lofi-social-card.png",
     mermaid: {
-      theme: { light: "forest", dark: "forest" },
+      // one custom brand palette for both color modes: filled shapes carry
+      // their own text color (mint/lime with forest ink), and floating text
+      // and lines use a mid sage that stays readable on light and dark pages
+      theme: { light: "base", dark: "base" },
+      options: {
+        themeVariables: {
+          fontFamily: '"Karla", system-ui, -apple-system, sans-serif',
+          primaryColor: "#99e5bd",
+          primaryTextColor: "#18231f",
+          primaryBorderColor: "#39725c",
+          secondaryColor: "#d5f26a",
+          secondaryTextColor: "#18231f",
+          secondaryBorderColor: "#39725c",
+          tertiaryColor: "#c9eeda",
+          tertiaryTextColor: "#18231f",
+          tertiaryBorderColor: "#39725c",
+          lineColor: "#6f9d88",
+          // floating labels render on the mint edge-label chip, so they carry
+          // forest ink; standalone titles use the mid sage via titleColor
+          textColor: "#18231f",
+          clusterBkg: "rgba(153, 229, 189, 0.16)",
+          clusterBorder: "#39725c",
+          titleColor: "#6f9d88",
+          clusterTextColor: "#6f9d88",
+          edgeLabelBackground: "#99e5bd",
+          actorBkg: "#99e5bd",
+          actorTextColor: "#18231f",
+          actorBorder: "#39725c",
+          actorLineColor: "#6f9d88",
+          signalColor: "#6f9d88",
+          signalTextColor: "#6f9d88",
+          labelBoxBkgColor: "#d5f26a",
+          labelBoxBorderColor: "#39725c",
+          labelTextColor: "#18231f",
+          loopTextColor: "#6f9d88",
+          activationBkgColor: "#d5f26a",
+          activationBorderColor: "#39725c",
+          noteBkgColor: "#d5f26a",
+          noteTextColor: "#18231f",
+          noteBorderColor: "#39725c",
+        },
+      },
     },
     colorMode: {
       respectPrefersColorScheme: true,

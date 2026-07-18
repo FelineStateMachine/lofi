@@ -23,6 +23,7 @@
  * @module
  */
 import { schema } from "jazz-tools";
+import { encryptedJson, encryptedText } from "./encrypted.ts";
 import {
   defineNestedApp,
   defineNestedPermissions,
@@ -73,6 +74,8 @@ export type SchemaDsl =
     defineNestedPermissions: typeof defineNestedPermissions;
     mergeNestedPermissions: typeof mergeNestedPermissions;
     flattenNestedSchema: typeof flattenNestedSchema;
+    encryptedText: typeof encryptedText;
+    encryptedJson: typeof encryptedJson;
   };
 
 /**
@@ -87,8 +90,17 @@ export const s: SchemaDsl = {
   defineNestedPermissions,
   mergeNestedPermissions,
   flattenNestedSchema,
+  encryptedText,
+  encryptedJson,
 };
 
+export {
+  clearEncryptedColumnKey,
+  EncryptedColumnError,
+  encryptedJson,
+  encryptedText,
+  setEncryptedColumnKey,
+} from "./encrypted.ts";
 export {
   defineNestedApp,
   defineNestedPermissions,

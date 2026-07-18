@@ -4,6 +4,7 @@ import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
 import { getLofiApp } from "./app.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { appId, databaseConfig, syncing } from "./config.ts";
+import { setEncryptedColumnKey } from "../schema/encrypted.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
   createTableStore,
@@ -169,6 +170,30 @@ async function migrateLocalRows(
   // sibling; the page lifecycle releases both ports safely.
 }
 
+// Encrypted columns fail closed until this runs: the master key derives from
+// the account secret, so it exists before the first database operation and is
+// re-derived whenever the runtime is recreated after a secret change.
+async function installEncryptedColumnKey(secret: string): Promise<void> {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret) as BufferSource,
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0) as BufferSource,
+      info: new TextEncoder().encode("lofi:encrypted-columns:v1") as BufferSource,
+    },
+    material,
+    256,
+  );
+  setEncryptedColumnKey(new Uint8Array(bits));
+}
+
 async function createClient(state: RuntimeSlot): Promise<Db> {
   const namespaceState = readNamespaceState();
   const connect = syncing();
@@ -180,6 +205,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
   return await runRuntimeStartup(runtimeMode, async () => {
     assertDurableBrowser();
     const secret = await resolveAccountSecret();
+    await installEncryptedColumnKey(secret);
     const namespace = await accountNamespace(secret);
     const db = await createDb(
       databaseConfig(

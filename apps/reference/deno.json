@@ -2,6 +2,9 @@
   "imports": {
     "@astrojs/check": "npm:@astrojs/check@0.9.9",
     "@astrojs/preact": "npm:@astrojs/preact@6.0.1",
+    "@noble/ciphers/chacha": "npm:@noble/ciphers@1.3.0/chacha",
+    "@noble/hashes/hkdf": "npm:@noble/hashes@1.8.0/hkdf",
+    "@noble/hashes/sha2": "npm:@noble/hashes@1.8.0/sha2",
     "@nzip/lofi": "../../package/runtime/mod.ts",
     "@nzip/lofi/": "../../package/",
     "@nzip/lofi/access": "../../package/access/mod.ts",
@@ -9,8 +12,8 @@
     "@nzip/lofi/build": "../../package/commands/build.ts",
     "@nzip/lofi/dev": "../../package/commands/dev.ts",
     "@nzip/lofi/doctor": "../../package/commands/doctor.ts",
-    "@nzip/lofi/preview": "../../package/commands/preview.ts",
     "@nzip/lofi/preact": "../../package/preact/mod.ts",
+    "@nzip/lofi/preview": "../../package/commands/preview.ts",
     "@nzip/lofi/provision": "../../package/commands/provision.ts",
     "@nzip/lofi/recipes/file-handler": "../../package/recipes/file-handler.ts",
     "@nzip/lofi/recipes/launch-handler": "../../package/recipes/launch-handler.ts",
@@ -29,16 +32,21 @@
     "jazz-tools/passkey-backup": "npm:jazz-tools@2.0.0-alpha.53/passkey-backup",
     "jazz-tools/passphrase": "npm:jazz-tools@2.0.0-alpha.53/passphrase",
     "preact": "npm:preact@10.29.7",
+    "preact-render-to-string": "npm:preact-render-to-string@6.7.0",
     "preact/hooks": "npm:preact@10.29.7/hooks",
     "preact/jsx-dev-runtime": "npm:preact@10.29.7/jsx-dev-runtime",
     "preact/jsx-runtime": "npm:preact@10.29.7/jsx-runtime",
-    "preact-render-to-string": "npm:preact-render-to-string@6.7.0",
     "typescript": "npm:typescript@6.0.3",
     "vite": "npm:vite@8.0.1"
   },
   "nodeModulesDir": "auto",
   "compilerOptions": {
-    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "lib": [
+      "deno.ns",
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
@@ -63,7 +71,9 @@
   },
   "lint": {
     "rules": {
-      "tags": ["recommended"]
+      "tags": [
+        "recommended"
+      ]
     }
   }
 }

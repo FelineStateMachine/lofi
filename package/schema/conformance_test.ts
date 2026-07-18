@@ -8,7 +8,15 @@
 // application author can actually reach.
 import { createPolicyTestApp } from "jazz-tools/testing";
 import { assert } from "../runtime/test-assert.ts";
-import { type ArrayColumn, type IntColumn, s, type StringColumn } from "./mod.ts";
+import {
+  type ArrayColumn,
+  clearEncryptedColumnKey,
+  EncryptedColumnError,
+  type IntColumn,
+  s,
+  setEncryptedColumnKey,
+  type StringColumn,
+} from "./mod.ts";
 
 const app = s.defineApp({
   parents: s.table({ name: s.string() }),
@@ -45,6 +53,11 @@ const app = s.defineApp({
     label: s.string(),
   }),
   gated: s.table({ visible: s.boolean(), title: s.string() }),
+  sealed: s.table({
+    body: s.encryptedText("sealed.body"),
+    meta: s.encryptedJson<{ note: string }>("sealed.meta"),
+    label: s.string(),
+  }),
 });
 
 // CONFORMANCE FINDING (alpha.53): a `g-set` column anywhere in a schema makes
@@ -78,6 +91,7 @@ const allowAllTables = [
   "refs",
   "arrays",
   "modifiers",
+  "sealed",
   "transformed",
 ] as const;
 
@@ -532,6 +546,60 @@ Deno.test("facade scalar columns round-trip, filter, and update through the real
       `ints: pinned i32 limit changed: ${i64Error || "no error thrown"}`,
     );
   } finally {
+    await testApp.shutdown();
+  }
+});
+
+Deno.test("encrypted columns round-trip through the engine and store only ciphertext", async () => {
+  const testApp = await createPolicyTestApp(app, permissions, expectLike);
+  setEncryptedColumnKey(new Uint8Array(32).map((_, index) => index + 1));
+  try {
+    const db = testApp.as(session("author"));
+    const body = "the sealed plaintext body";
+    const row = await db.insert(app.sealed, {
+      body,
+      meta: { note: "sealed json" },
+      label: "first",
+    }).wait({ tier: "global" });
+    assert(row.body === body, `sealed: insert returned ${describeValue(row.body)}`);
+    const readBack = (await db.all(app.sealed.where({ id: row.id })))[0];
+    assert(readBack !== undefined, "sealed: row lost after insert");
+    assert(readBack.body === body, `sealed: read back ${describeValue(readBack.body)}`);
+    assert(
+      sameValue(readBack.meta, { note: "sealed json" }),
+      `sealed: json view was ${describeValue(readBack.meta)}`,
+    );
+
+    // Filters address the stored representation: the plaintext must match
+    // nothing, because the engine never held it.
+    const byPlaintext = await db.all(
+      app.sealed.where({ body } as never),
+    );
+    assert(
+      byPlaintext.length === 0,
+      `sealed: a where on the plaintext matched ${byPlaintext.length} rows — the store saw plaintext`,
+    );
+
+    await db.update(app.sealed, row.id, { body: "rewritten sealed body" }).wait({
+      tier: "global",
+    });
+    const updated = (await db.all(app.sealed.where({ id: row.id })))[0];
+    assert(
+      updated?.body === "rewritten sealed body",
+      `sealed: update read back ${describeValue(updated?.body)}`,
+    );
+
+    // The wrong account key must refuse loudly, never return garbage.
+    setEncryptedColumnKey(new Uint8Array(32).map((_, index) => 255 - index));
+    let refused = false;
+    try {
+      await db.all(app.sealed.where({ id: row.id }));
+    } catch (error) {
+      refused = error instanceof EncryptedColumnError && error.code === "corrupt";
+    }
+    assert(refused, "sealed: a foreign account key must fail authentication");
+  } finally {
+    clearEncryptedColumnKey();
     await testApp.shutdown();
   }
 });

@@ -25,6 +25,9 @@
 }
 
 [data-theme="dark"] {
+  /* the active search hit keeps the mint highlight, so its text needs
+     forest ink instead of the plugin's default white */
+  --search-local-hit-active-color: #18231f;
   --ifm-color-primary: #99e5bd;
   --ifm-color-primary-dark: #7dddac;
   --ifm-color-primary-darker: #6fd9a3;

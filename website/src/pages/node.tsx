@@ -21,7 +21,7 @@ export default function NodeHome(): ReactNode {
 
   return (
     <Layout
-      title="lofi-node: user-owned sync"
+      title="lofi-node"
       description="lofi apps let their users choose where data syncs. lofi-node makes that choice real. One daemon a user runs, with an embedded Jazz sync server, iroh node-to-node transport, and a ticket-based access gate."
     >
       <main className="landing landing--node">

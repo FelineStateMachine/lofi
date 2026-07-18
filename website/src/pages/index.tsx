@@ -78,7 +78,7 @@ export default function Home(): ReactNode {
 
   return (
     <Layout
-      title="Local-first apps that keep working offline"
+      title="lofi"
       description="lofi generates installable Deno web apps that open immediately, keep working offline, and sync when users choose. Astro shell, Preact islands, Jazz 2 CRDT sync."
     >
       <main className="landing">

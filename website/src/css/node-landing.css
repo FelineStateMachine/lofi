@@ -266,14 +266,17 @@
   }
 }
 
-/* Lines pin to the bottom and grow upward, like a real terminal. */
+/* Lines pin to the bottom and grow upward, like a real terminal. The height
+   is fixed at the 7-line steady state (padding + 7 × 1.6 × 0.72rem) so
+   appended lines clip off the top instead of shifting the buttons below. */
 .landing .np-console {
   font-family: var(--f-mono);
   font-size: 0.72rem;
   line-height: 1.6;
   border-top: 1px solid var(--forest-2);
   padding-top: 0.7rem;
-  min-height: 5.6rem;
+  height: calc(0.7rem + 7 * 1.6 * 0.72rem);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;

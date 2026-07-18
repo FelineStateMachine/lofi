@@ -269,6 +269,12 @@
   align-items: center;
   padding-bottom: 1rem;
 }
+/* Grid items default to min-width auto, so the nowrap install command
+   would set the column's minimum and push the whole copy column past
+   narrow viewports; let the columns shrink and the command scroll. */
+.landing .hero-main > * {
+  min-width: 0;
+}
 @media (max-width: 860px) {
   .landing .hero-top {
     padding-top: 2.2rem;
@@ -414,6 +420,7 @@
   overflow-x: auto;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
   background: none;
   border: 0;
 }

@@ -55,6 +55,12 @@ export interface VirtualAuthenticatorHandle {
   credentials(): Promise<VirtualAuthenticatorCredential[]>;
   /** Install a previously exported virtual credential in this test profile. */
   addCredential(credential: VirtualAuthenticatorCredential): Promise<void>;
+  /**
+   * Remove every credential from this virtual authenticator, simulating a lost
+   * or replaced device — e.g. to prove a credential-pinned ceremony fails
+   * closed instead of accepting whatever passkey remains.
+   */
+  clearCredentials(): Promise<void>;
   /** Remove the virtual authenticator and detach the CDP session. Idempotent. */
   dispose(): Promise<void>;
 }
@@ -92,6 +98,9 @@ export async function withVirtualAuthenticator(
     },
     async addCredential(credential: VirtualAuthenticatorCredential): Promise<void> {
       await session.send("WebAuthn.addCredential", { authenticatorId, credential });
+    },
+    async clearCredentials(): Promise<void> {
+      await session.send("WebAuthn.clearCredentials", { authenticatorId });
     },
     async dispose(): Promise<void> {
       if (disposed) return;

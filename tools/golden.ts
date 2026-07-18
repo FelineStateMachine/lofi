@@ -643,9 +643,10 @@ async function patchManifest(
   // deno-lint-ignore no-explicit-any
   patch: (manifest: any) => void,
 ): Promise<void> {
-  await patchManifest(projectRoot, (manifest) => {
-    patch(manifest);
-  });
+  const manifestPath = join(projectRoot, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  patch(manifest);
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 async function installWebShareRecipe(projectRoot: string) {
@@ -1140,7 +1141,15 @@ async function main() {
       assert(worker === "development-disabled", `development worker state was ${worker}`);
     });
     await stage("passkey backup", async () => {
+      // Backup is a two-step ceremony: the phrase is revealed first and sync
+      // is enabled only after the explicit saved-it confirmation (which
+      // reloads the document into the managed namespace).
       await page!.getByRole("button", { name: "Back up & enable sync" }).click();
+      await page!.locator('[aria-label="Recovery phrase"] li').first().waitFor({
+        state: "visible",
+        timeout: 30_000,
+      });
+      await page!.getByRole("button", { name: "I saved my phrase — enable sync" }).click();
       await page!.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
         state: "visible",
         timeout: 30_000,

@@ -24,6 +24,7 @@
   "src/styles/global.css": "da8594026ea8420d00c58549b9b38040b4456f75615959ca2e94997b18be1997",
   "tests/auth_e2e_test.ts": "87dc3eb441eeaa96fc82b15df90bf4108096506217e5bfae907b483a3e75b4bf",
   "tests/author-boundary_test.ts": "9fdb6d94180cef044b1d2e74601a01d8f0b26253700bb494bbb45d4127dc728a",
+  "tests/backup_migration_e2e_test.ts": "7ad87dad687641ba937ab20b0c5d06a34478c7c08527ed6e8c6861ad6c97d622",
   "tests/convergence_e2e_test.ts": "71ec0ac935c25ff0722905e5b195c730f32a3b886dd4172e11d9e0e80f19cb38",
   "tests/testing-contract_test.ts": "4257306060d42566b879d92b3a6c395805b20f53717bee55d670c0ef7a117eec",
   "tsconfig.json": "c632473513c623f3cc69d7476159fb9421624521220029755695defa265c6cab"

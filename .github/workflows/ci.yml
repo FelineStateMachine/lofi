@@ -3,7 +3,7 @@ name: Generated app release gate
 on:
   pull_request:
     branches:
-      - dev
+      - main
 
 concurrency:
   group: generated-app-${{ github.event.pull_request.number }}

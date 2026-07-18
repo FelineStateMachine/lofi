@@ -26,36 +26,37 @@ project. Adding or removing a generated file requires updating this map in the s
 
 <!-- generated-file-map:start -->
 
-| Path                             | Ownership category      | Role                                                                                   |
-| -------------------------------- | ----------------------- | -------------------------------------------------------------------------------------- |
-| `.env.example`                   | Generated configuration | Names optional public sync settings and server-only secrets without values.            |
-| `.gitignore`                     | Generated configuration | Keeps secrets, dependencies, package tooling, builds, and failure artifacts untracked. |
-| `README.md`                      | Generated configuration | Gives the generated app's first commands, package boundary, and hosting path.          |
-| `deno.json`                      | Generated configuration | Pins one lofi package version and exposes the supported task surface.                  |
-| `public/apple-touch-icon.png`    | Product asset           | Supplies the replaceable 180x180 iOS Home Screen icon.                                 |
-| `public/favicon.svg`             | Product asset           | Supplies the replaceable vector browser icon and source mark.                          |
-| `public/icon-192.png`            | Product asset           | Supplies the regular 192x192 install icon.                                             |
-| `public/icon-512.png`            | Product asset           | Supplies the regular 512x512 install icon.                                             |
-| `public/icon-maskable-512.png`   | Product asset           | Supplies a padded 512x512 maskable icon with a safe-zone-aware mark.                   |
-| `public/icon-monochrome.svg`     | Product asset           | Supplies the transparent silhouette used where the OS applies a solid icon color.      |
-| `public/screenshot-narrow.png`   | Product asset           | Supplies a replaceable labeled phone-sized install screenshot.                         |
-| `public/screenshot-wide.png`     | Product asset           | Supplies a replaceable labeled desktop-sized install screenshot.                       |
-| `public/manifest.webmanifest`    | Product asset           | Declares stable install identity, locale, scope, orientation, icons, and shortcuts.    |
-| `src/app.ts`                     | Author-owned source     | Composes the app name, storage, sync, credential origins, and repository link.         |
-| `src/env.d.ts`                   | Generated configuration | Adds Astro and lofi build-time environment types.                                      |
-| `src/islands/AccountGate.tsx`    | Author-owned source     | Presents opt-in account backup, sync, and recovery controls.                           |
-| `src/islands/TaskList.tsx`       | Author-owned source     | Implements the replaceable starter task experience.                                    |
-| `src/islands/use-tasks.ts`       | Author-owned source     | Binds the starter task table to Preact through public package APIs.                    |
-| `src/layouts/Shell.astro`        | Author-owned source     | Owns document metadata, install links, and package boot.                               |
-| `src/pages/index.astro`          | Author-owned source     | Composes the starter page and package-owned optional UI.                               |
-| `src/permissions.ts`             | Author-owned source     | Declares application read and mutation policy.                                         |
-| `src/schema.ts`                  | Author-owned source     | Declares persisted application tables and fields.                                      |
-| `src/styles/global.css`          | Author-owned source     | Styles the starter page, islands, and optional package surfaces.                       |
-| `tests/auth_e2e_test.ts`         | Application test        | Demonstrates an opt-in browser credential round trip.                                  |
-| `tests/author-boundary_test.ts`  | Application test        | Prevents framework plumbing from returning to author UI.                               |
-| `tests/convergence_e2e_test.ts`  | Application test        | Demonstrates the optional two-client synced browser journey.                           |
-| `tests/testing-contract_test.ts` | Application test        | Type-checks the public local-first browser helpers.                                    |
-| `tsconfig.json`                  | Generated configuration | Enables strict Astro and Preact source checking.                                       |
+| Path                                 | Ownership category      | Role                                                                                   |
+| ------------------------------------ | ----------------------- | -------------------------------------------------------------------------------------- |
+| `.env.example`                       | Generated configuration | Names optional public sync settings and server-only secrets without values.            |
+| `.gitignore`                         | Generated configuration | Keeps secrets, dependencies, package tooling, builds, and failure artifacts untracked. |
+| `README.md`                          | Generated configuration | Gives the generated app's first commands, package boundary, and hosting path.          |
+| `deno.json`                          | Generated configuration | Pins one lofi package version and exposes the supported task surface.                  |
+| `public/apple-touch-icon.png`        | Product asset           | Supplies the replaceable 180x180 iOS Home Screen icon.                                 |
+| `public/favicon.svg`                 | Product asset           | Supplies the replaceable vector browser icon and source mark.                          |
+| `public/icon-192.png`                | Product asset           | Supplies the regular 192x192 install icon.                                             |
+| `public/icon-512.png`                | Product asset           | Supplies the regular 512x512 install icon.                                             |
+| `public/icon-maskable-512.png`       | Product asset           | Supplies a padded 512x512 maskable icon with a safe-zone-aware mark.                   |
+| `public/icon-monochrome.svg`         | Product asset           | Supplies the transparent silhouette used where the OS applies a solid icon color.      |
+| `public/screenshot-narrow.png`       | Product asset           | Supplies a replaceable labeled phone-sized install screenshot.                         |
+| `public/screenshot-wide.png`         | Product asset           | Supplies a replaceable labeled desktop-sized install screenshot.                       |
+| `public/manifest.webmanifest`        | Product asset           | Declares stable install identity, locale, scope, orientation, icons, and shortcuts.    |
+| `src/app.ts`                         | Author-owned source     | Composes the app name, storage, sync, credential origins, and repository link.         |
+| `src/env.d.ts`                       | Generated configuration | Adds Astro and lofi build-time environment types.                                      |
+| `src/islands/AccountGate.tsx`        | Author-owned source     | Presents opt-in account backup, sync, and recovery controls.                           |
+| `src/islands/TaskList.tsx`           | Author-owned source     | Implements the replaceable starter task experience.                                    |
+| `src/islands/use-tasks.ts`           | Author-owned source     | Binds the starter task table to Preact through public package APIs.                    |
+| `src/layouts/Shell.astro`            | Author-owned source     | Owns document metadata, install links, and package boot.                               |
+| `src/pages/index.astro`              | Author-owned source     | Composes the starter page and package-owned optional UI.                               |
+| `src/permissions.ts`                 | Author-owned source     | Declares application read and mutation policy.                                         |
+| `src/schema.ts`                      | Author-owned source     | Declares persisted application tables and fields.                                      |
+| `src/styles/global.css`              | Author-owned source     | Styles the starter page, islands, and optional package surfaces.                       |
+| `tests/auth_e2e_test.ts`             | Application test        | Demonstrates an opt-in browser credential round trip.                                  |
+| `tests/author-boundary_test.ts`      | Application test        | Prevents framework plumbing from returning to author UI.                               |
+| `tests/backup_migration_e2e_test.ts` | Application test        | Proves local rows survive sync election and the phrase guard stays pinned.             |
+| `tests/convergence_e2e_test.ts`      | Application test        | Demonstrates the optional two-client synced browser journey.                           |
+| `tests/testing-contract_test.ts`     | Application test        | Type-checks the public local-first browser helpers.                                    |
+| `tsconfig.json`                      | Generated configuration | Enables strict Astro and Preact source checking.                                       |
 
 <!-- generated-file-map:end -->
 

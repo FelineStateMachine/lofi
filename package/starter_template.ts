@@ -28,6 +28,7 @@ export const STARTER_FILES: readonly string[] = [
   "src/layouts/Shell.astro",
   "tests/auth_e2e_test.ts",
   "tests/author-boundary_test.ts",
+  "tests/backup_migration_e2e_test.ts",
   "tests/convergence_e2e_test.ts",
   "tests/testing-contract_test.ts",
 ];

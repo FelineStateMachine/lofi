@@ -48,6 +48,8 @@ test.
 
 - `package/schema/mod.ts` — the facade; `package/schema/mod_test.ts` verifies member identity
   against `jazz-tools` and round-trips `defineApp`/`definePermissions` through the facade.
+- `package/schema/merge_sync_test.ts` — concurrent-writer merge semantics (counter, g-set) over a
+  real JazzServer with two synced clients and a fresh observer.
 - `apps/reference/tests/author-boundary_test.ts` — rejects `jazz-tools` imports in all author
   source, including `schema.ts` and `permissions.ts`.
 - `deno task check` and `deno task build` pass with the reference app (and therefore the starter,
@@ -88,16 +90,24 @@ pinned in the suite so an alpha bump surfaces any change:
 5. **Short byte payloads are unreliable.** A 2-byte insert has been observed succeeding, failing
    with `WriteError … data too short for column value`, and hanging, depending on process context.
    Covered by a tolerant subprocess canary.
+6. **Counter merge semantics are inconsistent across replica lifetimes.** Verified with two synced
+   clients plus a fresh observer (`package/schema/merge_sync_test.ts`): the server keeps the last
+   causally ordered update value and sums only concurrent updates, while live replicas apply every
+   update — including the echo of their own reconnected write — as a delta. A replica that watched
+   the history diverges permanently from what a fresh boot reads (observed: canonical 8, first
+   writer 13 after a concurrent 5/3 conflict on 0; canonical 3, live replicas 5 after causal 2 then
+   3). The full matrix is pinned. G-set union merge, by contrast, is verified convergent across
+   writers and fresh boots.
 
 Hangs cannot be cancelled through FFI, so the canaries run in child processes that force-exit
-(`package/testdata/gset_hang_canary.ts`, `package/testdata/bytes_short_payload_canary.ts`).
+(`package/testdata/gset_hang_canary.ts`, `package/testdata/bytes_short_payload_canary.ts`). The
+concurrent-writer suite runs before the conformance suite in a separate process because the scalar
+test wedges the FFI driver last.
 
 ## Follow-up
 
-- Report findings 2–5 upstream to Jazz; re-verify all pins on each alpha bump and remove the ones
-  upstream fixes.
-- Document the full column palette in `docs/data-and-ui.md`, including the i32 limit and the
-  merge-cast workaround, once the surface stabilizes enough to teach.
-- Concurrent-writer merge semantics (counter, g-set) need two synced clients and remain untested.
+- Re-verify all pins on each alpha bump and remove the ones upstream fixes; findings 2–6 stay
+  internal until our own testing is complete and a report is explicitly decided.
+- Merge the g-set table back into the main conformance app when the cross-table hang is gone.
 - Revisit the curation list on each alpha bump; `defineSliceableApp` joins the surface when a use
   case and tests exist.

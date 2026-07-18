@@ -263,9 +263,8 @@ Deno.test("facade column modifiers (optional, default, counter, g-set) behave th
       `counter default: read back ${describeValue(readBack.total)}`,
     );
 
-    // Single-session semantics only; concurrent-writer merge behavior needs
-    // two synced clients and stays a follow-up (see the schema facade
-    // decision record).
+    // Single-session semantics only; concurrent-writer merge behavior is
+    // pinned in ./merge_sync_test.ts, which runs first in its own process.
     await db.update(app.modifiers, row.id, { total: 5 }).wait({ tier: "global" });
     const bumped = (await db.all(app.modifiers.where({ id: row.id })))[0];
     assert(bumped !== undefined, "modifiers: row lost after update");

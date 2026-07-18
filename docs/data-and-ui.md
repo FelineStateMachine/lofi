@@ -47,6 +47,62 @@ query and which mutations succeed; realtime access is not a separate permission 
 [Permissions](permissions.md), [direct sharing](examples/shared.md), and
 [group ownership](examples/group.md).
 
+## Column palette
+
+Every column constructor below is exercised against the real pinned engine by the conformance suite
+(`deno task test:conformance`); a member that only compiles is not part of the supported surface.
+
+| Constructor        | Row value                | Notes                                          |
+| ------------------ | ------------------------ | ---------------------------------------------- |
+| `s.string()`       | `string`                 | Unicode round-trips.                           |
+| `s.boolean()`      | `boolean`                |                                                |
+| `s.int()`          | `number`                 | i32 range only at runtime; see below.          |
+| `s.float()`        | `number`                 | Double precision.                              |
+| `s.timestamp()`    | `Date`                   | Storage round-trips; do not filter on it yet.  |
+| `s.enum("a", "b")` | Union of the literals    |                                                |
+| `s.bytes()`        | `Uint8Array`             | Keep payloads at 32 bytes or more; see below.  |
+| `s.json()`         | Any JSON value           | Nested objects and arrays round-trip.          |
+| `s.array(inner)`   | Array of the inner value |                                                |
+| `s.ref("table")`   | Referenced row id        | Filterable foreign key: `where({ parentId })`. |
+
+Constraints of the pinned alpha, each pinned by a conformance test that fails when upstream lifts
+it:
+
+- **`s.int()` accepts only the i32 range at runtime.** Despite the `number` static type, values
+  outside ±2³¹ are rejected with `InvalidArg … expected i32`.
+- **Timestamp `where`-equality matches every row** instead of filtering, so query timestamps by id
+  or another column for now.
+- **Byte payloads under 32 bytes are unreliable**; pad short payloads or store them as `s.json()`.
+
+### Column modifiers and merge strategies
+
+Modifiers chain on any constructor: `.optional()` makes the column nullable, `.default(value)` fills
+omitted inserts, and `.merge(strategy)` picks a conflict strategy for concurrent writers. In the
+pinned alpha `.merge()` returns the untyped builder (the legacy `merge(): this` signature shadows
+the typed overload), which degrades the whole table's row types — cast the result back to the
+intended column type; the runtime object is unchanged:
+
+```ts
+import { type ArrayColumn, type IntColumn, s } from "@nzip/lofi/schema";
+
+export const app = s.defineApp({
+  tagged: s.table({
+    name: s.string(),
+    tags: s.array(s.string()).merge("g-set") as unknown as ArrayColumn<"TEXT">,
+  }),
+});
+```
+
+Merge behavior is verified with two synced clients in `package/schema/merge_sync_test.ts`:
+
+- **`"g-set"` works**: concurrent writers union their elements and every replica — including a fresh
+  boot — converges on the same set. Keep a g-set table in its own single-table app for now; in the
+  pinned alpha a g-set column destabilizes writes to sibling tables in the same app.
+- **`"counter"` is not dependable yet**: the server keeps the last causally ordered update value and
+  sums only concurrent updates, while live replicas add every update as a delta, so a replica that
+  watched the history diverges permanently from what a fresh boot reads. Avoid counter columns until
+  an alpha bump clears the pins (see [the decision record](decisions/schema-facade-alpha53.md)).
+
 ## Bind an exact typed query
 
 ```ts

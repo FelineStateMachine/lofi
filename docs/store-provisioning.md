@@ -94,7 +94,7 @@ any request is made.
 
 - Table **additions** are the supported merge shape. Evolving columns of already-deployed tables
   (add/drop/rename) still goes through the app's own migration deploy flow; forwarding those through
-  provisioning is follow-on work on [#109](https://github.com/FelineStateMachine/lofi/issues/109).
+  provisioning at enrollment is planned.
 - `readStoreStatus` compares structurally; it does not verify migration connectivity. A
   `provisionStore` run (even an `unchanged` one) establishes the connectivity edge for this app's
   schema, so run it once per app version as part of the opt-in.

@@ -990,6 +990,7 @@
   text-transform: uppercase;
   color: var(--mint);
   text-align: left;
+  white-space: nowrap;
   padding: 0 1rem 0.7rem 0;
   border-bottom: 1px solid var(--jade);
   border-left: 0;
@@ -1029,6 +1030,7 @@
 }
 /* tables can't shrink below min-content; let the nowrap cells wrap on narrow screens */
 @media (max-width: 860px) {
+  .landing .tbl th,
   .landing .tbl td:first-child,
   .landing .tbl .pin {
     white-space: normal;

@@ -61,6 +61,11 @@ export const accessFiles = [
   "schema.ts",
 ] as const;
 
+/** Schema facade modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
+export const schemaFiles = [
+  "mod.ts",
+] as const;
+
 /** Preact modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
 export const preactFiles = [
   "DeviceStatus.tsx",
@@ -96,6 +101,7 @@ function renderConfig(projectRoot: string): string {
   const runtimeEntry = join(projectRoot, ".lofi", "package", "runtime", "mod.ts");
   const accessEntry = join(projectRoot, ".lofi", "package", "access", "mod.ts");
   const preactEntry = join(projectRoot, ".lofi", "package", "preact", "mod.ts");
+  const schemaEntry = join(projectRoot, ".lofi", "package", "schema", "mod.ts");
   const fileHandlerRecipe = join(projectRoot, ".lofi", "package", "recipes", "file-handler.ts");
   const launchHandlerRecipe = join(
     projectRoot,
@@ -195,6 +201,7 @@ export default defineConfig({
   } },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/preact$/, replacement: ${JSON.stringify(preactEntry)} },
         { find: /^jsr:@nzip\\/lofi@[^/]+\\/access$/, replacement: ${JSON.stringify(accessEntry)} },
+        { find: /^jsr:@nzip\\/lofi@[^/]+\\/schema$/, replacement: ${JSON.stringify(schemaEntry)} },
         { find: /^jsr:@nzip\\/lofi@[^/]+$/, replacement: ${JSON.stringify(runtimeEntry)} },
         { find: /^npm:preact@[^/]+\\/hooks$/, replacement: "preact/hooks" },
         { find: /^npm:preact@[^/]+\\/jsx-dev-runtime$/, replacement: "preact/jsx-dev-runtime" },
@@ -224,6 +231,7 @@ export default defineConfig({
   } },
         { find: "@nzip/lofi/preact", replacement: ${JSON.stringify(preactEntry)} },
         { find: "@nzip/lofi/access", replacement: ${JSON.stringify(accessEntry)} },
+        { find: "@nzip/lofi/schema", replacement: ${JSON.stringify(schemaEntry)} },
         { find: "@nzip/lofi", replacement: ${JSON.stringify(runtimeEntry)} },
       ],
       noExternal: ["@astrojs/preact"],
@@ -249,6 +257,7 @@ export async function prepareLofiAstroConfig(options: LofiAstroOptions = {}): Pr
   await Deno.mkdir(join(packageDir, "access"), { recursive: true });
   await Deno.mkdir(join(packageDir, "preact"), { recursive: true });
   await Deno.mkdir(join(packageDir, "recipes"), { recursive: true });
+  await Deno.mkdir(join(packageDir, "schema"), { recursive: true });
   for (const file of runtimeFiles) {
     await Deno.writeTextFile(
       join(packageDir, "runtime", file),
@@ -271,6 +280,12 @@ export async function prepareLofiAstroConfig(options: LofiAstroOptions = {}): Pr
     await Deno.writeTextFile(
       join(packageDir, "recipes", file),
       await readPackageFile(`../recipes/${file}`),
+    );
+  }
+  for (const file of schemaFiles) {
+    await Deno.writeTextFile(
+      join(packageDir, "schema", file),
+      await readPackageFile(`../schema/${file}`),
     );
   }
   const configSource = renderConfig(projectRoot);

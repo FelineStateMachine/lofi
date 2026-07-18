@@ -1,11 +1,12 @@
 # Data and UI
 
-Lofi keeps realtime plumbing out of product components. Authors declare Jazz tables and policies,
-build exact typed queries, and compose two package hooks inside a domain hook:
+Lofi keeps realtime plumbing out of product components. Authors declare tables and policies through
+the lofi schema surface, build exact typed queries, and compose two package hooks inside a domain
+hook:
 
 ```mermaid
 flowchart LR
-    Schema["Typed Jazz schema"] --> Policy["Private, Shared, or Group policy"]
+    Schema["Typed app schema"] --> Policy["Private, Shared, or Group policy"]
     Schema --> Query["Typed scoped query"]
     Query --> Live["useLiveQuery"]
     Table["Typed table"] --> Mutations["useTableMutations"]
@@ -20,7 +21,7 @@ errors, and durability tracking. `@nzip/lofi/preact` owns only the Preact lifecy
 ## Declare a table and policy
 
 ```ts
-import { schema as s } from "jazz-tools";
+import { s } from "@nzip/lofi/schema";
 
 const schema = {
   records: s.table({
@@ -34,15 +35,81 @@ const schema = {
 export const app = s.defineApp(schema);
 ```
 
-`src/schema.ts` and `src/permissions.ts` are the two deliberate raw-Jazz surfaces in author source.
-UI islands stay on public package seams: derive row types with `RowOf` from `@nzip/lofi`
-(`type Record = RowOf<typeof app.schema.records>`) instead of importing the vendor module, and the
-generated author-boundary test enforces exactly that split.
+`@nzip/lofi/schema` exports the pinned Jazz 2 schema DSL one-to-one — same names, same behavior — so
+`src/schema.ts` and `src/permissions.ts` never import the vendor module and package upgrades absorb
+upstream changes (see [the decision record](decisions/schema-facade-alpha53.md)). UI islands stay on
+public package seams: derive row types with `RowOf` from `@nzip/lofi`
+(`type Record = RowOf<typeof app.schema.records>`), and the generated author-boundary test rejects
+raw `jazz-tools` imports in every author source file.
 
 Every table needs a policy in `src/permissions.ts`. Permissions determine which rows enter a live
 query and which mutations succeed; realtime access is not a separate permission mode. See
 [Permissions](permissions.md), [direct sharing](examples/shared.md), and
 [group ownership](examples/group.md).
+
+## Column palette
+
+Every column constructor below is exercised against the real pinned engine by the conformance suite
+(`deno task test:conformance`); a member that only compiles is not part of the supported surface.
+
+| Constructor        | Row value                | Notes                                          |
+| ------------------ | ------------------------ | ---------------------------------------------- |
+| `s.string()`       | `string`                 | Unicode round-trips.                           |
+| `s.boolean()`      | `boolean`                |                                                |
+| `s.int()`          | `number`                 | i32 range only at runtime; see below.          |
+| `s.float()`        | `number`                 | Double precision.                              |
+| `s.timestamp()`    | `Date`                   | Storage round-trips; do not filter on it yet.  |
+| `s.enum("a", "b")` | Union of the literals    |                                                |
+| `s.bytes()`        | `Uint8Array`             | Keep payloads at 32 bytes or more; see below.  |
+| `s.json()`         | Any JSON value           | Nested objects and arrays round-trip.          |
+| `s.array(inner)`   | Array of the inner value |                                                |
+| `s.ref("table")`   | Referenced row id        | Filterable foreign key: `where({ parentId })`. |
+
+Constraints of the pinned alpha, each pinned by a conformance test that fails when upstream lifts
+it:
+
+- **`s.int()` accepts only the i32 range at runtime.** Despite the `number` static type, values
+  outside ±2³¹ are rejected with `InvalidArg … expected i32`.
+- **Timestamp `where`-equality matches every row** instead of filtering, so query timestamps by id
+  or another column for now.
+- **Byte payloads under 32 bytes are unreliable**; pad short payloads or store them as `s.json()`.
+
+### Column modifiers and merge strategies
+
+Modifiers chain on any constructor: `.optional()` makes the column nullable, `.default(value)` fills
+omitted inserts, and `.merge(strategy)` picks a conflict strategy for concurrent writers.
+`.transform({ from, to })` (experimental upstream) maps stored values to a different TypeScript view
+type: inserts, reads, and updates use the view type, while `where` filters address the stored
+representation. In the pinned alpha `.merge()` and `.transform()` return the untyped builder (the
+legacy untyped signatures shadow the typed overloads), which degrades the whole table's row types —
+cast the result back to the intended column type; the runtime object is unchanged:
+
+```ts
+import { type ArrayColumn, type IntColumn, s } from "@nzip/lofi/schema";
+
+export const app = s.defineApp({
+  tagged: s.table({
+    name: s.string(),
+    tags: s.array(s.string()).merge("g-set") as unknown as ArrayColumn<"TEXT">,
+  }),
+});
+```
+
+The pinned alpha ships exactly three merge strategies — `"lww"` (the default), `"counter"`, and
+`"g-set"` — and they are the whole collaborative-value surface: Jazz 2 has no successor to the 1.x
+CoValue types (`co.map`, CoText, FileStream). All three are verified with two synced clients in
+`package/schema/merge_sync_test.ts`:
+
+- **`"lww"` (the default) works**: with or without an explicit `.merge("lww")`, a concurrent
+  conflict resolves to the last write to reach the server, and live replicas and fresh boots agree.
+- **`"g-set"` works**: concurrent writers union their elements and every replica — including a fresh
+  boot — converges on the same set. Keep a g-set table in its own single-table app for now; in the
+  pinned alpha a g-set column destabilizes writes to sibling tables in the same app. See the
+  [collaborative sets example](examples/collaborative-sets.md).
+- **`"counter"` is not dependable yet**: the server keeps the last causally ordered update value and
+  sums only concurrent updates, while live replicas add every update as a delta, so a replica that
+  watched the history diverges permanently from what a fresh boot reads. Avoid counter columns until
+  an alpha bump clears the pins (see [the decision record](decisions/schema-facade-alpha53.md)).
 
 ## Bind an exact typed query
 
@@ -140,10 +207,12 @@ export function useWorkspaceRecords(workspaceId: string) {
 Components consume `createRecord` and `archiveRecord`; they do not call `getRuntime`, manage Jazz
 subscriptions, or listen for runtime recreation. The generated task hook is the smallest working
 example. For a complete access-aware composition, see the
-[collaborative list recipe](examples/collaborative-list.md).
+[collaborative list data model](examples/collaborative-list.md).
 
 ## Schema changes and migrations
 
 Use `deno task schema:validate` while editing. For existing data, create and review a migration with
 `deno task migrations:create`, then use `migrations:push` and `schema:deploy` only with the intended
-managed configuration. Never put server-only secrets in source or browser code.
+managed configuration. Never put server-only secrets in source or browser code. The
+[schema evolution example](examples/schema-evolution.md) walks through a verified two-version
+migration — add, drop, rename, and table rename — in both directions.

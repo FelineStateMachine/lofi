@@ -121,6 +121,9 @@ const config: Config = {
 
   themeConfig: {
     image: "img/lofi-social-card.png",
+    mermaid: {
+      theme: { light: "forest", dark: "forest" },
+    },
     colorMode: {
       respectPrefersColorScheme: true,
     },

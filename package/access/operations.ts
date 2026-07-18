@@ -174,6 +174,9 @@ export function createGroupOperations<
         } as MemberInit));
         return { group, membership };
       } catch (cause) {
+        // The creator's direct delete authority on their own group row
+        // authorizes this rollback, so a failed first-admin insert no longer
+        // strands an undeletable orphan group.
         await settle(db.delete(config.groups, group.id)).catch(() => undefined);
         throw cause;
       }

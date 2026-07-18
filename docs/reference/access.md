@@ -36,9 +36,14 @@ Collaboration operations reject local-only use with `AccessError.code === "sync-
 In pinned Jazz alpha.53, the permission authority does not expose a group inserted earlier in the
 same transaction to the first membership's `allowedTo.update("groupId")` check. `createGroup`
 therefore serializes the creator-owned group write and first-admin membership write, and attempts a
-compensating group delete if the membership is rejected. This is secure and leaves no usable
-unadministered group in the tested path, but it is not database-transaction atomic. Do not describe
-it as atomic until Jazz can validate that relationship against staged transaction rows.
+compensating group delete if the membership is rejected. The compensating delete is authorized by
+the creator's direct delete authority on their own group rows, so a failed bootstrap does not strand
+an orphan group. This is secure, but it is not database-transaction atomic. Do not describe it as
+atomic until Jazz can validate that relationship against staged transaction rows.
+
+The group creator additionally holds a permanent superseat — see
+[Permission templates](../permissions.md#fixed-group-roles) and
+[the decision record](../decisions/group-creator-authority-alpha53.md).
 
 The templates compile ordinary Jazz policies and accept a final raw-policy callback. They do not
 replace `s.table`, `s.defineApp`, or raw `s.definePermissions`; use those directly when the fixed

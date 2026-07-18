@@ -116,6 +116,14 @@ Check these states separately:
 “Sync configured” is not proof that a specific user opted in or that a specific write reached the
 server.
 
+## A device with an enrolled ticket came back local-only
+
+The declared sync location persists as a sealed record whose key lives in the browser's IndexedDB.
+Clearing site data partially — IndexedDB without localStorage, or a browser "free up space" eviction
+— leaves the record in place but unopenable, and the device deliberately falls back to local-only
+rather than guessing. Local data is untouched. Re-enroll the ticket (paste it again) to declare the
+sink and resume syncing under the same account.
+
 ## Recovery does not restore a recent item
 
 The phrase restores account authority, not unsynced device storage. Data returns only if it reached

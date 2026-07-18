@@ -100,13 +100,15 @@ export class EnvelopeError extends Error {
   }
 }
 
-function toBase64Url(bytes: Uint8Array): string {
+/** Encodes bytes as unpadded base64url, the envelope's storage encoding. */
+export function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-function fromBase64Url(text: string): Uint8Array {
+/** Decodes the envelope's unpadded base64url storage encoding. */
+export function fromBase64Url(text: string): Uint8Array {
   const base64 = text.replaceAll("-", "+").replaceAll("_", "/");
   const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
   const binary = atob(padded);

@@ -59,7 +59,10 @@ tickets per device or context so revocation is scoped.
 
 You paste; the app does the rest. The ticket is validated (against the same rules this node
 enforces; the two repos share machine-readable conformance fixtures), declared as the device's sync
-location, and sync is elected in one step. The app keeps the ticket URL in a device-local record and
-never surfaces it through its session snapshot — only the host and your label show. For app
+location, and sync is elected in one step. The app keeps the ticket URL in a sealed device-local
+record (encrypted at rest under a device-bound key) and never surfaces it through its session
+snapshot — only the host and your label show. A provision ticket gets split first: the app asks the
+node for a derived sync ticket to store, and the provision original is either sealed behind your
+passkey or kept only in memory with your password manager holding the durable copy. For app
 developers, the framework call behind that paste is `enrollSyncTicket`, documented in
 [Sync and recovery](/docs/sync-and-recovery).

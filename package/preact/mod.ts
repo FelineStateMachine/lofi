@@ -25,6 +25,7 @@ export {
   type PwaUpdateState,
   usePwaState,
 } from "./PwaActions.tsx";
+export { TicketEnrollForm, type TicketEnrollFormProps } from "./TicketEnrollForm.tsx";
 export {
   type DeviceCapabilitiesHook,
   type DeviceCapabilityReport,

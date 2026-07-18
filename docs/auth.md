@@ -34,7 +34,12 @@ The runtime lives at `package/runtime/auth.ts` and is exposed through `@nzip/lof
   secret bound to the credential, from which `deriveAtRestKey` produces an AES-GCM key via
   HKDF-SHA-256. PRF support is feature-detected (`getAuthCapability`); if the client or
   authenticator does not return a PRF result, the derive path throws `prf-unavailable` rather than
-  inventing a key.
+  inventing a key. The capability report is a UX hint only — flows that seal data attempt the
+  evaluation and record what actually succeeded, never gate on the report.
+- **Assertion and PRF evaluation compose into one prompt.** `authenticateAndDerivePrfSecret` rides
+  the PRF evaluation on a user-verifying assertion, so a flow that needs both the asserted
+  credential and a credential-bound key (sealing or unlocking an envelope) costs one ceremony, with
+  the same `credential-mismatch` pinning as plain authentication.
 - **No recovery claim for this primitive.** `enrollDeviceCredential` and the PRF-derived key do not
   contain the Jazz account secret, so they cannot restore an account. Account recovery uses the
   separate `createRecoverablePasskeyBackup` / `restoreFromPasskey` flow documented in

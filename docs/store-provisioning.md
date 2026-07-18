@@ -25,7 +25,9 @@ so the authoring surface stays free of the provisioning client.
 ## Classify before you connect
 
 With store administration (admin secret, or a provision-scoped ticket URL as `serverUrl` with
-`adminSecret` omitted):
+`adminSecret` omitted — in a browser app the provision URL comes from the runtime's capability
+custody: held in memory after enrollment, or unlocked through its passkey ceremony with
+`unlockProvisionCapability`; see [Sync and recovery](sync-and-recovery.md)):
 
 ```ts
 import { readStoreStatus } from "@nzip/lofi/schema/store";

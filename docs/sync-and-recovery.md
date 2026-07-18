@@ -62,7 +62,8 @@ Enrollment declares the ticket as this device's _data sink_ and elects sync in o
 data pushes up under the same account identity, exactly as electing against a compiled managed app
 does. `parseSyncTicket` validates a pasted string without enrolling it (returns `null` on any
 malformed input), and `readDeclaredSink` / `clearDeclaredSink` manage the declaration directly. A
-non-ticket location can be declared with `declareDataSink({ appId, serverUrl })`.
+non-ticket location can be declared with `await declareDataSink({ appId, serverUrl })` —
+declarations are asynchronous because the record is sealed before it is stored.
 
 Semantics to rely on:
 
@@ -74,12 +75,24 @@ Semantics to rely on:
 - **One store, one active sink.** Declaring a different sink over an existing one is refused; clear
   the declaration first. Local data and elections survive clearing.
 - **The ticket URL is a bearer credential.** It is used verbatim as the sync server (its secret path
-  is what authorizes transport), stored in a device-local record, and never exposed through the
-  session snapshot — `session.sink` carries only the source, host, and label.
+  is what authorizes transport) and never exposed through the session snapshot — `session.sink`
+  carries only the source, host, and label. At rest the declaration persists only as a sealed
+  envelope under a device-bound key, so nothing bearer-shaped sits in storage in cleartext. That
+  protects the record against disk images, backups, and storage exfiltration; it does not protect it
+  from script running on the same origin, which can drive the silent open itself.
 - **Tickets carry a scope.** A plain (or `scope: "sync"`) ticket is transport only; a
   `scope: "provision"` ticket additionally administers the store through the node's gate — the basis
   for opt-in store provisioning. A ticket with an unrecognized scope is rejected outright rather
   than silently granted less than it claims.
+- **A provision ticket is split before anything persists.** Enrollment asks the node's scope-down
+  exchange for a derived sync ticket; that becomes the declared sink, and the provision capability
+  is only _held_ in memory. Sealing it at rest is a separate, explicit passkey ceremony
+  (`sealProvisionCapability` / `unlockProvisionCapability`), attempted rather than
+  capability-detected; on a device whose authenticator cannot evaluate the WebAuthn PRF extension,
+  nothing persists and the durable copy is the ticket in the user's password manager. The packaged
+  `TicketEnrollForm` (`@nzip/lofi/preact`) is shaped for exactly that custody — the ticket is a
+  `current-password` field a manager saves on first paste and autofills later. Against a node
+  without the exchange, the ticket enrolls as pasted, exactly as before.
 - If the node revokes the ticket, requests fail with 401 and live sockets close; treat the stored
   sink as dead and surface re-enrollment rather than retrying silently.
 

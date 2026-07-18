@@ -39,14 +39,36 @@ jobs:
         run: npm ci --prefix website
       - name: Build site (fails on broken links)
         run: npm run build --prefix website
+      - name: Upload site build
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-build
+          path: website/build
+          retention-days: 1
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    # the Cloudflare credentials live as secrets on the `dev` environment; a job
+    # must declare that environment for them to resolve
+    environment:
+      name: dev
+      url: https://lofi.host
+    steps:
+      - name: Download site build
+        uses: actions/download-artifact@v4
+        with:
+          name: site-build
+          path: site-build
       # wrangler runs via npx (npm cache) rather than wrangler-action: the action
       # installs wrangler with `npm i` into the checkout, and npm cannot graft
       # onto the Deno-managed node_modules layout at the repo root.
       - name: Deploy to Cloudflare Pages
-        if: github.event_name == 'push'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx --yes wrangler@4 pages project create lofi-host --production-branch=main || true
-          npx --yes wrangler@4 pages deploy website/build --project-name=lofi-host
+          npx --yes wrangler@4 pages deploy site-build --project-name=lofi-host --branch=main

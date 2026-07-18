@@ -66,8 +66,10 @@ export function recreateResource<T>(
 }
 
 /**
- * Replaces a serialized resource after an async preparation step. Callers are
- * held behind the recreation promise while preparation and replacement run.
+ * Replaces a serialized resource after an async preparation step. Unlike
+ * {@link recreateResource}, replacement carries a payload (the preparation),
+ * so it never aliases to an in-flight recreation: it queues behind it and
+ * always runs its own preparation before installing the replacement.
  */
 export function replaceResource<T>(
   state: SerializedResourceState<T>,
@@ -75,7 +77,6 @@ export function replaceResource<T>(
   create: () => Promise<T>,
   destroy: (value: T) => Promise<void>,
 ): Promise<T> {
-  if (state.recreation) return state.recreation;
   const recreation = enqueue(state, async () => {
     await prepare();
     const previous = state.value;

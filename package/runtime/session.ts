@@ -37,6 +37,7 @@ import {
   runtimeCanReconnect,
   runtimeRecreatedEvent,
 } from "./runtime.ts";
+import { electManagedNamespace, readNamespaceState } from "./namespace-state.ts";
 
 /** A snapshot of the account: what is possible and what the user has chosen. */
 export type Session = {
@@ -63,8 +64,6 @@ export type Session = {
 // this only remembers to ask for it before revealing the phrase.
 const phraseGuardKey = `lofi:phrase-passkey:${appId}`;
 const recoverablePasskeyKey = `lofi:recoverable-passkey:${appId}`;
-const managedRuntimeKey = `lofi:managed-runtime:${appId}`;
-const migrateLocalRowsKey = `lofi:migrate-local-rows:${appId}`;
 
 function phraseGuarded(): boolean {
   if (typeof localStorage === "undefined") return false;
@@ -207,18 +206,16 @@ export async function revealRecoveryPhrase(): Promise<string> {
  * no Jazz app is configured.
  */
 export async function enableSyncBackup(): Promise<Session> {
-  const canReconnect = typeof localStorage !== "undefined" &&
-    localStorage.getItem(managedRuntimeKey) === "1";
+  // The documented no-op: without a managed Jazz app there is nothing to sync
+  // to, and electing the managed namespace anyway would hide the local rows
+  // behind an empty database on every later boot.
+  if (!syncAvailable) return readSession();
+  const alreadyManaged = readNamespaceState().mode === "managed";
   setSyncElected(true);
-  if (canReconnect && runtimeCanReconnect()) {
+  if (alreadyManaged && runtimeCanReconnect()) {
     await (await getRuntime()).db.reconnect();
   } else {
-    try {
-      localStorage.setItem(managedRuntimeKey, "1");
-      if (!canReconnect) localStorage.setItem(migrateLocalRowsKey, "1");
-    } catch {
-      // Runtime mode remains authoritative when local metadata cannot persist.
-    }
+    if (!alreadyManaged) electManagedNamespace({ migrateLocalRows: true });
     if (typeof window !== "undefined" && typeof SharedWorker !== "undefined") {
       return await reloadBrowserRuntime();
     }
@@ -266,16 +263,25 @@ async function replaceAccountSecret(
   options: AccountReplacementOptions,
 ): Promise<Session> {
   const current = await currentSecret();
-  if (current !== secret && !syncElected() && !options.confirmLocalReplacement) {
+  if (current === secret) {
+    // The device already holds this account; there is no principal to replace.
+    // Electing backup and sync is the whole remaining intent, and the election
+    // path migrates a never-synced device's local rows instead of hiding them.
+    return await enableSyncBackup();
+  }
+  if (!syncElected() && !options.confirmLocalReplacement) {
     throw new AccountReplacementError();
   }
-  setSyncElected(true);
-  try {
-    localStorage.setItem(managedRuntimeKey, "1");
-  } catch {
-    // The restored runtime is still authoritative if metadata cannot persist.
-  }
-  await replaceRuntimePrincipal(secret);
+  await replaceRuntimePrincipal(secret, {
+    onSecretSaved: () => {
+      // Commit election only after the restored secret is durably saved: a
+      // replacement that fails earlier leaves the device booting its intact
+      // local account instead of an empty managed namespace.
+      if (!syncAvailable) return;
+      setSyncElected(true);
+      electManagedNamespace({ migrateLocalRows: false });
+    },
+  });
   globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));
   return readSession();
 }

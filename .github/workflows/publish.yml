@@ -41,6 +41,13 @@ jobs:
       - name: Install Chromium
         run: deno task test:browser:install
 
+      - name: Reset incidental workspace changes from validation steps
+        # the reference build and test runs regenerate lockfiles in the
+        # runner's checkout; publishing must see exactly the tagged tree
+        run: |
+          git status --short
+          git checkout -- .
+
       - name: Publish to JSR
         run: deno publish
 

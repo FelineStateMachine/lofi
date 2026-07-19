@@ -25,6 +25,7 @@ export type LofiAstroOptions = {
 export const runtimeFiles = [
   "app.ts",
   "auth.ts",
+  "boot-progress.ts",
   "boot.ts",
   "config.ts",
   "data-sink.ts",
@@ -89,6 +90,7 @@ export const preactFiles = [
   "PwaActions.tsx",
   "RuntimeRecovery.tsx",
   "TicketEnrollForm.tsx",
+  "use-boot-progress.ts",
   "use-device-capabilities.ts",
   "use-schema-compat.ts",
   "write-hooks.ts",

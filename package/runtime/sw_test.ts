@@ -380,22 +380,38 @@ Deno.test("lookups never read another cache on the origin", async () => {
   }
 });
 
-Deno.test("shell precache bypasses the HTTP cache for every asset", async () => {
+Deno.test("shell precache bypasses the HTTP cache only for mutable assets", async () => {
   const precacheInputs: Array<RequestInfo | URL> = [];
   const harness = await serviceWorkerHarness((input) => {
     const url = requestUrl(input);
-    if (url.endsWith("lofi-precache.json")) return Promise.resolve(Response.json(["./"]));
+    if (url.endsWith("lofi-precache.json")) {
+      return Promise.resolve(
+        Response.json([
+          "./",
+          "./_astro/runtime.AAAA1111.js",
+          "./_astro/jazz_wasm_bg.BBBB2222.wasm",
+        ]),
+      );
+    }
     precacheInputs.push(input);
     return Promise.resolve(new Response("shell"));
   });
   try {
     await harness.dispatchLifecycle("install");
-    assert(precacheInputs.length === 1, "expected one precached shell asset");
-    const request = precacheInputs[0];
-    assert(request instanceof Request, "precache must construct explicit requests");
+    assert(precacheInputs.length === 3, "expected three precached shell assets");
+    const modes = new Map<string, string>();
+    for (const input of precacheInputs) {
+      assert(input instanceof Request, "precache must construct explicit requests");
+      modes.set(new URL(input.url).pathname, input.cache);
+    }
     assert(
-      request.cache === "reload",
-      "shell assets must bypass the HTTP cache, matching the manifest's no-store fetch",
+      modes.get("/app/") === "reload",
+      "mutable shell assets must bypass the HTTP cache, matching the manifest's no-store fetch",
+    );
+    assert(
+      modes.get("/app/_astro/runtime.AAAA1111.js") === "default" &&
+        modes.get("/app/_astro/jazz_wasm_bg.BBBB2222.wasm") === "default",
+      "content-hashed assets must admit the HTTP cache so a first visit is not downloaded twice",
     );
   } finally {
     harness.close();

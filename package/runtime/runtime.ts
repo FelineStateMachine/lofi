@@ -2,6 +2,7 @@
 import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
 // Package-owned Jazz runtime.
 import { getLofiApp } from "./app.ts";
+import { bootProgressTracker } from "./boot-progress.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { activeSink, appId, databaseConfig, syncing } from "./config.ts";
 import { assertSchemaWritable, schemaCompatGate, subscribeSchemaCompat } from "./schema-compat.ts";
@@ -77,6 +78,7 @@ function recordStartupFailure(state: RuntimeSlot, failure: RuntimeStartupFailure
   const previous = state.diagnostics.startupFailure;
   state.diagnostics.storageState = "failed";
   state.diagnostics.startupFailure = failure;
+  bootProgressTracker.mark("failed");
   if (
     previous?.code !== failure.code || previous.runtimeMode !== failure.runtimeMode ||
     previous.message !== failure.message
@@ -227,6 +229,12 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
   });
   return await runRuntimeStartup(runtimeMode, async () => {
     assertDurableBrowser();
+    // On a cold first visit the engine binary is the wait; download it with
+    // byte progress before the engine's own fetch reads the primed cache. The
+    // warm-up cannot fail boot — it resolves and the engine falls back to
+    // resolving its binary itself.
+    await bootProgressTracker.warmEngineDownload();
+    bootProgressTracker.mark("opening");
     const secret = await resolveAccountSecret();
     await installEncryptedColumnKey(secret);
     const namespace = await accountNamespace(secret);
@@ -259,6 +267,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     // The runtime is open read-write; the compatibility gate may stamp the
     // local schema version forward (it never stamps while data is ahead).
     schemaCompatGate.markRuntimeWritable();
+    bootProgressTracker.mark("ready");
     notifyDiagnostics(state);
     return db;
   }, record);

@@ -2,7 +2,8 @@
  * Optional Preact bindings for the lofi runtime: live typed queries
  * ({@link useLiveQuery}), table mutations ({@link useTableMutations}), the
  * per-write sync lifecycle ({@link useWrite}, {@link usePendingWrites},
- * {@link useSyncStatus}), and the schema-compatibility gate
+ * {@link useSyncStatus}), first-load progress ({@link useBootProgress}), and
+ * the schema-compatibility gate
  * ({@link useSchemaCompat}), plus package-owned example components
  * ({@link DeviceStatus}, {@link PwaActions}, {@link RuntimeRecovery},
  * {@link TicketEnrollForm}) that application layouts may compose or replace
@@ -42,6 +43,7 @@ export {
   type SchemaCompatState,
   useSchemaCompat,
 } from "./use-schema-compat.ts";
+export { type BootProgress, type BootProgressPhase, useBootProgress } from "./use-boot-progress.ts";
 export {
   type DeviceCapabilitiesHook,
   type DeviceCapabilityReport,

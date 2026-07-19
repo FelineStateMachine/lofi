@@ -195,6 +195,49 @@ export async function shellWeightBytes(
   return total;
 }
 
+/** The heaviest shell asset — the one first-visit download time hinges on. */
+export async function heaviestShellAsset(
+  paths: readonly string[],
+  root = "dist",
+): Promise<{ path: string; bytes: number } | null> {
+  let heaviest: { path: string; bytes: number } | null = null;
+  for (const path of paths) {
+    const { size } = await Deno.stat(join(root, path));
+    if (!heaviest || size > heaviest.bytes) {
+      heaviest = { path: path.replaceAll("\\", "/"), bytes: size };
+    }
+  }
+  return heaviest;
+}
+
+/** Build-emitted Jazz engine binaries among dist paths; one after deduplication. */
+export function engineWasmAssets(paths: readonly string[]): string[] {
+  return paths
+    .map((path) => path.replaceAll("\\", "/"))
+    .filter((path) => /^_astro\/jazz_wasm_bg\.[^/]+\.wasm$/.test(path))
+    .sort();
+}
+
+/**
+ * The head tag that starts the engine download while the module graph is still
+ * arriving. `crossorigin` makes the preload match the engine glue's plain
+ * `fetch()` credentials mode; without it the browser fetches the binary twice.
+ * The stamped byte size (uncompressed, unlike a Content-Length over a
+ * compressed transfer) lets the runtime report download progress.
+ */
+export function engineWasmPreloadTag(path: string, basePath: string, bytes: number): string {
+  const base = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  return `<link rel="preload" href="${base}${path}" as="fetch" crossorigin data-lofi-engine="${bytes}">`;
+}
+
+/** Inserts tags before an HTML document's `</head>`; unchanged when it has none. */
+export function injectHeadTags(html: string, tags: readonly string[]): string {
+  if (tags.length === 0) return html;
+  const headEnd = html.indexOf("</head>");
+  if (headEnd === -1) return html;
+  return `${html.slice(0, headEnd)}${tags.join("")}${html.slice(headEnd)}`;
+}
+
 function contains(haystack: Uint8Array, needle: Uint8Array): boolean {
   if (needle.length === 0 || haystack.length < needle.length) return false;
   outer:

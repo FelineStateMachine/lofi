@@ -166,12 +166,14 @@ not change either way.
 
 ### Offline cache policy
 
-The build's precache manifest contains required shell resources only. Shell assets are fetched
-bypassing the HTTP cache (matching the manifest's own `no-store` fetch), so a new revision can never
-be populated from stale HTTP-cached responses. If any listed response cannot be fetched,
-service-worker installation fails and reports a precache error rather than exposing a worker that
-cannot cold-start the application. Product-specific optional resources do not belong in that
-manifest.
+The build's precache manifest contains required shell resources only. Mutable shell assets (HTML,
+manifests) are fetched bypassing the HTTP cache (matching the manifest's own `no-store` fetch), so a
+new revision can never be populated from stale HTTP-cached responses. Content-hashed build assets
+under `_astro/` cannot go stale under their names, so precaching admits the HTTP cache for them: a
+first visit reuses the bytes the page's own module and engine fetches already downloaded instead of
+downloading the shell a second time. If any listed response cannot be fetched, service-worker
+installation fails and reports a precache error rather than exposing a worker that cannot cold-start
+the application. Product-specific optional resources do not belong in that manifest.
 
 Cache names carry the registration scope, and lookups consult only the worker's own caches: apps
 served from different base paths on one origin never read, shadow, or delete each other's caches,
@@ -188,6 +190,18 @@ activation.
 Navigation preload remains disabled: generated routes and their assets are precached, so starting a
 parallel network request before the normal cache-first lookup would spend bandwidth on the expected
 offline-ready path. Jazz sync, OPFS storage, background sync, and push remain outside the worker.
+
+### First-visit download
+
+A repeat visit opens from the precached shell without touching the network. A cold first visit is
+dominated by the Jazz engine binary, so the build stamps every prerendered page with a fetch preload
+for it: the download starts while the module graph is still arriving, and the tag carries the
+binary's uncompressed size. Before the runtime opens it streams that same URL with byte progress,
+and the engine's own fetch then reads the primed HTTP cache. Applications can name the wait with the
+`useBootProgress` hook in `@nzip/lofi/preact` (phases `pending`, `downloading`, `opening`, `ready`,
+`failed`, with `loadedBytes` and `totalBytes` while downloading); the starter task list shows the
+pattern. Serving `_astro/` assets with compression and long-lived caching headers keeps both the
+first visit and the warm-up cheap.
 
 ### Install and update lifecycle
 

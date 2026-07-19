@@ -1,7 +1,22 @@
 import { useState } from "preact/hooks";
 import { settleUiMutation } from "@nzip/lofi";
-import { usePendingWrites, useSyncStatus } from "@nzip/lofi/preact";
+import {
+  type BootProgress,
+  useBootProgress,
+  usePendingWrites,
+  useSyncStatus,
+} from "@nzip/lofi/preact";
 import { type Task, useTaskNotice, useTasks } from "./use-tasks.ts";
+
+// A cold first visit waits on the engine download, not on storage; name the
+// wait it is actually in, with byte progress while the download runs.
+function loadingLabel(boot: BootProgress): string {
+  if (boot.phase !== "downloading") return "Opening persistent storage…";
+  const mb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+  return boot.totalBytes === null
+    ? `Downloading the app · ${mb(boot.loadedBytes)} MB…`
+    : `Downloading the app · ${mb(boot.loadedBytes)} of ${mb(boot.totalBytes)} MB…`;
+}
 
 /**
  * Author-owned starter UI. One island over one table: add a row through a
@@ -13,6 +28,7 @@ export default function TaskList() {
   const { status, error, durability, tasks, failureKind, create, setCompleted } = useTasks();
   const notice = useTaskNotice();
   const pending = usePendingWrites();
+  const boot = useBootProgress();
   const [text, setText] = useState("");
 
   return (
@@ -44,7 +60,7 @@ export default function TaskList() {
         </div>
       </form>
       <p class="state" role="status">
-        {status === "loading" && "Opening persistent storage…"}
+        {status === "loading" && loadingLabel(boot)}
         {status === "error" &&
           `${failureKind === "read" ? "Read failed" : "Write failed"}: ${error}`}
         {status === "ready" && `${tasks.length} item(s) · ${

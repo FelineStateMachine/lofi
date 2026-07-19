@@ -1,6 +1,10 @@
 import { join } from "node:path";
 import {
   duplicateBuildAssets,
+  engineWasmAssets,
+  engineWasmPreloadTag,
+  heaviestShellAsset,
+  injectHeadTags,
   precacheUrls,
   scanSecrets,
   shellWeightBytes,
@@ -165,7 +169,43 @@ Deno.test("shell weight sums the bytes of the precached set", async () => {
     await Deno.writeTextFile(join(root, "_astro", "client.js"), "1234567");
     const total = await shellWeightBytes(["index.html", "_astro/client.js"], root);
     assert(total === 12, `expected 12 bytes, received ${total}`);
+    const heaviest = await heaviestShellAsset(["index.html", "_astro/client.js"], root);
+    assert(
+      heaviest?.path === "_astro/client.js" && heaviest.bytes === 7,
+      `expected _astro/client.js at 7 bytes, received ${JSON.stringify(heaviest)}`,
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+Deno.test("engine preload tags target the engine binary and land inside head", () => {
+  const distFiles = [
+    "_astro/jazz_wasm_bg.MOpZeXEV.wasm",
+    "_astro/runtime.CCX0HbMH.js",
+    "index.html",
+    "media/jazz_wasm_bg.notes.wasm.txt",
+  ];
+  const assets = engineWasmAssets(distFiles);
+  assert(
+    assets.length === 1 && assets[0] === "_astro/jazz_wasm_bg.MOpZeXEV.wasm",
+    `expected the one engine binary, received ${JSON.stringify(assets)}`,
+  );
+  const tag = engineWasmPreloadTag(assets[0], "/app", 9_300_000);
+  assert(
+    tag ===
+      '<link rel="preload" href="/app/_astro/jazz_wasm_bg.MOpZeXEV.wasm" as="fetch" crossorigin data-lofi-engine="9300000">',
+    `unexpected preload tag: ${tag}`,
+  );
+  const html = "<html><head><title>t</title></head><body></body></html>";
+  const injected = injectHeadTags(html, [tag]);
+  assert(
+    injected === `<html><head><title>t</title>${tag}</head><body></body></html>`,
+    `tag was not injected before </head>: ${injected}`,
+  );
+  assert(
+    injectHeadTags("<body>no head</body>", [tag]) === "<body>no head</body>",
+    "a document without a head must pass through unchanged",
+  );
+  assert(injectHeadTags(html, []) === html, "no tags must leave the document unchanged");
 });

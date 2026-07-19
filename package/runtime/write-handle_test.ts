@@ -14,7 +14,7 @@ Deno.test("stages are monotonic and never regress", () => {
   handle.advance("synced");
   handle.advance("saved");
   assert(handle.stage === "synced", "a later stage must not regress to an earlier one");
-  handle.reject({ code: "permission_denied", reason: "late" });
+  handle.reject({ cause: "denied", code: "permission_denied", reason: "late" });
   assert(handle.stage === "synced", "a settled write must ignore late verdicts");
   assert(handle.reason === null, "a settled write must not carry a rejection");
 });
@@ -30,7 +30,7 @@ Deno.test("synced resolves with the value staged before confirmation", async () 
 Deno.test("rejection settles both promises with WriteRejectedError and sets reason", async () => {
   const handle = new WriteHandle<void>("w1");
   handle.advance("saved");
-  handle.reject({ code: "permission_denied", reason: "denied by store" });
+  handle.reject({ cause: "denied", code: "permission_denied", reason: "denied by store" });
   assert(handle.stage === "rejected", "the verdict must reach the stage");
   assert(handle.reason?.code === "permission_denied", "the rejection code must be readable");
   const error = await handle.synced.then(() => null, (thrown) => thrown as WriteRejectedError);
@@ -40,7 +40,7 @@ Deno.test("rejection settles both promises with WriteRejectedError and sets reas
 
 Deno.test("an unobserved rejected handle leaks no unhandled rejection", async () => {
   const handle = new WriteHandle<void>("w1");
-  handle.reject({ code: null, reason: "refused" });
+  handle.reject({ cause: "denied", code: null, reason: "refused" });
   // Nothing awaits the handle; settling the microtask queue must not surface
   // an unhandled rejection (the test runner fails the test if one escapes).
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -57,6 +57,6 @@ Deno.test("subscribers are level-triggered: late subscribers see current truth",
   assert(seen[1] === "synced", "subscribers must observe later transitions");
   stop();
   stop();
-  handle.reject({ code: null, reason: "ignored" });
+  handle.reject({ cause: "denied", code: null, reason: "ignored" });
   assertCount(seen.length, 2, "an unsubscribed listener must not be notified");
 });

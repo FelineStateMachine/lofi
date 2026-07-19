@@ -48,6 +48,11 @@ export type EffectContext = {
   rowId: string;
   /** Which fate settled the write. */
   fate: "synced" | "rejected";
+  /**
+   * Why a `rejected` write settled: `denied` for a store verdict, `expired`
+   * for an intent retired past its lifespan; `null` on the `synced` fate.
+   */
+  cause: "denied" | "expired" | null;
   /** The adjudicated rejection code, on the `rejected` fate. */
   code: string | null;
   /** The adjudicated rejection reason, on the `rejected` fate. */
@@ -67,6 +72,23 @@ export type EffectHandlers<Row> = {
 };
 
 /**
+ * Retention options for one effect unit: how long delivery may lag the write,
+ * and how many failing attempts are made before quarantine.
+ */
+export type EffectUnitOptions = {
+  /**
+   * The delivery window in milliseconds, measured from the write. When the
+   * write synced but this obligation could not be delivered inside the
+   * window, the obligation retires as expired and no handler fires — the
+   * write happened, so compensation would be wrong. External-tier handlers
+   * whose receivers keep finite idempotency windows should set this.
+   */
+  expiresAfter?: number;
+  /** Failing attempts before quarantine retires the obligation. Default 5. */
+  maxAttempts?: number;
+};
+
+/**
  * A named, reusable pairing of action and compensation. The name is the
  * durable identity the journal uses to re-arm handlers after a reload; a
  * mutation declares its units once, at the verb declaration.
@@ -76,6 +98,10 @@ export type EffectUnit<Row = { id: string }> = {
   readonly effectName: string;
   /** The unit's handlers. */
   readonly handlers: EffectHandlers<Row>;
+  /** The delivery window in milliseconds, or `null` for none. */
+  readonly expiresAfterMs?: number | null;
+  /** Failing attempts before quarantine retires the obligation. */
+  readonly maxAttempts?: number;
 };
 
 /** Which operation a {@link MutationOp} performs. */
@@ -126,6 +152,15 @@ export type MutationOptions<Row> = {
   onSynced?: EffectHandlers<Row>["onSynced"];
   /** Inline sugar for an implicit single unit named after the verb. */
   onRejected?: EffectHandlers<Row>["onRejected"];
+  /**
+   * The intent's lifespan in milliseconds. A write of this verb still pending
+   * past its lifespan is surfaced through pending-writes state and
+   * diagnostics. The engine offers no withdrawal for a locally accepted write
+   * at the pinned runtime, so an overdue intent is reported, never retired:
+   * retiring it as rejected could fire compensation for a write that later
+   * syncs anyway.
+   */
+  expires?: number;
 };
 
 /** The registered declaration the runtime dispatches for one verb. */
@@ -136,6 +171,8 @@ export type MutationDescriptor = {
   readonly op: MutationOp<unknown, unknown>;
   /** The verb's effect units, implicit unit included. */
   readonly units: readonly EffectUnit<{ id: string }>[];
+  /** The intent's lifespan in milliseconds, or `null` for none. */
+  readonly expiresMs: number | null;
 };
 
 /** The runtime half installed by the package runtime before verbs are called. */
@@ -229,10 +266,16 @@ export function effect<T extends { id: string }, Init>(
   name: string,
   table: TableProxy<T, Init>,
   handlers: EffectHandlers<T>,
+  options: EffectUnitOptions = {},
 ): EffectUnit<T> {
   if (!name.trim()) throw new Error("effect name must not be empty");
   void table;
-  const unit: EffectUnit<T> = { effectName: name, handlers };
+  const unit: EffectUnit<T> = {
+    effectName: name,
+    handlers,
+    expiresAfterMs: options.expiresAfter ?? null,
+    ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
+  };
   registerUnit(unit as EffectUnit<{ id: string }>);
   return unit;
 }
@@ -327,6 +370,7 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
     verbName: name,
     op: op as MutationOp<unknown, unknown>,
     units,
+    expiresMs: options.expires ?? null,
   };
   state.verbs.set(name, descriptor);
   const verb = (...args: readonly unknown[]) => requireRuntime().dispatch(descriptor, args);

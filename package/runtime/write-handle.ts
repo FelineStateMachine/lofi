@@ -19,8 +19,13 @@
  */
 export type WriteStage = "saving" | "saved" | "syncing" | "synced" | "rejected";
 
-/** Why a write settled as `rejected`: the adjudicated code and its reason text. */
+/** Why a write settled as `rejected`: the structured cause, code, and reason. */
 export type WriteRejection = {
+  /**
+   * The structured cause: `denied` for a store verdict, `expired` for an
+   * intent retired past its lifespan.
+   */
+  cause: "denied" | "expired";
   /** The sync node's rejection code, or `null` when none was carried. */
   code: string | null;
   /** Human-readable reason text from the adjudicating node. */
@@ -34,6 +39,8 @@ export type WriteRejection = {
 export class WriteRejectedError extends Error {
   /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "WriteRejectedError";
+  /** The structured cause: `denied` or `expired`. */
+  readonly rejectionCause: "denied" | "expired";
   /** The adjudicated rejection code, or `null` when none was carried. */
   readonly code: string | null;
   /** The journal id of the rejected write. */
@@ -44,6 +51,7 @@ export class WriteRejectedError extends Error {
     super(rejection.reason);
     this.writeId = writeId;
     this.code = rejection.code;
+    this.rejectionCause = rejection.cause;
   }
 }
 

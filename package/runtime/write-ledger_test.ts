@@ -5,6 +5,7 @@ import { assert, assertCount } from "./test-assert.ts";
 import {
   createMemoryJournalStorage,
   emptyJournal,
+  hashJournalValue,
   type JournalDocument,
   journalIdFor,
 } from "./write-journal.ts";
@@ -95,6 +96,7 @@ type Harness = {
   diagnostics: ReturnType<typeof createDiagnostics>;
   storage: ReturnType<typeof createMemoryJournalStorage>;
   units: Map<string, EffectUnit<{ id: string }>>;
+  clock: { value: number };
 };
 
 function harness(options: {
@@ -103,11 +105,13 @@ function harness(options: {
   units?: Map<string, EffectUnit<{ id: string }>>;
   db?: FakeDb;
   guardWrite?: () => Promise<(() => void) | void>;
+  sweepIntervalMs?: number;
 } = {}): Harness {
   const db = options.db ?? new FakeDb();
   const diagnostics = createDiagnostics();
   const storage = options.storage ?? createMemoryJournalStorage();
   const units = options.units ?? new Map<string, EffectUnit<{ id: string }>>();
+  const clock = { value: 1000 };
   const environment: WriteLedgerEnvironment = {
     getDb: () => Promise.resolve(db.value()),
     syncConfigured: () => options.syncConfigured ?? true,
@@ -116,24 +120,31 @@ function harness(options: {
     resolveEffectUnit: (name) => units.get(name) ?? null,
     subscribeRuntimeRecreation: () => () => undefined,
     updateDiagnostics: (update) => update(diagnostics),
-    now: () => 1000,
+    now: () => clock.value,
     retryDelayMs: () => 1,
     probeTimeoutMs: 50,
+    sweepIntervalMs: options.sweepIntervalMs ?? 60_000,
     ...(options.guardWrite ? { guardWrite: options.guardWrite } : {}),
   };
-  return { db, ledger: new WriteLedger(environment), diagnostics, storage, units };
+  return { db, ledger: new WriteLedger(environment), diagnostics, storage, units, clock };
 }
 
 function unit(
   name: string,
   calls: Array<{ handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }>,
-  options: { failFirst?: { onSynced?: boolean } } = {},
+  options: {
+    failFirst?: { onSynced?: boolean };
+    failAlways?: boolean;
+    expiresAfter?: number;
+    maxAttempts?: number;
+  } = {},
 ): EffectUnit<{ id: string }> {
   let failed = false;
   return {
     effectName: name,
     handlers: {
       onSynced: (row, context) => {
+        if (options.failAlways) throw new Error("handler always explodes");
         if (options.failFirst?.onSynced && !failed) {
           failed = true;
           throw new Error("handler exploded");
@@ -144,6 +155,8 @@ function unit(
         calls.push({ handler: "onRejected", row, context });
       },
     },
+    expiresAfterMs: options.expiresAfter ?? null,
+    ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
   };
 }
 
@@ -314,12 +327,16 @@ Deno.test("boot reconciliation confirms journaled writes against store state", a
     op: "insert",
     rowId: "row-a",
     batchId: "batch-a",
-    row: { id: "row-a", title: "kept" },
+    rowHashes: { title: hashJournalValue(document.hashKey, "kept") },
     stage: "saved",
+    cause: null,
     code: null,
     reason: null,
     createdAt: 1,
-    effects: { celebrate: { status: "pending", attempts: 0, lastError: null } },
+    expiresAt: null,
+    effects: {
+      celebrate: { status: "pending", attempts: 0, lastError: null, expiresAt: null },
+    },
   };
   document.writes["w-waiting"] = {
     writeId: "w-waiting",
@@ -328,11 +345,13 @@ Deno.test("boot reconciliation confirms journaled writes against store state", a
     op: "insert",
     rowId: "row-b",
     batchId: "batch-b",
-    row: { id: "row-b", title: "not there yet" },
+    rowHashes: { title: hashJournalValue(document.hashKey, "not there yet") },
     stage: "saved",
+    cause: null,
     code: null,
     reason: null,
     createdAt: 2,
+    expiresAt: null,
     effects: {},
   };
   const storage = createMemoryJournalStorage(JSON.stringify(document));
@@ -367,12 +386,16 @@ Deno.test("boot reconciliation applies replayed verdicts to journaled writes", a
     op: "insert",
     rowId: "row-x",
     batchId: "batch-x",
-    row: { id: "row-x", title: "denied" },
+    rowHashes: { title: hashJournalValue(document.hashKey, "denied") },
     stage: "saved",
+    cause: null,
     code: null,
     reason: null,
     createdAt: 1,
-    effects: { compensate: { status: "pending", attempts: 0, lastError: null } },
+    expiresAt: null,
+    effects: {
+      compensate: { status: "pending", attempts: 0, lastError: null, expiresAt: null },
+    },
   };
   const storage = createMemoryJournalStorage(JSON.stringify(document));
   const fixture = harness({ storage, units });
@@ -409,11 +432,13 @@ Deno.test("an unknown replayed code keeps the journaled write pending", async ()
     op: "update",
     rowId: "row-y",
     batchId: "batch-y",
-    row: { id: "row-y", title: "edited" },
+    rowHashes: { title: hashJournalValue(document.hashKey, "edited") },
     stage: "saved",
+    cause: null,
     code: null,
     reason: null,
     createdAt: 1,
+    expiresAt: null,
     effects: {},
   };
   const storage = createMemoryJournalStorage(JSON.stringify(document));
@@ -443,11 +468,13 @@ Deno.test("a remove is confirmed at boot by the row's absence", async () => {
     op: "remove",
     rowId: "row-z",
     batchId: "batch-z",
-    row: { id: "row-z" },
+    rowHashes: {},
     stage: "saved",
+    cause: null,
     code: null,
     reason: null,
     createdAt: 1,
+    expiresAt: null,
     effects: {},
   };
   const storage = createMemoryJournalStorage(JSON.stringify(document));
@@ -558,4 +585,202 @@ Deno.test("the write-guard release covers exactly the local-durability window", 
   await flush();
   assertCount(released, 1, "global settlement must not release the lock again");
   fixture.ledger.dispose();
+});
+
+Deno.test("the serialized journal holds hashes, never plaintext column values", async () => {
+  const fixture = harness();
+  await fixture.ledger.arm();
+  const handle = fixture.ledger.perform<Row>(
+    {
+      kind: "insert",
+      table: table as TableProxy<unknown, unknown>,
+      values: { title: "SECRET-VALUE-XYZ" },
+    },
+  );
+  await handle;
+  await fixture.ledger.flush();
+  const persisted = fixture.storage.text() ?? "";
+  assert(persisted.includes(handle.writeId), "the pending write must be journaled");
+  assert(
+    persisted.includes("SECRET-VALUE-XYZ") === false,
+    "no plaintext column value may reach the persisted journal",
+  );
+  assert(persisted.includes("rowHashes"), "the equality-probe hashes must be journaled");
+  fixture.ledger.dispose();
+});
+
+Deno.test("boot compensation receives write identity only; live handlers keep the row", async () => {
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  const units = new Map([["compensate", unit("compensate", calls)]]);
+  const document: JournalDocument = emptyJournal();
+  document.writes["w-back"] = {
+    writeId: "w-back",
+    verb: "placeOrder",
+    table: "records",
+    op: "insert",
+    rowId: "row-q",
+    batchId: "batch-q",
+    rowHashes: { title: hashJournalValue(document.hashKey, "gone") },
+    stage: "saved",
+    cause: null,
+    code: null,
+    reason: null,
+    createdAt: 1,
+    expiresAt: null,
+    effects: {
+      compensate: { status: "pending", attempts: 0, lastError: null, expiresAt: null },
+    },
+  };
+  const storage = createMemoryJournalStorage(JSON.stringify(document));
+  const fixture = harness({ storage, units });
+  await fixture.ledger.arm();
+  fixture.db.emit(
+    {
+      code: "permission_denied",
+      reason: "tightened while away",
+      batch: { batchId: "batch-q" },
+    } as unknown as MutationErrorEvent,
+  );
+  await flush();
+  assertCount(calls.length, 1, "the replayed verdict must run compensation");
+  assert(
+    Object.keys(calls[0].row).join(",") === "id" && calls[0].row.id === "row-q",
+    "after a reload the journal holds no values: compensation receives identity only",
+  );
+  assert(calls[0].context.cause === "denied", "the structured cause must reach the handler");
+  fixture.ledger.dispose();
+});
+
+Deno.test("a synced obligation re-armed at boot receives the live store row", async () => {
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  const units = new Map([["celebrate", unit("celebrate", calls)]]);
+  const document: JournalDocument = emptyJournal();
+  document.writes["w-live"] = {
+    writeId: "w-live",
+    verb: "addTask",
+    table: "records",
+    op: "insert",
+    rowId: "row-l",
+    batchId: "batch-l",
+    rowHashes: { title: hashJournalValue(document.hashKey, "kept") },
+    stage: "synced",
+    cause: null,
+    code: null,
+    reason: null,
+    createdAt: 1,
+    expiresAt: null,
+    effects: {
+      celebrate: { status: "pending", attempts: 0, lastError: null, expiresAt: null },
+    },
+  };
+  const storage = createMemoryJournalStorage(JSON.stringify(document));
+  const fixture = harness({ storage, units });
+  fixture.db.rows = [{ id: "row-l", title: "kept" }];
+  await fixture.ledger.arm();
+  await flush();
+  assertCount(calls.length, 1, "the re-armed obligation must run");
+  assert(
+    (calls[0].row as { title?: string }).title === "kept",
+    "a synced write's handler must receive the live row the store confirmed",
+  );
+  fixture.ledger.dispose();
+});
+
+Deno.test("an overdue intent surfaces in pending state and diagnostics without compensation", async () => {
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  const units = new Map([["chargeCard", unit("chargeCard", calls)]]);
+  const fixture = harness({ units, sweepIntervalMs: 5 });
+  await fixture.ledger.arm();
+  const handle = fixture.ledger.perform<Row>(
+    { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "slow" } },
+    { verb: "placeOrder", units: [units.get("chargeCard")!], expiresMs: 50 },
+  );
+  await handle;
+  assert(
+    fixture.ledger.getPendingSnapshot().writes[0]?.expired === false,
+    "an intent inside its lifespan is not overdue",
+  );
+  fixture.clock.value = 2000;
+  await settleTimers(20);
+  const snapshot = fixture.ledger.getPendingSnapshot();
+  assert(snapshot.writes[0]?.expired === true, "the overdue intent must surface");
+  assertCount(fixture.diagnostics.expiredPendingWrites, 1, "diagnostics must count it");
+  assert(handle.stage === "saved", "no withdrawal exists, so the stage must not change");
+  assertCount(calls.length, 0, "no compensation may fire for a write that can still sync");
+  // The store later confirms the overdue write: it settles normally.
+  fixture.db.settleGlobal();
+  await flush();
+  assert(String(handle.stage) === "synced", "a late confirmation still settles the write");
+  fixture.ledger.dispose();
+});
+
+Deno.test("a closed delivery window retires the obligation: no handler, diagnosable, prunable", async () => {
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  const units = new Map([["notifyOnce", unit("notifyOnce", calls, { expiresAfter: 30 })]]);
+  const fixture = harness({ units });
+  await fixture.ledger.arm();
+  const handle = fixture.ledger.perform<Row>(
+    { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "late" } },
+    { units: [units.get("notifyOnce")!] },
+  );
+  await handle;
+  // The device stays away past the delivery window; the write then syncs.
+  fixture.clock.value = 5000;
+  fixture.db.settleGlobal();
+  await flush();
+  assert(String(handle.stage) === "synced", "the write itself settled");
+  assertCount(calls.length, 0, "the write happened, so no handler may fire past the window");
+  assertCount(fixture.diagnostics.expiredObligations, 1, "the retirement must be diagnosable");
+  await fixture.ledger.flush();
+  assert(
+    (fixture.storage.text() ?? "").includes(handle.writeId) === false,
+    "a retired obligation makes the entry prunable",
+  );
+  fixture.ledger.dispose();
+});
+
+Deno.test("quarantine retires a permanently failing handler after its attempt bound", async () => {
+  const storage = createMemoryJournalStorage();
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  const failing = unit("fragile", calls, { failAlways: true, maxAttempts: 2 });
+  const first = harness({ storage, units: new Map([["fragile", failing]]) });
+  await first.ledger.arm();
+  const handle = first.ledger.perform<Row>(
+    { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "boom" } },
+    { units: [failing] },
+  );
+  await handle;
+  first.db.settleGlobal();
+  await flush();
+  await first.ledger.flush();
+  assertCount(first.diagnostics.effectHandlerFailures, 1, "the first failure is counted");
+  assert((storage.text() ?? "").includes("fragile"), "the failed obligation re-arms at boot");
+  first.ledger.dispose();
+
+  const second = harness({ storage, units: new Map([["fragile", failing]]) });
+  second.db.rows = [];
+  await second.ledger.arm();
+  await flush();
+  assertCount(
+    second.diagnostics.quarantinedObligations,
+    1,
+    "the attempt bound must quarantine the obligation",
+  );
+  await second.ledger.flush();
+  assert(
+    (second.storage.text() ?? "").includes(handle.writeId) === false,
+    "a quarantined obligation makes the entry prunable",
+  );
+  assertCount(calls.length, 0, "a quarantined handler never reports success");
+  second.ledger.dispose();
 });

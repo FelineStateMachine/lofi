@@ -54,8 +54,14 @@ export type RuntimeDiagnostics = {
   mutationErrors: number;
   /** Journaled writes that have not yet settled as synced or rejected. */
   journaledPendingWrites: number;
+  /** Pending writes whose declared intent lifespan has passed (surfacing only). */
+  expiredPendingWrites: number;
   /** Effect handler invocations that threw; failed obligations re-arm at boot. */
   effectHandlerFailures: number;
+  /** Obligations retired because their delivery window closed undelivered. */
+  expiredObligations: number;
+  /** Obligations quarantined after repeated handler failures. */
+  quarantinedObligations: number;
   /** Recent structured entries recorded by the built-in `s.log` effect unit. */
   effectLog: readonly EffectLogEntry[];
 };
@@ -80,7 +86,10 @@ export function createDiagnostics(): RuntimeDiagnostics {
     lastWriteDurability: "none",
     mutationErrors: 0,
     journaledPendingWrites: 0,
+    expiredPendingWrites: 0,
     effectHandlerFailures: 0,
+    expiredObligations: 0,
+    quarantinedObligations: 0,
     effectLog: [],
   };
 }

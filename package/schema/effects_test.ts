@@ -39,6 +39,7 @@ Deno.test("verbs carry their declared units and dispatch call-site arguments", (
   });
   const placeOrder = s.mutation("placeOrder", s.insert(app.orders), {
     effects: [chargeCard, s.log("order-placed")],
+    expires: 60_000,
   });
   placeOrder({ item: "tea", qty: 2 });
   assertCount(recorder.dispatched.length, 1, "the verb call must reach the dispatcher");
@@ -53,6 +54,7 @@ Deno.test("verbs carry their declared units and dispatch call-site arguments", (
     (args[0] as { item: string }).item === "tea",
     "call-site values must be forwarded untouched",
   );
+  assert(descriptor.expiresMs === 60_000, "the intent lifespan must ride the descriptor");
   clearEffectDeclarations();
 });
 
@@ -115,6 +117,7 @@ Deno.test("s.log reuses one unit per label and records through the runtime", () 
     table: "orders",
     rowId: "row-1",
     fate: "synced",
+    cause: null,
     code: null,
     reason: null,
   };

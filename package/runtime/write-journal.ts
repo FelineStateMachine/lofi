@@ -9,17 +9,42 @@
  * by write id; effect obligations are keyed by `(write id, effect name)`, and
  * the composed journal id is the idempotency key handlers receive.
  *
+ * The journal never stores column values. Boot-reconciliation equality probes
+ * compare per-column keyed hashes (HMAC-SHA-256 under a random per-journal
+ * key), so the journal is not a second greppable plaintext copy of row data.
+ * This does not protect low-entropy values against brute force by an attacker
+ * holding the whole storage — that attacker's access already equals the local
+ * store's own at-rest posture.
+ *
  * @module
  */
 
+import { sha256 } from "@noble/hashes/sha2";
+
+/**
+ * One obligation's durable status. `pending` until the handler completes;
+ * `failed` handlers re-arm at boot until quarantine retires them as
+ * `failed-permanent`; `expired` marks a delivery window that closed before
+ * the obligation could be delivered. Retired statuses never run again and
+ * make the entry prunable.
+ */
+export type JournalEffectStatus =
+  | "pending"
+  | "done"
+  | "failed"
+  | "expired"
+  | "failed-permanent";
+
 /** One effect obligation's durable state within a journaled write. */
 export type JournalEffectState = {
-  /** `pending` until the handler completes; `failed` handlers re-arm at boot. */
-  status: "pending" | "done" | "failed";
+  /** The obligation's durable status. */
+  status: JournalEffectStatus;
   /** How many times the handler has been started, across reloads. */
   attempts: number;
   /** The last handler failure message, for diagnostics. */
   lastError: string | null;
+  /** Epoch milliseconds when the delivery window closes, or `null` for none. */
+  expiresAt: number | null;
 };
 
 /** The durable fate of a journaled write. */
@@ -40,18 +65,23 @@ export type JournalWriteRecord = {
   /** The vendor batch id used to attribute adjudicated verdicts. */
   batchId: string | null;
   /**
-   * The journaled row snapshot handlers receive: the full row for inserts,
-   * the id plus changed columns for updates, and the id for removes.
+   * Keyed per-column hashes of the written values (all columns for inserts,
+   * the changed columns for updates, none for removes), sufficient for the
+   * boot-reconciliation equality probe. Values themselves are never stored.
    */
-  row: Record<string, unknown>;
+  rowHashes: Record<string, string>;
   /** The write's durable fate so far. */
   stage: JournalWriteStage;
+  /** The structured rejection cause, when the stage is `rejected`. */
+  cause: "denied" | "expired" | null;
   /** The adjudicated rejection code, when the stage is `rejected`. */
   code: string | null;
   /** The adjudicated rejection reason, when the stage is `rejected`. */
   reason: string | null;
   /** Epoch milliseconds when the write was journaled. */
   createdAt: number;
+  /** Epoch milliseconds when the intent's lifespan ends, or `null` for none. */
+  expiresAt: number | null;
   /** Effect obligations keyed by effect name. */
   effects: Record<string, JournalEffectState>;
 };
@@ -60,6 +90,8 @@ export type JournalWriteRecord = {
 export type JournalDocument = {
   /** Storage format version. */
   version: 1;
+  /** The random per-journal key (hex) the column-value hashes are keyed with. */
+  hashKey: string;
   /** Journaled writes keyed by write id. */
   writes: Record<string, JournalWriteRecord>;
 };
@@ -80,18 +112,76 @@ export function journalIdFor(writeId: string, effectName: string): string {
   return `${writeId}:${effectName}`;
 }
 
-/** An empty journal document. */
-export function emptyJournal(): JournalDocument {
-  return { version: 1, writes: {} };
+function randomHashKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Parses persisted journal text; unreadable or foreign text is an empty journal. */
+/** An empty journal document with a freshly generated hash key. */
+export function emptyJournal(): JournalDocument {
+  return { version: 1, hashKey: randomHashKey(), writes: {} };
+}
+
+// One HMAC-SHA-256 block; noble's sha256 keeps this synchronous, so hashes
+// exist before the journal entry is first persisted.
+function hmacSha256(key: Uint8Array, message: Uint8Array): Uint8Array {
+  const blockSize = 64;
+  const normalizedKey = key.length > blockSize ? sha256(key) : key;
+  const inner = new Uint8Array(blockSize).fill(0x36);
+  const outer = new Uint8Array(blockSize).fill(0x5c);
+  for (let index = 0; index < normalizedKey.length; index += 1) {
+    inner[index] ^= normalizedKey[index];
+    outer[index] ^= normalizedKey[index];
+  }
+  const message1 = new Uint8Array(blockSize + message.length);
+  message1.set(inner);
+  message1.set(message, blockSize);
+  const innerHash = sha256(message1);
+  const message2 = new Uint8Array(blockSize + innerHash.length);
+  message2.set(outer);
+  message2.set(innerHash, blockSize);
+  return sha256(message2);
+}
+
+function hexKeyBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length >> 1);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * The keyed hash of one JSON-normalized column value under a journal's hash
+ * key: what the journal persists instead of the value, and what the
+ * boot-reconciliation probe computes over live rows for the equality check.
+ */
+export function hashJournalValue(hashKey: string, value: unknown): string {
+  const canonical = JSON.stringify(value === undefined ? null : value) ?? "null";
+  const digest = hmacSha256(hexKeyBytes(hashKey), new TextEncoder().encode(canonical));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Parses persisted journal text; unreadable or foreign text is an empty
+ * journal. Entries from earlier formats without column hashes are dropped, so
+ * no plaintext-era record survives a load.
+ */
 export function parseJournal(text: string | null): JournalDocument {
   if (!text) return emptyJournal();
   try {
     const value = JSON.parse(text) as Partial<JournalDocument> | null;
-    if (value && value.version === 1 && value.writes && typeof value.writes === "object") {
-      return { version: 1, writes: value.writes as Record<string, JournalWriteRecord> };
+    if (
+      value && value.version === 1 && typeof value.hashKey === "string" && value.hashKey &&
+      value.writes && typeof value.writes === "object"
+    ) {
+      const writes: Record<string, JournalWriteRecord> = {};
+      for (const [writeId, entry] of Object.entries(value.writes)) {
+        const record = entry as Partial<JournalWriteRecord>;
+        if (!record.rowHashes || typeof record.rowHashes !== "object") continue;
+        writes[writeId] = entry as JournalWriteRecord;
+      }
+      return { version: 1, hashKey: value.hashKey, writes };
     }
   } catch {
     // Fall through: a corrupt journal must not brick boot.

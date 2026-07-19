@@ -43,6 +43,8 @@ import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
 import { WriteHandle } from "./write-handle.ts";
 import {
   createDefaultJournalStorage,
+  hashJournalValue,
+  type JournalEffectState,
   journalIdFor,
   type JournalStorage,
   type JournalWriteRecord,
@@ -63,6 +65,12 @@ export type PendingWriteSummary = {
   op: "insert" | "update" | "remove";
   /** Epoch milliseconds when the write was journaled. */
   createdAt: number;
+  /**
+   * True once the verb's declared lifespan has passed while the write is
+   * still pending. Surfacing only: the runtime cannot withdraw a locally
+   * accepted write, so an overdue intent is reported, never retired.
+   */
+  expired: boolean;
 };
 
 /** The reload-safe pending set powering "N changes waiting to sync". */
@@ -93,6 +101,8 @@ export type LedgerWriteOptions = {
   verb?: string | null;
   /** The effect units journaled with this write. */
   units?: readonly EffectUnit<{ id: string }>[];
+  /** The intent's lifespan in milliseconds, or `null` for none. */
+  expiresMs?: number | null;
 };
 
 type VendorWrite = {
@@ -132,6 +142,8 @@ export type WriteLedgerEnvironment = {
   retryDelayMs?: (attempt: number) => number;
   /** How long a global-tier probe may run before it is retried later. */
   probeTimeoutMs?: number;
+  /** How often retention is swept while the ledger runs. Default 30 seconds. */
+  sweepIntervalMs?: number;
   /**
    * Runs before each write reaches the database: rejects to refuse the write
    * (the schema-compatibility gate — the refusal surfaces through the verb
@@ -156,12 +168,26 @@ function normalized(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
 }
 
-function fieldsMatch(journaled: Record<string, unknown>, row: Record<string, unknown>): boolean {
-  for (const [key, value] of Object.entries(journaled)) {
+function hashesMatch(
+  hashKey: string,
+  journaled: Record<string, string>,
+  row: Record<string, unknown>,
+): boolean {
+  for (const [key, digest] of Object.entries(journaled)) {
     if (key === "id") continue;
-    if (JSON.stringify(normalized(value)) !== JSON.stringify(normalized(row[key]))) return false;
+    if (hashJournalValue(hashKey, normalized(row[key]) ?? null) !== digest) return false;
   }
   return true;
+}
+
+// The default quarantine bound: failing attempts before an obligation
+// retires as failed-permanent instead of re-arming forever.
+const defaultMaxAttempts = 5;
+
+type RetiredEffectStatus = "done" | "expired" | "failed-permanent";
+
+function isRetired(status: JournalEffectState["status"]): status is RetiredEffectStatus {
+  return status === "done" || status === "expired" || status === "failed-permanent";
 }
 
 /**
@@ -179,6 +205,8 @@ export class WriteLedger {
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #sessionFates = new Map<string, { stage: "synced" | "rejected"; at: number }>();
   #handles = new Map<string, WriteHandle<unknown>>();
+  readonly #liveRows = new Map<string, Record<string, unknown>>();
+  #sweepTimer: ReturnType<typeof setInterval> | null = null;
   #db: LedgerDb | null = null;
   #stopMutationErrors: (() => void) | null = null;
   #stopRecreation: (() => void) | null = null;
@@ -280,7 +308,11 @@ export class WriteLedger {
   /** Performs one declared verb call; the verb dispatcher's entry point. */
   performVerb(descriptor: MutationDescriptor, args: readonly unknown[]): WriteHandle<unknown> {
     const table = descriptor.op.table as TableProxy<unknown, unknown>;
-    const options: LedgerWriteOptions = { verb: descriptor.verbName, units: descriptor.units };
+    const options: LedgerWriteOptions = {
+      verb: descriptor.verbName,
+      units: descriptor.units,
+      expiresMs: descriptor.expiresMs,
+    };
     if (descriptor.op.kind === "insert") {
       return this.perform({ kind: "insert", table, values: args[0] }, options);
     }
@@ -300,7 +332,7 @@ export class WriteLedger {
     for (const entry of Object.values(this.#journal.document.writes)) {
       if (entry.stage === "saved") continue;
       const state = entry.effects[effectName];
-      if (state && state.status !== "done") void this.#runObligation(entry, effectName);
+      if (state && !isRetired(state.status)) void this.#runObligation(entry, effectName);
     }
   }
 
@@ -313,6 +345,8 @@ export class WriteLedger {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    if (this.#sweepTimer !== null) clearInterval(this.#sweepTimer);
+    this.#sweepTimer = null;
     for (const timer of this.#timers) clearTimeout(timer);
     this.#timers.clear();
     this.#listeners.clear();
@@ -352,7 +386,9 @@ export class WriteLedger {
 
   async #reconcile(): Promise<void> {
     await this.#journal.load();
-    this.#afterChange();
+    // Retention first: obligations whose delivery window closed while the
+    // device was away retire before anything re-arms.
+    this.#sweepRetention();
     await this.#withDb();
     if (this.#disposed) return;
     for (const entry of Object.values(this.#journal.document.writes)) {
@@ -363,6 +399,48 @@ export class WriteLedger {
       this.#fireUnits(entry);
     }
     this.#startProbes();
+    if (this.#sweepTimer === null && !this.#disposed) {
+      this.#sweepTimer = setInterval(
+        () => this.#sweepRetention(),
+        this.#environment.sweepIntervalMs ?? 30_000,
+      );
+      // A periodic bookkeeping timer must never keep a process alive.
+      (this.#sweepTimer as unknown as { unref?: () => void }).unref?.();
+    }
+  }
+
+  // Retention: delivery windows close, overdue intents surface. Runs at boot
+  // and periodically while the ledger lives.
+  #sweepRetention(): void {
+    if (this.#disposed) return;
+    const now = this.#environment.now();
+    for (const entry of Object.values(this.#journal.document.writes)) {
+      if (entry.stage === "saved") continue;
+      for (const [name, state] of Object.entries(entry.effects)) {
+        if (isRetired(state.status)) continue;
+        if (this.#running.has(journalIdFor(entry.writeId, name))) continue;
+        if (state.expiresAt !== null && now > state.expiresAt) {
+          this.#retireObligation(entry, name, "expired");
+        }
+      }
+    }
+    this.#afterChange();
+  }
+
+  #retireObligation(
+    entry: JournalWriteRecord,
+    effectName: string,
+    status: "expired" | "failed-permanent",
+  ): void {
+    const state = entry.effects[effectName];
+    if (!state || isRetired(state.status)) return;
+    this.#journal.update(() => {
+      state.status = status;
+    });
+    this.#environment.updateDiagnostics((diagnostics) => {
+      if (status === "expired") diagnostics.expiredObligations += 1;
+      else diagnostics.quarantinedObligations += 1;
+    });
   }
 
   #startProbes(): void {
@@ -404,9 +482,8 @@ export class WriteLedger {
         return;
       }
       const row = rows.find((candidate) => candidate.id === current.rowId);
-      const confirmed = current.op === "remove"
-        ? row === undefined
-        : row !== undefined && fieldsMatch(current.row, row);
+      const confirmed = current.op === "remove" ? row === undefined : row !== undefined &&
+        hashesMatch(this.#journal.document.hashKey, current.rowHashes, row);
       if (confirmed) this.#settleSynced(current);
       else this.#scheduleProbe(writeId, attempt + 1);
     });
@@ -452,6 +529,16 @@ export class WriteLedger {
       this.#environment.updateDiagnostics((diagnostics) => diagnostics.mutationErrors += 1);
       throw error;
     }
+    // The journal persists keyed hashes, never values: enough for the boot
+    // equality probe without a second plaintext copy of row data. The values
+    // themselves live only in this session's memory, for handler delivery.
+    const hashKey = this.#journal.document.hashKey;
+    const rowHashes: Record<string, string> = {};
+    for (const [column, value] of Object.entries(rowSnapshot)) {
+      if (column === "id") continue;
+      rowHashes[column] = hashJournalValue(hashKey, normalized(value) ?? null);
+    }
+    const createdAt = this.#environment.now();
     const entry: JournalWriteRecord = {
       writeId: handle.writeId,
       verb: options.verb ?? null,
@@ -459,21 +546,29 @@ export class WriteLedger {
       op: request.kind,
       rowId,
       batchId: vendor.batchId === undefined ? null : String(vendor.batchId),
-      row: rowSnapshot,
+      rowHashes,
       stage: "saved",
+      cause: null,
       code: null,
       reason: null,
-      createdAt: this.#environment.now(),
+      createdAt,
+      expiresAt: options.expiresMs != null ? createdAt + options.expiresMs : null,
       effects: Object.fromEntries(
         (options.units ?? []).map((unit) => [
           unit.effectName,
-          { status: "pending" as const, attempts: 0, lastError: null },
+          {
+            status: "pending" as const,
+            attempts: 0,
+            lastError: null,
+            expiresAt: unit.expiresAfterMs != null ? createdAt + unit.expiresAfterMs : null,
+          },
         ]),
       ),
     };
     this.#journal.update((document) => {
       document.writes[entry.writeId] = entry;
     });
+    this.#liveRows.set(entry.writeId, rowSnapshot);
     this.#handles.set(entry.writeId, handle);
     handle.setBatchId(entry.batchId);
     // Pre-stage the insert's row value so a fast global confirmation can
@@ -576,11 +671,12 @@ export class WriteLedger {
     if (classifyMutationError(code) !== "permanent") return;
     this.#journal.update(() => {
       current.stage = "rejected";
+      current.cause = "denied";
       current.code = code;
       current.reason = reason;
     });
     const handle = this.#handles.get(current.writeId);
-    handle?.reject({ code, reason });
+    handle?.reject({ cause: "denied", code, reason });
     this.#fireUnits(current);
     this.#afterChange();
   }
@@ -597,7 +693,15 @@ export class WriteLedger {
   async #runObligation(entry: JournalWriteRecord, effectName: string): Promise<void> {
     const journalId = journalIdFor(entry.writeId, effectName);
     const state = entry.effects[effectName];
-    if (!state || state.status === "done" || this.#running.has(journalId)) return;
+    if (!state || isRetired(state.status) || this.#running.has(journalId)) return;
+    // A closed delivery window retires the obligation before any handler
+    // consideration: the write happened, so compensation would be wrong, and
+    // the receiver's idempotency window is assumed gone.
+    if (state.expiresAt !== null && this.#environment.now() > state.expiresAt) {
+      this.#retireObligation(entry, effectName, "expired");
+      this.#afterChange();
+      return;
+    }
     const unit = this.#environment.resolveEffectUnit(effectName);
     // An unregistered unit stays pending: its declaring module may not have
     // loaded yet, and registration re-attempts outstanding obligations.
@@ -612,38 +716,82 @@ export class WriteLedger {
       return;
     }
     this.#running.add(journalId);
-    // Attempts are journaled before the handler starts: a crash mid-handler
-    // re-runs it at the next boot — the documented at-least-once contract.
-    this.#journal.update(() => {
-      state.attempts += 1;
-      state.status = "pending";
-    });
-    const context: EffectContext = {
-      journalId,
-      writeId: entry.writeId,
-      verb: entry.verb,
-      table: entry.table,
-      rowId: entry.rowId,
-      fate,
-      code: entry.code,
-      reason: entry.reason,
-    };
     try {
-      await handler(entry.row as EffectRow<{ id: string }>, context);
+      const row = await this.#resolveHandlerRow(entry, fate);
+      // Attempts are journaled before the handler starts: a crash mid-handler
+      // re-runs it at the next boot — the documented at-least-once contract.
       this.#journal.update(() => {
-        state.status = "done";
-        state.lastError = null;
+        state.attempts += 1;
+        state.status = "pending";
       });
-    } catch (error) {
-      this.#journal.update(() => {
-        state.status = "failed";
-        state.lastError = error instanceof Error ? error.message : String(error);
-      });
-      this.#environment.updateDiagnostics((diagnostics) => diagnostics.effectHandlerFailures += 1);
+      const context: EffectContext = {
+        journalId,
+        writeId: entry.writeId,
+        verb: entry.verb,
+        table: entry.table,
+        rowId: entry.rowId,
+        fate,
+        cause: fate === "rejected" ? entry.cause ?? "denied" : null,
+        code: entry.code,
+        reason: entry.reason,
+      };
+      try {
+        await handler(row as EffectRow<{ id: string }>, context);
+        this.#journal.update(() => {
+          state.status = "done";
+          state.lastError = null;
+        });
+      } catch (error) {
+        const maxAttempts = unit.maxAttempts ?? defaultMaxAttempts;
+        this.#journal.update(() => {
+          state.status = "failed";
+          state.lastError = error instanceof Error ? error.message : String(error);
+        });
+        this.#environment.updateDiagnostics((diagnostics) =>
+          diagnostics.effectHandlerFailures += 1
+        );
+        // Quarantine: a handler that keeps failing retires instead of
+        // re-arming forever; the retirement is diagnosable and prunable.
+        if (state.attempts >= maxAttempts) {
+          this.#retireObligation(entry, effectName, "failed-permanent");
+        }
+      }
     } finally {
       this.#running.delete(journalId);
       this.#afterChange();
     }
+  }
+
+  /**
+   * The row a handler receives. Same-session deliveries pass the in-memory
+   * write snapshot. After a reload the journal holds no values: a synced
+   * write's row is fetched live from the store (sync confirmed it exists); a
+   * rejected write was rolled back by the engine, so compensation receives
+   * write identity only — the row id and the structured cause.
+   */
+  async #resolveHandlerRow(
+    entry: JournalWriteRecord,
+    fate: "synced" | "rejected",
+  ): Promise<Record<string, unknown>> {
+    const live = this.#liveRows.get(entry.writeId);
+    if (live) return live;
+    if (fate === "synced" && entry.op !== "remove") {
+      const db = this.#db;
+      const table = this.#environment.resolveTable(entry.table);
+      if (db && table) {
+        try {
+          const rows = await db.all(
+            table.where({ id: entry.rowId }) as never,
+            { tier: "local" },
+          ) as Array<Record<string, unknown>>;
+          const row = rows.find((candidate) => candidate.id === entry.rowId);
+          if (row) return row;
+        } catch {
+          // Fall through to identity-only delivery below.
+        }
+      }
+    }
+    return { id: entry.rowId };
   }
 
   #afterChange(): void {
@@ -655,16 +803,18 @@ export class WriteLedger {
         this.#sessionFates.set(entry.rowId, { stage: entry.stage, at: entry.createdAt });
       }
       const settled = Object.values(entry.effects)
-        .every((state) => state.status === "done");
+        .every((state) => isRetired(state.status));
       if (settled) {
-        // Fully settled entries leave the journal; failed obligations keep
-        // theirs so the next boot can re-arm the handler.
+        // Fully settled entries leave the journal; failed-but-not-quarantined
+        // obligations keep theirs so the next boot can re-arm the handler.
         this.#journal.update(() => {
           delete document.writes[entry.writeId];
         });
         this.#handles.delete(entry.writeId);
+        this.#liveRows.delete(entry.writeId);
       }
     }
+    const now = this.#environment.now();
     const pending = Object.values(document.writes)
       .filter((entry) => entry.stage === "saved")
       .sort((left, right) => left.createdAt - right.createdAt)
@@ -675,15 +825,18 @@ export class WriteLedger {
         rowId: entry.rowId,
         op: entry.op,
         createdAt: entry.createdAt,
+        expired: entry.expiresAt !== null && now > entry.expiresAt,
       }));
     const changed = pending.length !== this.#pendingSnapshot.count ||
       pending.some((entry, index) =>
-        this.#pendingSnapshot.writes[index]?.writeId !== entry.writeId
+        this.#pendingSnapshot.writes[index]?.writeId !== entry.writeId ||
+        this.#pendingSnapshot.writes[index]?.expired !== entry.expired
       );
     if (changed) this.#pendingSnapshot = { count: pending.length, writes: pending };
-    this.#environment.updateDiagnostics((diagnostics) =>
-      diagnostics.journaledPendingWrites = pending.length
-    );
+    this.#environment.updateDiagnostics((diagnostics) => {
+      diagnostics.journaledPendingWrites = pending.length;
+      diagnostics.expiredPendingWrites = pending.filter((entry) => entry.expired).length;
+    });
     for (const listener of this.#listeners) listener();
   }
 }

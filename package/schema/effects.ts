@@ -284,6 +284,15 @@ export function effect<T extends { id: string }, Init>(
  * A built-in effect unit that records a structured entry in runtime
  * diagnostics on either fate. Repeated calls with one label return the same
  * unit, so a label can be shared by several verbs.
+ *
+ * @example
+ * ```ts
+ * export const addTask = s.mutation("addTask", s.insert(app.schema.tasks), {
+ *   effects: [s.log("task-writes")],
+ * });
+ * // Each addTask write records a "task-writes" diagnostics entry when it
+ * // syncs or is rejected.
+ * ```
  */
 export function log(label: string): EffectUnit<{ id: string }> {
   if (!label.trim()) throw new Error("log label must not be empty");

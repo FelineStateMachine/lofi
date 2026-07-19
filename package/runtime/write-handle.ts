@@ -85,6 +85,19 @@ function exposedPromise<T>(): { promise: Promise<T>; resolver: Resolver<T> } {
  * confirms the write and rejects with {@link WriteRejectedError} when the
  * store denies it. `stage` and `reason` are current-state properties;
  * `subscribe` notifies immediately and on every later change.
+ *
+ * @example
+ * ```ts
+ * const write = placeOrder({ item, qty }); // WriteHandle<Order>
+ * const order = await write;               // saved: durable on this device
+ * try {
+ *   await write.synced;                    // confirmed by the store
+ * } catch (error) {
+ *   if (error instanceof WriteRejectedError) {
+ *     console.log(write.stage, write.reason?.code); // "rejected", the verdict
+ *   }
+ * }
+ * ```
  */
 export class WriteHandle<T> implements PromiseLike<T> {
   readonly #writeId: string;

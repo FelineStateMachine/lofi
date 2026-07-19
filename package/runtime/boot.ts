@@ -1,8 +1,44 @@
+/// <reference path="./env.d.ts" />
 // Package-owned browser boot orchestration.
+import { getLofiApp } from "./app.ts";
 import { restoreDeclaredSink } from "./data-sink.ts";
-import { registerProductionServiceWorker } from "./pwa.ts";
+import {
+  attachPwaUpdateCoordination,
+  registerProductionServiceWorker,
+  resolvePwaResources,
+} from "./pwa.ts";
+import { mountDefaultCompatBanner, schemaCompatGate } from "./schema-compat.ts";
+import { configureUpgradeCoordinator } from "./upgrade-coordination.ts";
 
 let booted = false;
+
+// The compatibility gate and the cross-tab upgrade coordination are wired
+// before the runtime opens: the gate's verdict must be able to refuse the
+// first write, and sibling tabs must hear an upgrade announcement no matter
+// which module triggers it.
+function startCompatibilityGate(): void {
+  schemaCompatGate.start();
+  mountDefaultCompatBanner();
+  if (!import.meta.env.PROD) return;
+  const deploymentBaseUrl = new URL(import.meta.env.BASE_URL, document.location.origin).href;
+  const coordinator = configureUpgradeCoordinator(resolvePwaResources(deploymentBaseUrl).scope);
+  attachPwaUpdateCoordination({
+    prepareUpdateSwap: () => coordinator.announceUpgrade(),
+    staleTabBehavior: () => {
+      try {
+        return getLofiApp().pwa?.staleTabs ?? "reload";
+      } catch {
+        return "reload";
+      }
+    },
+    onStaleTab: () => {
+      // The swap this tab sat out is over; resume writes long enough for the
+      // gate to flip the tab read-only with its reload prompt.
+      coordinator.notifyActivation();
+      schemaCompatGate.markStaleTab();
+    },
+  });
+}
 
 /**
  * Starts lofi's browser lifecycle once for the current document.
@@ -33,6 +69,7 @@ export async function bootLofi(): Promise<void> {
   } catch {
     // Continue local-only; enrollment can re-declare the sink.
   }
+  startCompatibilityGate();
   await import("./lifecycle.ts");
   registerProductionServiceWorker();
   if (import.meta.env.DEV) void import("./probe.ts");

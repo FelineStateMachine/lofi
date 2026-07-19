@@ -1,3 +1,4 @@
+import type { SchemaCompatState } from "./schema-compat.ts";
 import type { RuntimeStartupFailure } from "./startup-recovery.ts";
 import type { RuntimeStoreStatus } from "./store-status.ts";
 
@@ -10,6 +11,7 @@ export type RuntimeDiagnostics = {
   storageState: "persistent-requested" | "persistent-driver-open" | "failed";
   startupFailure: RuntimeStartupFailure | null;
   storeStatus: RuntimeStoreStatus;
+  schemaCompat: SchemaCompatState;
   clientsCreated: number;
   activeClients: number;
   activeConsumers: number;
@@ -30,6 +32,7 @@ export function createDiagnostics(): RuntimeDiagnostics {
     storageState: "persistent-requested",
     startupFailure: null,
     storeStatus: { state: "unchecked", reason: "sync-not-connected" },
+    schemaCompat: { state: "unchecked", reason: "inactive" },
     clientsCreated: 0,
     activeClients: 0,
     activeConsumers: 0,

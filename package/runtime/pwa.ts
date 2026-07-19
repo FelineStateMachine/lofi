@@ -106,6 +106,21 @@ export type PwaControllerDependencies = {
   /** @deprecated Supply deploymentBaseUrl when injecting browser location in tests. */
   readonly reload?: () => void;
   readonly exposeState?: (state: PwaState) => void;
+  /**
+   * Runs before the waiting worker is told to activate, so sibling tabs can
+   * quiesce in-flight writes. When supplied, `applyUpdate()` posts the
+   * skip-waiting message only after this settles; a rejection does not block
+   * the swap. When omitted, activation is requested synchronously.
+   */
+  readonly prepareUpdateSwap?: () => Promise<void>;
+  /**
+   * How a tab that did not initiate an update behaves when a new worker takes
+   * control: `reload` (the default) reloads it onto the new revision, `prompt`
+   * keeps the document and reports the stale revision via `onStaleTab`.
+   */
+  readonly staleTabBehavior?: () => "reload" | "prompt";
+  /** Notified when this tab stays on a stale revision under `prompt` behavior. */
+  readonly onStaleTab?: () => void;
 };
 
 /** Stateful controller for browser installation and service-worker updates. */
@@ -385,10 +400,12 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
         else update({ failure: failure("runtime-cache") });
       }
     });
-    // A controller change means a new worker took over this tab. Every
-    // controlled tab must reload — the new worker prunes the old revision's
+    // A controller change means a new worker took over this tab. By default
+    // every controlled tab reloads — the new worker prunes the old revision's
     // caches, so a document kept on the old HTML/module graph goes stale —
-    // not just the tab whose applyUpdate() initiated the change. The first
+    // not just the tab whose applyUpdate() initiated the change. Under the
+    // `prompt` stale-tab preference a bystander tab keeps its document and is
+    // reported stale instead; the initiating tab always reloads. The first
     // claim of a previously uncontrolled page does not reload, and a document
     // reloads at most once, so a misbehaving worker cannot cause a loop.
     let hadController = Boolean(container.controller);
@@ -400,13 +417,17 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
       reloadForUpdate = false;
       if (!initiated && !wasControlled) return;
       if (reloadedForController) return;
-      reloadedForController = true;
       waitingWorker = undefined;
       update({
         worker: "ready",
         update: "idle",
         failure: clearFailure("installation", "update-check"),
       });
+      if (!initiated && (dependencies.staleTabBehavior?.() ?? "reload") === "prompt") {
+        dependencies.onStaleTab?.();
+        return;
+      }
+      reloadedForController = true;
       if (dependencies.reload) dependencies.reload();
       else location.reload();
     });
@@ -462,19 +483,51 @@ export function createPwaController(dependencies: PwaControllerDependencies = {}
     checkForUpdate,
     applyUpdate() {
       if (!waitingWorker || state.update !== "ready") return false;
+      const worker = waitingWorker;
+      const prepare = dependencies.prepareUpdateSwap;
       reloadForUpdate = true;
-      try {
-        waitingWorker.postMessage({ type: "LOFI_SKIP_WAITING" });
+      const requestActivation = () => {
+        try {
+          worker.postMessage({ type: "LOFI_SKIP_WAITING" });
+          return true;
+        } catch {
+          reloadForUpdate = false;
+          failUpdate("installation");
+          return false;
+        }
+      };
+      if (!prepare) {
+        if (!requestActivation()) return false;
         update({ update: "applying", failure: clearFailure("installation", "update-check") });
         return true;
-      } catch {
-        reloadForUpdate = false;
-        failUpdate("installation");
-        return false;
       }
+      // With coordination, sibling tabs quiesce writes first; the swap itself
+      // must not depend on their cooperation, so a rejection still proceeds.
+      update({ update: "applying", failure: clearFailure("installation", "update-check") });
+      void Promise.resolve().then(prepare).catch(() => undefined).then(requestActivation);
+      return true;
     },
     initialize,
   };
+}
+
+/** Cross-tab coordination hooks the boot wiring attaches to the shared controller. */
+export type PwaUpdateCoordination = {
+  /** Quiesces sibling-tab writes before the worker swap. */
+  prepareUpdateSwap: () => Promise<void>;
+  /** The author's stale-tab preference; `reload` is the safe default. */
+  staleTabBehavior: () => "reload" | "prompt";
+  /** Marks this tab stale when `prompt` keeps it on the old revision. */
+  onStaleTab: () => void;
+};
+
+// Late-bound so this module stays free of upgrade-coordination imports; the
+// hooks act only once boot wiring attaches them.
+let updateCoordination: PwaUpdateCoordination | undefined;
+
+/** Attaches (or replaces) the shared controller's cross-tab coordination hooks. */
+export function attachPwaUpdateCoordination(hooks: PwaUpdateCoordination): void {
+  updateCoordination = hooks;
 }
 
 /** Shared controller used by the root runtime and optional Preact bindings. */
@@ -482,6 +535,9 @@ export const pwaController: PwaController = createPwaController({
   exposeState(next) {
     if (typeof document !== "undefined") (globalThis as LofiPwaGlobal).__LOFI_PWA_STATE__ = next;
   },
+  prepareUpdateSwap: () => updateCoordination?.prepareUpdateSwap() ?? Promise.resolve(),
+  staleTabBehavior: () => updateCoordination?.staleTabBehavior() ?? "reload",
+  onStaleTab: () => updateCoordination?.onStaleTab(),
 });
 
 /** Returns the shared controller's current state snapshot. */

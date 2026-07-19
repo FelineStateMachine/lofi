@@ -72,6 +72,14 @@ export {
 } from "./pwa.ts";
 export { type RuntimeDiagnostics } from "./diagnostics.ts";
 export {
+  describeSchemaCompat,
+  getSchemaCompatState,
+  SchemaCompatibilityError,
+  type SchemaCompatReason,
+  type SchemaCompatState,
+  subscribeSchemaCompat,
+} from "./schema-compat.ts";
+export {
   acquireLiveQuery,
   type LiveQueryLease,
   type LiveQuerySnapshot,

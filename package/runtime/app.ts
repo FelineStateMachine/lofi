@@ -24,6 +24,26 @@ export type LofiAppConfig<Schema = unknown> = {
    * hostname is used, which is convenient locally but preview-host specific.
    */
   passkey?: { rpId?: string };
+  /**
+   * Optional PWA update-lifecycle preferences. Omitting the block keeps the
+   * safe defaults: the framework's minimal read-only banner renders when
+   * local data is newer than the running bundle, and tabs left on a stale
+   * revision after a worker swap reload onto the new one.
+   */
+  pwa?: {
+    /**
+     * `default` renders the framework's minimal schema-compatibility banner;
+     * `none` suppresses it for apps that render their own from
+     * `useSchemaCompat`.
+     */
+    updateBanner?: "default" | "none";
+    /**
+     * How a tab that did not initiate an update behaves once a new worker
+     * controls it: `reload` (default) reloads onto the new revision; `prompt`
+     * keeps the document read-only and asks the user to reload.
+     */
+    staleTabs?: "reload" | "prompt";
+  };
   sync: { adapter: "jazz" };
   repositoryUrl?: string;
 };

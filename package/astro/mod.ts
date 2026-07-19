@@ -46,6 +46,7 @@ export const runtimeFiles = [
   "recovery.ts",
   "resource-lifecycle.ts",
   "runtime.ts",
+  "schema-compat.ts",
   "session.ts",
   "startup-recovery.ts",
   "store-status.ts",
@@ -53,6 +54,7 @@ export const runtimeFiles = [
   "table-store.ts",
   "transport-gate.ts",
   "ui-mutation.ts",
+  "upgrade-coordination.ts",
 ] as const;
 
 /** Access modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
@@ -67,6 +69,7 @@ export const accessFiles = [
 
 /** Schema facade modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
 export const schemaFiles = [
+  "compat.ts",
   "encrypted.ts",
   "mod.ts",
   "nested.ts",
@@ -82,6 +85,7 @@ export const preactFiles = [
   "RuntimeRecovery.tsx",
   "TicketEnrollForm.tsx",
   "use-device-capabilities.ts",
+  "use-schema-compat.ts",
 ] as const;
 
 /** Recipe modules vendored into `.lofi/`; kept in lockstep by the manifest test. */

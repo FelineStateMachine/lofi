@@ -3,7 +3,9 @@ import { syncing } from "./config.ts";
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
 import { settleDurableWrite } from "./durability.ts";
 import { getRuntime, runtimeRecreatedEvent, updateRuntimeDiagnostics } from "./runtime.ts";
+import { assertSchemaWritable } from "./schema-compat.ts";
 import type { TableRow } from "./table-store.ts";
+import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
 
 /** Observable state shared by every mutation consumer for one table. */
 export type TableMutationSnapshot = {
@@ -29,6 +31,13 @@ export type TableMutationEnvironment = {
   syncConfigured(): boolean;
   subscribeRuntimeRecreation(listener: () => void): () => void;
   updateDiagnostics(update: (diagnostics: RuntimeDiagnostics) => void): void;
+  /**
+   * Runs before each mutation reaches the database: rejects to refuse the
+   * write (the schema-compatibility gate), and may resolve with a release
+   * function that is invoked once the write settles locally (the cross-tab
+   * write lock). Absent means writes are never guarded.
+   */
+  guardWrite?(): Promise<(() => void) | void>;
 };
 
 /** Framework-neutral typed mutations and observable durability for one table. */
@@ -109,16 +118,33 @@ export class TableMutationStore<T extends TableRow, Init> {
 
   async #perform<Result>(create: (db: Db) => MutationHandle<Result>): Promise<Result> {
     if (this.#disposed) throw new Error("table mutation store has been released");
-    const db = await this.#environment.getDb();
-    let mutation: MutationHandle<Result>;
+    // The guard runs before the mutation reaches the vendor: a refusal (the
+    // schema-compatibility gate) surfaces like any mutation failure, and the
+    // returned release ends this write's hold on the cross-tab write lock
+    // once the write settles to the local tier — the quiescence bar an
+    // upgrade swap waits on.
+    let releaseGuard: (() => void) | undefined;
     try {
-      mutation = create(db);
+      releaseGuard = (await this.#environment.guardWrite?.()) ?? undefined;
     } catch (error) {
       this.#updateDiagnostics((diagnostics) => diagnostics.mutationErrors += 1);
       this.#fail(error);
       throw error;
     }
-    return await this.#settle(mutation);
+    try {
+      const db = await this.#environment.getDb();
+      let mutation: MutationHandle<Result>;
+      try {
+        mutation = create(db);
+      } catch (error) {
+        this.#updateDiagnostics((diagnostics) => diagnostics.mutationErrors += 1);
+        this.#fail(error);
+        throw error;
+      }
+      return await this.#settle(mutation);
+    } finally {
+      releaseGuard?.();
+    }
   }
 
   #ownsBatch(event: MutationErrorEvent): boolean {
@@ -323,6 +349,10 @@ const defaultRegistry = new TableMutationRegistry({
     return () => globalThis.removeEventListener(runtimeRecreatedEvent, listener);
   },
   updateDiagnostics: updateRuntimeDiagnostics,
+  async guardWrite() {
+    await assertSchemaWritable();
+    return await acquireUpgradeWriteLock();
+  },
 });
 
 /** Acquires the package-wide typed mutation surface for one table. */

@@ -10,6 +10,7 @@ import {
   runtimeRecreatedEvent,
   subscribeRuntimeDiagnostics,
 } from "../runtime/runtime.ts";
+import { describeSchemaCompat } from "../runtime/schema-compat.ts";
 import { readSession, type Session } from "../runtime/session.ts";
 import { describeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
@@ -168,7 +169,15 @@ export default function DeviceStatus(): VNode {
           <Row label="Install" value={pwa.install} />
           <Row label="Service worker" value={pwa.worker} />
           <Row label="Update" value={pwa.update} />
+          <Row
+            label="Schema compatibility"
+            value={describeSchemaCompat(runtimeDiagnostics.schemaCompat)}
+          />
         </dl>
+        {(runtimeDiagnostics.schemaCompat.state === "data-ahead" ||
+          runtimeDiagnostics.schemaCompat.state === "updating") && (
+          <p>{runtimeDiagnostics.schemaCompat.message}</p>
+        )}
         <PwaActions title="Install & updates" />
       </div>
     </section>

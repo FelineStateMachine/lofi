@@ -13,7 +13,11 @@ import { join, resolve } from "node:path";
 export type LofiAstroOptions = {
   /** Project root. Defaults to the directory from which Astro was invoked. */
   root?: string;
-  /** Directory containing the Jazz schema and permissions. */
+  /**
+   * Reserved. The generated integration always reads the Jazz schema and
+   * permissions from `src`; any other value throws.
+   * @default "src"
+   */
   schemaDir?: string;
 };
 

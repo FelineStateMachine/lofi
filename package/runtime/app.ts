@@ -13,10 +13,21 @@
  * ```
  */
 export type LofiAppConfig<Schema = unknown> = {
+  /** Display name, used for the PWA and as the passkey label. Must be non-empty. */
   name: string;
+  /** Name of the local database the runtime opens. Must be non-empty. */
   databaseName: string;
+  /** The app's Jazz schema, as returned by the `@nzip/lofi/schema` define entry points. */
   schema: Schema;
+  /** Storage durability contract. `durable` is the only supported mode. */
   storage: "durable";
+  /**
+   * Allowlist of hostnames considered committed-stable for enrolling device
+   * credentials: exact hostnames or `*.` suffix patterns. A deployed HTTPS
+   * host not on this list classifies as `unverified` and passkey enrollment
+   * refuses there — with the list omitted or empty, enrollment works only on
+   * localhost. Add the production hostname before shipping passkey features.
+   */
   credentialOrigins?: readonly string[];
   /**
    * Recoverable passkeys are scoped to this relying-party ID. Pin the canonical
@@ -77,7 +88,9 @@ export class LofiConfigurationError extends Error {
  * Defines the application-facing values the versioned runtime needs.
  *
  * The returned value retains the exact schema type so author code can select
- * tables without importing or editing framework internals.
+ * tables without importing or editing framework internals. Calling it also
+ * registers the configuration globally so runtime entry points (`bootLofi`,
+ * `getRuntime`) can resolve it — import the defining module before booting.
  *
  * @example
  * ```ts
@@ -95,6 +108,7 @@ export class LofiConfigurationError extends Error {
  *
  * @param config The author-owned app configuration, including the raw Jazz schema.
  * @returns The same configuration, typed to the exact schema for table selection.
+ * @throws {LofiConfigurationError} When `name` or `databaseName` is empty.
  */
 export function defineLofiApp<const Schema>(
   config: LofiAppConfig<Schema>,

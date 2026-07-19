@@ -99,6 +99,18 @@ export type SchemaDsl =
     remove: typeof remove;
   };
 
+// The define entry points additionally record every encrypted column into
+// the table/column registry the access layer consults; behavior and types
+// are otherwise the pinned originals.
+function withEncryptedColumnRegistration<
+  F extends (definition: never, ...rest: never[]) => unknown,
+>(define: F): F {
+  return ((definition: unknown, ...rest: unknown[]) => {
+    registerEncryptedColumns(definition);
+    return (define as unknown as (...args: unknown[]) => unknown)(definition, ...rest);
+  }) as unknown as F;
+}
+
 /**
  * The lofi schema surface. Use in `src/schema.ts` and `src/permissions.ts` in
  * place of a raw `jazz-tools` import; Jazz member names and behavior are
@@ -112,18 +124,6 @@ export type SchemaDsl =
  * `WriteHandle`, observed in UI through `useWrite` and `usePendingWrites`
  * from `@nzip/lofi/preact`.
  */
-// The define entry points additionally record every encrypted column into
-// the table/column registry the access layer consults; behavior and types
-// are otherwise the pinned originals.
-function withEncryptedColumnRegistration<
-  F extends (definition: never, ...rest: never[]) => unknown,
->(define: F): F {
-  return ((definition: unknown, ...rest: unknown[]) => {
-    registerEncryptedColumns(definition);
-    return (define as unknown as (...args: unknown[]) => unknown)(definition, ...rest);
-  }) as unknown as F;
-}
-
 export const s: SchemaDsl = {
   ...schema,
   defineSchema: withEncryptedColumnRegistration(schema.defineSchema),

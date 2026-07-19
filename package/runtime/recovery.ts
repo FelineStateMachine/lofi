@@ -1,5 +1,4 @@
 /**
-// Package-owned recovery encoding.
  * Recovery-phrase backup for the local-first account.
  *
  * A lofi account is a 32-byte secret held on the device. That is enough to work

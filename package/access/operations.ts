@@ -84,9 +84,17 @@ export type ShareLevel = "read" | "edit";
 
 /** Direct-share operations bound to one resource and grant table pair. */
 export type SharingOperations<Resource, Grant> = {
+  /**
+   * Grants the recipient access at `level`. Upserts: when a grant already
+   * exists for that recipient, its level is changed in place — including
+   * silently downgrading `edit` to `read`.
+   */
   share(resourceId: string, recipient: SharingIdentity | string, level: ShareLevel): Promise<Grant>;
+  /** Deletes every grant for the recipient on the resource; no-op when none exist. */
   revoke(resourceId: string, recipient: SharingIdentity | string): Promise<void>;
+  /** Lists the current grants on one resource. */
   listShares(resourceId: string): Promise<Grant[]>;
+  /** Lists resources other accounts have shared with the current account. */
   sharedWithMe(): Promise<Resource[]>;
 };
 
@@ -335,19 +343,36 @@ export function createGroupOperations<
 
 /** Fixed-role group creation and membership operations. */
 export type GroupOperations<Group, GroupInit, Member> = {
+  /** Creates the group row and the creator's admin membership. */
   createGroup(values: GroupInit): Promise<{ group: Group; membership: Member }>;
+  /**
+   * Adds the recipient at `role`; rejects when they are already a member
+   * (use {@linkcode GroupOperations.changeRole} instead). For groups hosting
+   * shared columns, key delivery is best-effort — a member without a
+   * directory entry stays pending until
+   * {@linkcode GroupOperations.reconcileSharedFieldKeys} runs.
+   */
   addMember(
     groupId: string,
     recipient: SharingIdentity | string,
     role: GroupRole,
   ): Promise<Member>;
+  /** Replaces an existing member's role capabilities; rejects for non-members. */
   changeRole(
     groupId: string,
     recipient: SharingIdentity | string,
     role: GroupRole,
   ): Promise<Member>;
+  /**
+   * Deletes the membership; no-op for non-members. Shared-field keys rotate
+   * lazily: future writes seal under a generation the removed member never
+   * receives, but content sealed under generations they already hold remains
+   * readable to them.
+   */
   removeMember(groupId: string, recipient: SharingIdentity | string): Promise<void>;
+  /** Deletes the current account's own membership; no-op for non-members. */
   leaveGroup(groupId: string): Promise<void>;
+  /** Lists the memberships of one group. */
   listMembers(groupId: string): Promise<Member[]>;
   /** Repairs missing field-key wraps for a group hosting shared columns;
    * throws a configuration error when the operations were created without

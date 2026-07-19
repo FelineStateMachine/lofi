@@ -26,7 +26,8 @@ export type { BootProgress, BootProgressPhase } from "../runtime/boot-progress.t
  *
  * const boot = useBootProgress();
  * if (boot.phase === "downloading" && boot.totalBytes) {
- *   return <p>Downloading the app · {progressLabel(boot)}</p>;
+ *   const percent = Math.round((boot.loadedBytes / boot.totalBytes) * 100);
+ *   return <p>Downloading the app · {percent}%</p>;
  * }
  * ```
  *

@@ -90,6 +90,11 @@ export function sharedAccess(config: {
  * (or match its column shape), and each resource table must carry the `groupId`
  * column referencing the group table.
  *
+ * Group-creator authority is permanent: the creator can always update their
+ * group row, and through it restore their own admin membership even after
+ * being demoted or removed. Choose this template only when that trust
+ * property fits — a group cannot durably expel its creator.
+ *
  * @example
  * ```ts
  * import { defineAccessPolicies, groupAccess } from "@nzip/lofi/access";
@@ -114,7 +119,9 @@ export function groupAccess(config: {
   groupId: string;
   /** Wrapped-field-key table for groups hosting shared encrypted columns
    * (declared with `sharedFieldKeyTable`). Readable by each row's recipient
-   * or any member; writable by a member signing as themselves. */
+   * or any member; inserted by a member signing as themselves; updated only
+   * by the row's sender; deleted by the sender, the recipient, or a group
+   * admin. */
   fieldKeys?: AccessTable;
 }): GroupAccessTemplate {
   return {

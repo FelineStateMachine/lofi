@@ -1,5 +1,4 @@
 /**
-// Package-owned identity and device-credential runtime.
  * Device credential auth for local-first apps.
  *
  * Local-first identity is device-local and cryptographic — there is no central
@@ -23,7 +22,9 @@ export type PrfSupport = "available" | "not-reported" | "unknown" | "unavailable
 /**
  * How stable the current origin is for enrolling a passkey. A passkey is bound
  * to the origin hostname (its RP ID); enrolling on an origin that later changes
- * silently breaks the credential, so enrollment is gated on `stable`.
+ * silently breaks the credential, so enrollment is allowed only on `stable`
+ * origins and on loopback hosts during development (`local-only`), and refused
+ * on `unverified` and `blocked` origins.
  */
 export type CredentialOriginReport = {
   status: "stable" | "local-only" | "unverified" | "blocked";
@@ -290,7 +291,8 @@ export async function getAuthCapability(
 
 /**
  * Enrolls a resident, user-verifying device passkey with the PRF extension
- * enabled. Refuses unless the current origin is `stable` (pass `rpId` to test).
+ * enabled. Refuses with an `AuthError("origin-rejected")` unless the current
+ * origin is `stable` or a loopback `local-only` host (pass `rpId` to test).
  * The returned `portable` flag says whether the credential roams across devices;
  * `label` names it in the user's password manager. Returns the opaque id.
  */
@@ -522,6 +524,6 @@ export async function decryptAtRest(
 // Account identity is not derived from a credential in lofi. The account is a
 // local-first secret (see `session.ts`), backed up by a recovery phrase and,
 // optionally, protected at rest by the PRF key above. Deriving the *account*
-// from a passkey was removed: it cannot preserve a pre-existing local-only
-// account's data, since a derived key is a different account. This module stays
-// a device-credential + at-rest-key primitive, nothing more.
+// from a passkey cannot preserve a pre-existing local-only account's data,
+// since a derived key is a different account. This module stays a
+// device-credential + at-rest-key primitive, nothing more.

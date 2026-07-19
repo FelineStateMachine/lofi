@@ -3,6 +3,10 @@
 `src/permissions.ts` is an author-owned security boundary. It defines which signed local-first
 identity may read or mutate each table; hiding a button in the UI is not a substitute for policy.
 
+> Permissions bound which identities may read or write; they do not hide data from the server that
+> enforces them. See [the threat model](threat-model.md) for what the server can see and
+> [encrypted columns](data-and-ui.md#encrypted-columns) for content it cannot.
+
 ## The starter policy
 
 The generated task app uses creator-owned rows:

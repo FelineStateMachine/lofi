@@ -183,6 +183,10 @@ const config: Config = {
           path: "../docs",
           routeBasePath: "docs",
           sidebarPath: "./sidebars.ts",
+          // Decision records are date-ordered with numeric prefixes; keep the
+          // prefix in the document id so ids match filenames everywhere the
+          // manifest is consumed (sidebar, llms corpus, links).
+          numberPrefixParser: false,
           // `exclude` replaces the plugin defaults, so the `_`-prefix globs
           // must be restated alongside the repo-only content.
           exclude: [
@@ -274,7 +278,10 @@ const config: Config = {
           items: [
             { label: "docs", to: "/docs" },
             { label: "api", to: "/api" },
-            { label: "github", href: "https://github.com/FelineStateMachine/lofi" },
+            {
+              label: "github",
+              href: "https://github.com/FelineStateMachine/lofi",
+            },
             { label: "jsr", href: "https://jsr.io/@nzip/lofi" },
           ],
         },
@@ -286,7 +293,10 @@ const config: Config = {
           items: [
             { label: "docs", to: "/node/docs" },
             { label: "api", to: "/node/api" },
-            { label: "github", href: "https://github.com/FelineStateMachine/lofi-node" },
+            {
+              label: "github",
+              href: "https://github.com/FelineStateMachine/lofi-node",
+            },
             { label: "jsr", href: "https://jsr.io/@nzip/lofi-node" },
           ],
         },
@@ -301,7 +311,10 @@ const config: Config = {
           items: [
             { label: "docs", to: "/docs" },
             { label: "api", to: "/api" },
-            { label: "github", href: "https://github.com/FelineStateMachine/lofi" },
+            {
+              label: "github",
+              href: "https://github.com/FelineStateMachine/lofi",
+            },
             { label: "jsr", href: "https://jsr.io/@nzip/lofi" },
             { label: "llms.txt", to: "/llms.txt", target: "_blank" },
           ],
@@ -311,7 +324,10 @@ const config: Config = {
           items: [
             { label: "docs", to: "/node/docs" },
             { label: "api", to: "/node/api" },
-            { label: "github", href: "https://github.com/FelineStateMachine/lofi-node" },
+            {
+              label: "github",
+              href: "https://github.com/FelineStateMachine/lofi-node",
+            },
             { label: "jsr", href: "https://jsr.io/@nzip/lofi-node" },
             { label: "llms.txt", to: "/node/llms.txt", target: "_blank" },
           ],

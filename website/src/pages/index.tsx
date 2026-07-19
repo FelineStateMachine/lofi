@@ -188,8 +188,9 @@ export default function Home(): ReactNode {
               <p className="lede band-lede">
                 This is the starter task app the generator gives you. Turn the
                 network off, keep typing on both devices, then turn it back on.
-                Nothing is lost and nothing conflicts. That is what the CRDT
-                buys you.
+                Edits from both sides survive and every replica converges on
+                the same result: same-field collisions resolve last-writer-wins,
+                everything else merges cleanly. That is what the CRDT buys you.
               </p>
             </div>
             <SyncDemo />
@@ -328,11 +329,21 @@ export default function Home(): ReactNode {
                 <ul className="limits">
                   <li>
                     <b>It is an early alpha release.</b>{" "}
-                    Expect the surface to move.
+                    Expect the surface to move, and do not yet trust it with
+                    data you cannot afford to lose.
                   </li>
                   <li>
                     <b>The data layer is Jazz 2 alpha</b>, deliberately pinned
-                    to a reviewed version.
+                    to a reviewed version. Five known engine defects at the
+                    current pin are each documented in a decision record and
+                    covered by an automated canary that fails loudly when a
+                    version bump changes the behavior.
+                  </li>
+                  <li>
+                    <b>The sync server reads unencrypted columns.</b>{" "}
+                    <Link to="/docs/threat-model">The threat model</Link>{" "}
+                    states what the server can and cannot see, and which
+                    fields you can seal.
                   </li>
                   <li>
                     <b>Browser floors are real.</b>{" "}

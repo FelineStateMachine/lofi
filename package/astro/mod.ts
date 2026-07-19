@@ -152,6 +152,13 @@ function renderConfig(projectRoot: string): string {
 import { defineConfig } from "astro/config";
 import { jazzPlugin } from "jazz-tools/dev/vite";
 import { resolve } from "node:path";
+// The vendored runtime's crypto dependencies are imported only by files Vite
+// serves, so nothing on the Deno side would otherwise materialize them into
+// node_modules where Vite resolves bare specifiers. Loading them here pins
+// them into the project's node_modules at config time.
+import "@noble/ciphers/chacha";
+import "@noble/hashes/hkdf";
+import "@noble/hashes/sha2";
 
 const projectRoot = Deno.cwd();
 const schemaDir = resolve(projectRoot, "src");
@@ -229,6 +236,9 @@ export default defineConfig({
         { find: /^npm:preact@[^/]+\\/jsx-dev-runtime$/, replacement: "preact/jsx-dev-runtime" },
         { find: /^npm:preact@[^/]+\\/jsx-runtime$/, replacement: "preact/jsx-runtime" },
         { find: /^npm:preact@[^/]+$/, replacement: "preact" },
+        { find: /^npm:@noble\\/ciphers@[^/]+\\/chacha$/, replacement: "@noble/ciphers/chacha" },
+        { find: /^npm:@noble\\/hashes@[^/]+\\/hkdf$/, replacement: "@noble/hashes/hkdf" },
+        { find: /^npm:@noble\\/hashes@[^/]+\\/sha2$/, replacement: "@noble/hashes/sha2" },
         { find: /^npm:jazz-tools@[^/]+\\/passkey-backup$/, replacement: "jazz-tools/passkey-backup" },
         { find: /^npm:jazz-tools@[^/]+\\/passphrase$/, replacement: "jazz-tools/passphrase" },
         { find: /^npm:jazz-tools@[^/]+$/, replacement: "jazz-tools" },

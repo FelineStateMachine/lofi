@@ -98,6 +98,16 @@ Semantics to rely on:
 - If the node revokes the ticket, requests fail with 401 and live sockets close; treat the stored
   sink as dead and surface re-enrollment rather than retrying silently.
 
+### Restoring on a fresh device
+
+Recovery has two halves, held in two places: the passkey or phrase recovers _who you are_ (the
+account identity), and the app-connect ticket names _where your data lives_. A passkey backup stores
+exactly the 32-byte account secret, so on a deployment without a compiled managed app a fresh device
+restores to a local-only account and then connects the sync location — paste the ticket saved in
+your password manager, or have the node re-issue one. The starter account UI offers both steps in
+either order; synced data arrives once the location is enrolled. Deployments with a compiled managed
+app restore straight to syncing.
+
 ## The user's account journey
 
 ```mermaid

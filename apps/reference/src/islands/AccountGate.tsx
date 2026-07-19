@@ -16,6 +16,7 @@ import {
   stopSyncBackup,
 } from "@nzip/lofi";
 import { encodeSharingIdentity } from "@nzip/lofi/access";
+import { TicketEnrollForm } from "@nzip/lofi/preact";
 
 /**
  * Author-owned account example. lofi is local-first: the app already opened on a
@@ -24,9 +25,10 @@ import { encodeSharingIdentity } from "@nzip/lofi/access";
  * public `@nzip/lofi` session primitives. Delete it if your app is local-only,
  * or restyle it freely; framework implementation remains package-owned.
  *
- * It renders only when a managed Jazz app is configured (`JAZZ_APP_ID` /
- * `JAZZ_SERVER_URL`, e.g. via `deno task jazz:provision`), because a recovery
- * phrase only matters once there is somewhere to sync to.
+ * With no sync location — no compiled managed app and no enrolled ticket — it
+ * offers the connect step instead: enroll an app-connect ticket (a password
+ * manager autofills a saved one), and restore is available first, so a fresh
+ * device can recover its identity before or after choosing where to sync.
  */
 
 type Busy =
@@ -92,10 +94,120 @@ export default function AccountGate() {
     [],
   );
 
-  // Nothing to back up to when no Jazz app is configured — stay out of the way.
-  if (!session || !session.syncAvailable) return null;
+  if (!session) return null;
 
   const disabled = busy !== null;
+
+  // Restore works without a sync location: it replaces the local identity, and
+  // synced data arrives once a location exists. Rendered in both the connect
+  // and the back-up states.
+  const restoreBlock = (
+    <>
+      <div class="account-actions">
+        <button
+          type="button"
+          class="account-secondary"
+          disabled={disabled || !confirmReplacement}
+          onClick={() => {
+            setRestoring(true);
+            run("passkey-restore", () =>
+              restoreFromPasskey({ confirmLocalReplacement: confirmReplacement }).then((next) => {
+                setConfirmReplacement(false);
+                return next;
+              }));
+          }}
+        >
+          {busy === "passkey-restore" ? "Restoring…" : "Use passkey"}
+        </button>
+        <button
+          type="button"
+          class="account-secondary"
+          disabled={disabled || !confirmReplacement}
+          onClick={() => {
+            setError(null);
+            setRestoring((value) =>
+              !value
+            );
+          }}
+        >
+          {restoring ? "Cancel" : "Restore from recovery phrase"}
+        </button>
+      </div>
+      <label class="account-note">
+        <input
+          type="checkbox"
+          checked={confirmReplacement}
+          disabled={disabled}
+          onChange={(event) => setConfirmReplacement(event.currentTarget.checked)}
+        />{" "}
+        I understand restore replaces this device's current local account and unsynced data may be
+        lost.
+      </label>
+      {restoring && (
+        <div class="account-field">
+          <label for="recovery-input">Recovery phrase</label>
+          <textarea
+            id="recovery-input"
+            value={phraseInput}
+            onInput={(event) => setPhraseInput(event.currentTarget.value)}
+            placeholder="word one word two …"
+            rows={3}
+            disabled={disabled}
+          />
+          <p class="account-note">
+            Restoring replaces this device's local account with the recovered one — any data created
+            here that is not backed up will be discarded.
+          </p>
+          <button
+            type="button"
+            disabled={disabled || phraseInput.trim().length === 0}
+            onClick={() =>
+              run(
+                "restore",
+                () =>
+                  restoreFromRecoveryPhrase(phraseInput, {
+                    confirmLocalReplacement: confirmReplacement,
+                  }).then((next) => {
+                    setRestoring(false);
+                    setPhraseInput("");
+                    setConfirmReplacement(false);
+                    return next;
+                  }),
+              )}
+          >
+            {busy === "restore" ? "Restoring…" : "Restore account"}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  // No sync location yet: offer the connect step, with restore available so a
+  // fresh device recovers its identity before or after choosing where to sync.
+  if (!session.syncAvailable) {
+    return (
+      <section class="account account-out" aria-labelledby="account-title">
+        <header>
+          <p class="eyebrow">Account</p>
+          <h2 id="account-title">Connect a sync location</h2>
+        </header>
+        <p>
+          You are working on a private, on-device account. To sync or recover it, connect a sync
+          location: paste the app-connect ticket from your node — a password manager fills a saved
+          one. Restoring an account works before or after connecting; synced data arrives once a
+          location exists.
+        </p>
+        <TicketEnrollForm
+          title="Enroll an app-connect ticket"
+          onEnrolled={() => {
+            void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
+          }}
+        />
+        {restoreBlock}
+        {error && <p class="account-error" role="alert">{error}</p>}
+      </section>
+    );
+  }
 
   const phraseBlock = phrase && (
     <div class="account-phrase">
@@ -231,45 +343,8 @@ export default function AccountGate() {
             {busy === "enable" ? "Backing up…" : "Back up & enable sync"}
           </button>
         )}
-        <button
-          type="button"
-          class="account-secondary"
-          disabled={disabled || !confirmReplacement}
-          onClick={() => {
-            setRestoring(true);
-            run("passkey-restore", () =>
-              restoreFromPasskey({ confirmLocalReplacement: confirmReplacement }).then((next) => {
-                setConfirmReplacement(false);
-                return next;
-              }));
-          }}
-        >
-          {busy === "passkey-restore" ? "Restoring…" : "Use passkey"}
-        </button>
-        <button
-          type="button"
-          class="account-secondary"
-          disabled={disabled || !confirmReplacement}
-          onClick={() => {
-            setError(null);
-            setRestoring((value) =>
-              !value
-            );
-          }}
-        >
-          {restoring ? "Cancel" : "Restore from recovery phrase"}
-        </button>
       </div>
-      <label class="account-note">
-        <input
-          type="checkbox"
-          checked={confirmReplacement}
-          disabled={disabled}
-          onChange={(event) => setConfirmReplacement(event.currentTarget.checked)}
-        />{" "}
-        I understand restore replaces this device's current local account and unsynced data may be
-        lost.
-      </label>
+      {restoreBlock}
       {phraseBlock}
       {pendingEnable && (
         <div class="account-actions">
@@ -283,42 +358,6 @@ export default function AccountGate() {
             onClick={() => run("enable", enableSyncBackup)}
           >
             {busy === "enable" ? "Enabling sync…" : "I saved my phrase — enable sync"}
-          </button>
-        </div>
-      )}
-      {restoring && (
-        <div class="account-field">
-          <label for="recovery-input">Recovery phrase</label>
-          <textarea
-            id="recovery-input"
-            value={phraseInput}
-            onInput={(event) => setPhraseInput(event.currentTarget.value)}
-            placeholder="word one word two …"
-            rows={3}
-            disabled={disabled}
-          />
-          <p class="account-note">
-            Restoring replaces this device's local account with the recovered one — any data created
-            here that is not backed up will be discarded.
-          </p>
-          <button
-            type="button"
-            disabled={disabled || phraseInput.trim().length === 0}
-            onClick={() =>
-              run(
-                "restore",
-                () =>
-                  restoreFromRecoveryPhrase(phraseInput, {
-                    confirmLocalReplacement: confirmReplacement,
-                  }).then((next) => {
-                    setRestoring(false);
-                    setPhraseInput("");
-                    setConfirmReplacement(false);
-                    return next;
-                  }),
-              )}
-          >
-            {busy === "restore" ? "Restoring…" : "Restore account"}
           </button>
         </div>
       )}

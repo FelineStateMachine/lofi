@@ -9,6 +9,8 @@ import {
 } from "./schema-compat.ts";
 import { type TableMutationEnvironment, TableMutationRegistry } from "./table-mutations.ts";
 import { assert } from "./test-assert.ts";
+import { createMemoryJournalStorage } from "./write-journal.ts";
+import { WriteLedger } from "./write-ledger.ts";
 
 class FakeStorage {
   readonly values = new Map<string, string>();
@@ -291,14 +293,28 @@ Deno.test("an old shell over newer data refuses table writes with the gate diagn
 
   const db = new RefusingDb();
   const diagnostics = createDiagnostics();
-  const environment: TableMutationEnvironment = {
+  // Table mutations route through the write ledger, so the production guard
+  // seam — the gate check plus the upgrade write lock — lives on the ledger
+  // environment; this wires the same shape minus the lock.
+  const ledger = new WriteLedger({
     getDb: () => Promise.resolve(db.value()),
     syncConfigured: () => false,
+    storage: createMemoryJournalStorage(),
+    resolveTable: () => null,
+    resolveEffectUnit: () => null,
     subscribeRuntimeRecreation: () => () => undefined,
     updateDiagnostics: (update) => update(diagnostics),
+    now: () => 0,
     async guardWrite() {
       await gate.assertWritable();
     },
+  });
+  const environment: TableMutationEnvironment = {
+    getDb: () => Promise.resolve(db.value()),
+    syncConfigured: () => false,
+    getLedger: () => ledger,
+    subscribeRuntimeRecreation: () => () => undefined,
+    updateDiagnostics: (update) => update(diagnostics),
   };
   const store = new TableMutationRegistry(environment).acquire(table).store;
   let refused: unknown;
@@ -314,4 +330,5 @@ Deno.test("an old shell over newer data refuses table writes with the gate diagn
     store.getSnapshot().error?.includes("newer version") === true,
     "the store snapshot does not carry the user-facing diagnostic",
   );
+  ledger.dispose();
 });

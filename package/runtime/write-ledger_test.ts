@@ -102,6 +102,7 @@ function harness(options: {
   storage?: ReturnType<typeof createMemoryJournalStorage>;
   units?: Map<string, EffectUnit<{ id: string }>>;
   db?: FakeDb;
+  guardWrite?: () => Promise<(() => void) | void>;
 } = {}): Harness {
   const db = options.db ?? new FakeDb();
   const diagnostics = createDiagnostics();
@@ -118,6 +119,7 @@ function harness(options: {
     now: () => 1000,
     retryDelayMs: () => 1,
     probeTimeoutMs: 50,
+    ...(options.guardWrite ? { guardWrite: options.guardWrite } : {}),
   };
   return { db, ledger: new WriteLedger(environment), diagnostics, storage, units };
 }
@@ -505,5 +507,55 @@ Deno.test("without configured sync, local durability is settlement and effects r
   assert(handle.stage === "synced", "a device without a sync location settles at saved");
   assertCount(calls.length, 1, "effects must run when the write settles");
   assertCount(fixture.ledger.getPendingSnapshot().count, 0, "nothing waits without a store");
+  fixture.ledger.dispose();
+});
+
+Deno.test("a write-guard refusal fails the handle and never journals or compensates", async () => {
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  const units = new Map([["chargeCard", unit("chargeCard", calls)]]);
+  const fixture = harness({
+    units,
+    guardWrite: () => Promise.reject(new Error("schema is ahead of this bundle")),
+  });
+  await fixture.ledger.arm();
+  const handle = fixture.ledger.perform<Row>(
+    { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "held" } },
+    { verb: "placeOrder", units: [units.get("chargeCard")!] },
+  );
+  const error = await handle.saved.then(() => null, (thrown) => thrown as Error);
+  assert(
+    error?.message === "schema is ahead of this bundle",
+    "the guard refusal must surface through the verb call",
+  );
+  assert(handle.stage !== "rejected", "a refusal is not an adjudicated verdict");
+  assertCount(fixture.ledger.getPendingSnapshot().count, 0, "a refused write must not journal");
+  await fixture.ledger.flush();
+  assert(
+    (fixture.storage.text() ?? "").includes("held") === false,
+    "a refused write must leave no journal entry",
+  );
+  assertCount(calls.length, 0, "a refused write must fire no effect");
+  assertCount(fixture.diagnostics.mutationErrors, 1, "the refusal must be diagnosable");
+  assertCount(fixture.db.nextId, 0, "the write must never reach the database");
+  fixture.ledger.dispose();
+});
+
+Deno.test("the write-guard release covers exactly the local-durability window", async () => {
+  let released = 0;
+  const fixture = harness({
+    guardWrite: () => Promise.resolve(() => void (released += 1)),
+  });
+  await fixture.ledger.arm();
+  const handle = fixture.ledger.perform<Row>(
+    { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "locked" } },
+  );
+  await handle;
+  await flush();
+  assertCount(released, 1, "the lock must release once the write settles locally");
+  fixture.db.settleGlobal();
+  await flush();
+  assertCount(released, 1, "global settlement must not release the lock again");
   fixture.ledger.dispose();
 });

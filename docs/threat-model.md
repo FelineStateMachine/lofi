@@ -46,6 +46,27 @@ column is account-private — a row shared with another account is undecryptable
 and reads refuse loudly rather than return garbage. Details:
 [encrypted columns](data-and-ui.md#encrypted-columns).
 
+## Shared fields: content the server relays but cannot read
+
+Shared encrypted columns extend sealing to group collaboration: a per-group field key seals the
+content, and the key itself travels as ordinary synced data — wrapped to each member's public key,
+which every account self-publishes in a key directory. The wrap is authenticated with the sender's
+own key, so a server that knows every public key still cannot mint one; forging a wrap requires a
+member's secret.
+
+For shared fields the server is therefore an **active attacker, not a passive reader**: its one move
+is substituting public keys during membership changes, and that move is detected. Each device pins
+peer keys on first sight, sharing identities carry the account's key fingerprint so members added
+person-to-person are pinned with no server first-sight window, and a key that later disagrees is
+refused — the field stays sealed and the mismatch surfaces as an alert, until the user re-trusts
+after out-of-band verification.
+
+The residual exposures, stated plainly: a peer first seen only through the directory is trusted on
+first sight by that device; a removed member keeps the key generations they already held (removal
+seals future content, not history — re-encrypting merged history is unsound); and structure, timing,
+and size-class metadata remain visible exactly as for account-private fields. Details:
+[shared encrypted columns](data-and-ui.md#shared-encrypted-columns).
+
 ## Tickets: what possession grants
 
 An app-connect ticket is a bearer credential with 256-bit entropy.
@@ -76,13 +97,14 @@ inheriting the page's capability.
 
 ## Where the lines move
 
-- **Shared-field encryption** is the designed next step: distributing a field key wrapped to each
-  member's account key, stored as ordinary synced data the server cannot open. That demotes the
-  server from passive reader to active attacker for shared fields — it could only attempt key
-  substitution during membership changes, a detectable act rather than silent reading.
+- **Engine-authenticated member keys** would upgrade the shared-field trust story: today's key
+  directory is self-published and pinned; identity material the sync engine itself authenticates
+  would remove the first-sight window entirely. Tracked against the pinned engine and reviewed on
+  every version bump.
 - **Metadata blindness is out of scope** under the pinned engine: a server that evaluates policies
   and queries must see structure. A fully blind relay is a different architecture and is not
   claimed.
 
 Read this page as the definition behind the phrase "the user holds the keys": identity, recovery,
-location, and at-rest custody today, with content blindness per field where the schema declares it.
+location, and at-rest custody, with content blindness per field where the schema declares it —
+account-private or shared across a group.

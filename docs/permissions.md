@@ -100,6 +100,20 @@ The templates do not replace the schema surface. Use `s.table()`, `s.defineApp()
 `s.definePermissions()` directly whenever they do not fit. `defineAccessPolicies` also accepts a
 final raw-policy callback for a small extension without hiding the underlying policy builder.
 
+### Hosting shared encrypted columns
+
+A group whose resources declare [shared encrypted columns](data-and-ui.md#shared-encrypted-columns)
+needs two more tables and two policy touches: `sharedFieldDirectoryTable()` compiled by
+`sharedFieldAccess({ directory })` — world-readable, self-only writes, since public keys are public
+and integrity comes from fingerprint pinning — and `sharedFieldKeyTable("workspaces")` passed as
+`fieldKeys` to `groupAccess`, readable by each row's recipient or any member and writable by a
+member signing as themselves. Group operations created with the same `fieldKeys`/`directory` tables
+then handle the key lifecycle: creation mints the first key, `addMember` delivers held keys (a
+member who has not yet published a directory entry reads `pending-key` until
+`reconcileSharedFieldKeys` repairs the gap), and `removeMember` rotates so future content is sealed
+to the removed member. Policies can never reference the sealed columns themselves — gate on
+plaintext columns, and let sealing bound what the server can read.
+
 ## Fixed group roles
 
 | Role          | Read | Create | Edit own | Edit any | Manage members |

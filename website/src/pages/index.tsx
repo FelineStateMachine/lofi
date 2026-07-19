@@ -228,7 +228,7 @@ export default function Home(): ReactNode {
                 Edits from both sides survive and every replica converges on
                 the same result: same-field collisions resolve last-writer-wins,
                 everything else merges cleanly. That is what the CRDT buys you.
-                The same starter, restyled, runs installable at{" "}
+                A reworked build of this starter runs installable at{" "}
                 <Link href="https://demo.lofi.host">demo.lofi.host</Link>,
                 deployed from the latest release.
               </p>

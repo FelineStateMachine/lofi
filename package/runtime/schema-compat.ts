@@ -55,7 +55,16 @@ const staleTabMessage =
   "A newer version of the app is now active in another tab. Reload this tab to continue editing.";
 const updatingMessage = "Updating the app… editing resumes when the update finishes.";
 
-/** Raised when a mutation is refused because the local data is ahead of the code. */
+/**
+ * Raised when a mutation is refused because the local data is ahead of the
+ * running code. It surfaces through the ordinary error path of whatever
+ * performed the write — a verb call's handle fails, a table
+ * `insert`/`update`/`delete` rejects — with no journal entry or effect;
+ * reads keep working. The remediation is updating the app: watch
+ * {@link SchemaCompatState} via `useSchemaCompat` or
+ * {@link subscribeSchemaCompat}, and offer `applyPwaUpdate` when the update
+ * is ready.
+ */
 export class SchemaCompatibilityError extends Error {
   /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "SchemaCompatibilityError";

@@ -22,9 +22,18 @@ export type TableHandle<T extends TableRow, Init> = TableProxy<T, Init> & QueryB
 
 /** Reactive table state including rows and the last observed durability tier. */
 export type TableSnapshot<T extends TableRow> = {
+  /** `ready` once the first result arrived; an empty `rows` is not `loading`. */
   status: "loading" | "ready" | "error";
+  /** The current typed rows of the table. */
   rows: T[];
+  /**
+   * How far the latest write has travelled: `none` before any write settles,
+   * `local` once saved on this device (the resting state when sync is not
+   * configured), `global` once the store confirms it, `failed` when it was
+   * denied.
+   */
   durability: "none" | "local" | "global" | "failed";
+  /** The latest subscription or write error message, or `null`. */
   error: string | null;
 };
 

@@ -13,9 +13,11 @@
 
 /**
  * The closed, framework-owned write lifecycle. Stages are monotonic:
- * `saving → saved → syncing → synced | rejected`. `syncing` appears only when
- * the runtime can observe the transport; a runtime without that signal moves
- * writes from `saved` directly to `synced`.
+ * `saving → saved → syncing → synced | rejected`. `syncing` is reserved for a
+ * runtime that can observe the transport; the current storage engine exposes
+ * no such signal, so today writes move from `saved` directly to `synced` or
+ * `rejected` and no handle ever reports `syncing`. Branch on `saved` vs
+ * settled, not on seeing `syncing`.
  */
 export type WriteStage = "saving" | "saved" | "syncing" | "synced" | "rejected";
 
@@ -23,7 +25,10 @@ export type WriteStage = "saving" | "saved" | "syncing" | "synced" | "rejected";
 export type WriteRejection = {
   /**
    * The structured cause: `denied` for a store verdict, `expired` for an
-   * intent retired past its lifespan.
+   * intent retired past its lifespan. The current runtime never retires a
+   * locally accepted write, so every rejection today is `denied`; an overdue
+   * intent surfaces as `PendingWriteSummary.expired` instead. `expired`
+   * exists so handlers written now stay correct if retirement ships.
    */
   cause: "denied" | "expired";
   /** The sync node's rejection code, or `null` when none was carried. */
@@ -39,7 +44,13 @@ export type WriteRejection = {
 export class WriteRejectedError extends Error {
   /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "WriteRejectedError";
-  /** The structured cause: `denied` or `expired`. */
+  /**
+   * The structured cause: `denied` or `expired`. The current runtime never
+   * retires a locally accepted write, so every rejection today is `denied`;
+   * an overdue intent surfaces as `PendingWriteSummary.expired` instead.
+   * `expired` exists so handlers written now stay correct if retirement
+   * ships.
+   */
   readonly rejectionCause: "denied" | "expired";
   /** The adjudicated rejection code, or `null` when none was carried. */
   readonly code: string | null;
@@ -86,17 +97,18 @@ function exposedPromise<T>(): { promise: Promise<T>; resolver: Resolver<T> } {
  * store denies it. `stage` and `reason` are current-state properties;
  * `subscribe` notifies immediately and on every later change.
  *
+ * On a device without managed sync there is no store to confirm anything:
+ * local durability is settlement, and the handle reaches `synced` as soon as
+ * it is `saved`. In Preact components, render a handle with `useWrite` and
+ * the app-wide pending set with `usePendingWrites`.
+ *
  * @example
  * ```ts
- * const write = placeOrder({ item, qty }); // WriteHandle<Order>
- * const order = await write;               // saved: durable on this device
- * try {
- *   await write.synced;                    // confirmed by the store
- * } catch (error) {
- *   if (error instanceof WriteRejectedError) {
- *     console.log(write.stage, write.reason?.code); // "rejected", the verdict
- *   }
- * }
+ * const write = placeOrder({ sku, quantity });   // a verb returns a WriteHandle
+ * const order = await write;                     // resolves at saved — safe to navigate
+ * write.synced.catch((error) => {
+ *   if (error instanceof WriteRejectedError) showDenied(error.message);
+ * });
  * ```
  */
 export class WriteHandle<T> implements PromiseLike<T> {

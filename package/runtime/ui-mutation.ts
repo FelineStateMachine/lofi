@@ -1,5 +1,5 @@
 /** Lets event handlers await a UI mutation without leaking an unhandled rejection. */
-export async function settleUiMutation(mutation: Promise<unknown>): Promise<void> {
+export async function settleUiMutation(mutation: PromiseLike<unknown>): Promise<void> {
   // Package-owned UI mutation settlement.
   try {
     await mutation;

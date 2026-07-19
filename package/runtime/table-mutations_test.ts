@@ -3,6 +3,9 @@ import { schema as s } from "jazz-tools";
 import { createDiagnostics } from "./diagnostics.ts";
 import { type TableMutationEnvironment, TableMutationRegistry } from "./table-mutations.ts";
 import { assert, assertCount } from "./test-assert.ts";
+import { WriteHandle } from "./write-handle.ts";
+import { WriteLedger } from "./write-ledger.ts";
+import { createMemoryJournalStorage } from "./write-journal.ts";
 
 type Row = { id: string; title: string; archived: boolean };
 type Init = Omit<Row, "id">;
@@ -29,7 +32,8 @@ class FakeDb {
 
   insert(_table: TableProxy<Row, Init>, values: Init) {
     this.operations.push("insert");
-    return this.handle({ id: `row-${++this.nextId}`, ...values });
+    const row = { id: `row-${++this.nextId}`, ...values };
+    return { value: row, ...this.handle(row) };
   }
 
   update(_table: TableProxy<Row, Init>, _id: string, _patch: Partial<Init>) {
@@ -40,6 +44,10 @@ class FakeDb {
   delete(_table: TableProxy<Row, Init>, _id: string) {
     this.operations.push("delete");
     return this.handle(undefined);
+  }
+
+  all(): Promise<unknown[]> {
+    return Promise.resolve([]);
   }
 
   reject(event: MutationErrorEvent): void {
@@ -69,9 +77,25 @@ class FakeDb {
 function environment(db: FakeDb, syncConfigured = false) {
   const diagnostics = createDiagnostics();
   const recreation = new Set<() => void>();
+  const ledger = new WriteLedger({
+    getDb: () => Promise.resolve(db.value()),
+    syncConfigured: () => syncConfigured,
+    storage: createMemoryJournalStorage(),
+    resolveTable: () => null,
+    resolveEffectUnit: () => null,
+    subscribeRuntimeRecreation(listener) {
+      recreation.add(listener);
+      return () => recreation.delete(listener);
+    },
+    updateDiagnostics(update) {
+      update(diagnostics);
+    },
+    now: () => 0,
+  });
   const value: TableMutationEnvironment = {
     getDb: () => Promise.resolve(db.value()),
     syncConfigured: () => syncConfigured,
+    getLedger: () => ledger,
     subscribeRuntimeRecreation(listener) {
       recreation.add(listener);
       return () => recreation.delete(listener);
@@ -80,10 +104,11 @@ function environment(db: FakeDb, syncConfigured = false) {
       update(diagnostics);
     },
   };
-  return { value, diagnostics, recreation };
+  return { value, diagnostics, recreation, ledger };
 }
 
 async function flush(): Promise<void> {
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
@@ -107,6 +132,7 @@ Deno.test("table mutation consumers share one listener and release it after fina
   second.release();
   assertCount(db.mutationListeners.size, 0, "final teardown retained the mutation listener");
   assertCount(runtime.diagnostics.activeMutationListeners, 0, "listener diagnostics leaked");
+  runtime.ledger.dispose();
 });
 
 Deno.test("typed mutations return inserted rows and wait for local durability", async () => {
@@ -116,11 +142,13 @@ Deno.test("typed mutations return inserted rows and wait for local durability", 
   const created = await store.insert({ title: "created", archived: false });
   await store.update(created.id, { archived: true });
   await store.remove(created.id);
+  await flush();
   assert(created.id === "row-1" && created.title === "created", "insert omitted the created row");
   assert(db.operations.join(",") === "insert,update,delete", "typed operations missed the DB");
   assertCount(db.localWaits, 3, "mutations resolved before local durability");
   assertCount(runtime.diagnostics.localWaitCalls, 3, "local waits were not diagnosable");
   assert(store.getSnapshot().durability === "local", "local durability was not observable");
+  runtime.ledger.dispose();
 });
 
 Deno.test("managed mutations continue global durability tracking in the background", async () => {
@@ -132,6 +160,7 @@ Deno.test("managed mutations continue global durability tracking in the backgrou
   assertCount(db.globalWaits, 1, "managed mutation omitted its global wait");
   assert(store.getSnapshot().durability === "global", "global confirmation was not observable");
   assertCount(runtime.diagnostics.pendingGlobalWrites, 0, "global wait remained pending");
+  runtime.ledger.dispose();
 });
 
 Deno.test("local and asynchronous permission rejections reach public mutation state", async () => {
@@ -141,13 +170,18 @@ Deno.test("local and asynchronous permission rejections reach public mutation st
   const stop = lease.store.subscribe(() => undefined);
   await flush();
   db.failLocal = new Error("local permission denied");
-  await lease.store.insert({ title: "blocked", archived: false }).catch(() => undefined);
+  await lease.store.insert({ title: "blocked", archived: false }).then(
+    () => undefined,
+    () => undefined,
+  );
+  await flush();
   assert(lease.store.getSnapshot().error === "local permission denied", "local rejection hidden");
   db.reject({ code: "WriteRejected", reason: "revoked" } as MutationErrorEvent);
   assert(lease.store.getSnapshot().error?.includes("revoked"), "async rejection hidden");
   assertCount(runtime.diagnostics.mutationErrors, 2, "rejections were not diagnosed");
   stop();
   lease.release();
+  runtime.ledger.dispose();
 });
 
 Deno.test("asynchronous rejections reach only the store owning the batch", async () => {
@@ -158,6 +192,7 @@ Deno.test("asynchronous rejections reach only the store owning the batch", async
   const stop = lease.store.subscribe(() => undefined);
   await flush();
   await lease.store.insert({ title: "mine", archived: false });
+  await flush();
   db.reject(
     {
       code: "WriteRejected",
@@ -181,16 +216,20 @@ Deno.test("asynchronous rejections reach only the store owning the batch", async
   assertCount(runtime.diagnostics.mutationErrors, 1, "the owned rejection must count once");
   stop();
   lease.release();
+  runtime.ledger.dispose();
 });
 
 Deno.test("mutation types follow the exact Jazz table insert and row shapes", () => {
   const app = s.defineApp({ records: s.table({ title: s.string(), archived: s.boolean() }) });
-  const registry = new TableMutationRegistry(environment(new FakeDb()).value);
+  const runtime = environment(new FakeDb());
+  const registry = new TableMutationRegistry(runtime.value);
   const lease = registry.acquire(app.records);
-  const result: Promise<s.RowOf<typeof app.records>> = lease.store.insert({
+  const result: WriteHandle<s.RowOf<typeof app.records>> = lease.store.insert({
     title: "typed",
     archived: false,
   });
-  assert(result instanceof Promise, "typed insert did not return a promise");
+  assert(result instanceof WriteHandle, "typed insert did not return a write handle");
+  assert(typeof result.then === "function", "the write handle must stay thenable");
   lease.release();
+  runtime.ledger.dispose();
 });

@@ -120,6 +120,16 @@ function runtimeTables(): RuntimeTable[] {
   ) as RuntimeTable[];
 }
 
+/**
+ * Resolves one declared table by name from the active app schema, for
+ * package modules that journal writes by table name.
+ */
+export function findRuntimeTable(
+  name: string,
+): { where(input: Record<string, unknown>): unknown } | null {
+  return runtimeTables().find((table) => table._table === name) ?? null;
+}
+
 async function awaitLocalReady(db: Db): Promise<void> {
   const firstTable = runtimeTables()[0];
   if (!firstTable) return;

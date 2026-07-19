@@ -164,6 +164,21 @@ async function persistSealed(
  */
 export type SinkRestoreOutcome = "none" | "restored" | "migrated" | "unopenable";
 
+// The most recent restore's outcome, kept so status surfaces can distinguish
+// "no sync location" from "a sync location exists but this device cannot open
+// it". Cleared when the record is removed or successfully re-declared.
+let lastRestoreOutcome: SinkRestoreOutcome = "none";
+
+/**
+ * How the most recent {@link restoreDeclaredSink} resolved. An `unopenable`
+ * answer means a declaration is persisted but no available key opens it — the
+ * device runs local-only until the sink is cleared and re-enrolled, and a
+ * status surface should say so rather than showing plain local-only.
+ */
+export function readSinkRestoreOutcome(): SinkRestoreOutcome {
+  return lastRestoreOutcome;
+}
+
 /**
  * Unseals the persisted declaration into memory. Boot awaits this before any
  * sync decision (see `boot.ts`); tests and non-boot embedders call it
@@ -172,6 +187,11 @@ export type SinkRestoreOutcome = "none" | "restored" | "migrated" | "unopenable"
 export async function restoreDeclaredSink(
   keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
 ): Promise<SinkRestoreOutcome> {
+  lastRestoreOutcome = await resolveRestore(keyStore);
+  return lastRestoreOutcome;
+}
+
+async function resolveRestore(keyStore: DeviceKeyStore): Promise<SinkRestoreOutcome> {
   cachedSink = null;
   if (typeof localStorage === "undefined") return "none";
   let raw: string | null = null;
@@ -276,12 +296,16 @@ export async function declareDataSink(
   }
   await persistSealed(declaration, keyStore);
   cachedSink = declaration;
+  // The record now seals under an available key; an earlier unopenable
+  // restore no longer describes it.
+  lastRestoreOutcome = "restored";
   return declaration;
 }
 
 /** Removes the declared sink. Existing local data and elections are untouched. */
 export function clearDeclaredSink(): void {
   cachedSink = null;
+  lastRestoreOutcome = "none";
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.removeItem(sinkKey);

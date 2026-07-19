@@ -75,6 +75,11 @@
           "source": "lofi-node:docs/site/http-surface.md"
         },
         {
+          "id": "write-verdicts",
+          "label": "Write verdicts",
+          "source": "lofi-node:docs/site/write-verdicts.md"
+        },
+        {
           "id": "architecture",
           "label": "Architecture and provenance",
           "source": "lofi-node:docs/site/architecture.md"

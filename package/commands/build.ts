@@ -14,6 +14,10 @@ import { prepareLofiAstroConfig } from "../astro/mod.ts";
 import { loadEnvironment, serverEnvironmentNames } from "../tooling/environment.ts";
 import {
   duplicateBuildAssets,
+  engineWasmAssets,
+  engineWasmPreloadTag,
+  heaviestShellAsset,
+  injectHeadTags,
   precacheUrls,
   scanSecrets,
   shellWeightBytes,
@@ -99,6 +103,26 @@ const productionManifest = JSON.parse(await Deno.readTextFile("dist/manifest.web
 // One walk serves the precache manifest, the shell checks, and the route
 // count below.
 const distFiles = await walkFiles("dist", { includeDist: true });
+
+// The engine binary dominates a cold first visit. Every prerendered page
+// preloads it so the download overlaps the module graph instead of queueing
+// behind it, and the tag carries the byte size the runtime's boot-progress
+// surface reports while the download runs.
+const engineTags = await Promise.all(
+  engineWasmAssets(distFiles).map(async (asset) =>
+    engineWasmPreloadTag(
+      asset,
+      environment.LOFI_BASE_PATH || "/",
+      (await Deno.stat(join("dist", asset))).size,
+    )
+  ),
+);
+for (const path of distFiles.filter((file) => extname(file) === ".html")) {
+  const html = await Deno.readTextFile(join("dist", path));
+  const injected = injectHeadTags(html, engineTags);
+  if (injected !== html) await Deno.writeTextFile(join("dist", path), injected);
+}
+
 const screenshotPaths = screenshotAssetPaths(productionManifest, environment.LOFI_BASE_PATH);
 const shellPaths = precachePaths(distFiles, screenshotPaths);
 
@@ -114,6 +138,7 @@ if (duplicateAssets.length > 0) {
 }
 
 const shellBytes = await shellWeightBytes(shellPaths);
+const heaviestAsset = await heaviestShellAsset(shellPaths);
 if (shellBytes > shellWeightNoticeBytes) {
   console.warn(
     `warning: the app shell weighs ${
@@ -151,5 +176,9 @@ const routes = distFiles.filter((path) => extname(path) === ".html").length;
 console.log(
   `lofi build: ${join(Deno.cwd(), "dist")} (${routes} routes, ${sourceHash}, ${
     megabytes(shellBytes)
-  } MB shell, secret scan passed)`,
+  } MB shell${
+    heaviestAsset
+      ? `, heaviest asset ${heaviestAsset.path} at ${megabytes(heaviestAsset.bytes)} MB`
+      : ""
+  }, secret scan passed)`,
 );

@@ -30,15 +30,21 @@ self.addEventListener("install", (event) => {
       const paths = await response.json();
       // Every emitted path is part of the generated offline shell. Installation
       // fails as one transaction rather than claiming readiness with a partial
-      // shell. `cache: "reload"` bypasses the HTTP cache for every shell asset,
-      // matching the manifest's no-store fetch — otherwise a new revision's
-      // cache could be populated from stale HTTP-cached responses and serve
-      // them cache-first indefinitely.
+      // shell. Mutable paths (HTML, manifests) use `cache: "reload"`, matching
+      // the manifest's no-store fetch — otherwise a new revision's cache could
+      // be populated from stale HTTP-cached responses and serve them
+      // cache-first indefinitely. Build assets under `_astro/` carry a content
+      // hash in their name, so a stale response is impossible; admitting the
+      // HTTP cache for them lets a first visit reuse the bytes the page's own
+      // module and engine fetches just downloaded instead of downloading the
+      // shell a second time.
       const cache = await caches.open(SHELL_CACHE_NAME);
       await cache.addAll(
-        paths.map((path) =>
-          new Request(new URL(path, self.registration.scope), { cache: "reload" })
-        ),
+        paths.map((path) => {
+          const url = new URL(path, self.registration.scope);
+          const contentHashed = /(?:^|\/)_astro\//.test(url.pathname);
+          return new Request(url, contentHashed ? {} : { cache: "reload" });
+        }),
       );
     } catch (error) {
       await reportFailure(

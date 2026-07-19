@@ -42,6 +42,12 @@ export {
 } from "./auth.ts";
 export { bootLofi } from "./boot.ts";
 export {
+  type BootProgress,
+  type BootProgressPhase,
+  getBootProgress,
+  subscribeBootProgress,
+} from "./boot-progress.ts";
+export {
   clearProvisionCapability,
   heldProvisionCapability,
   holdProvisionCapability,

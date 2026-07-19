@@ -1,0 +1,38 @@
+---
+import AccountGate from "../islands/AccountGate";
+import IncidentBoard from "../islands/IncidentBoard";
+import MagmaBackdrop from "../islands/MagmaBackdrop";
+import StatusStrip from "../islands/StatusStrip";
+import { DeviceStatus } from "@nzip/lofi/preact";
+import Shell from "../layouts/Shell.astro";
+import { app } from "../app.ts";
+import "../styles/global.css";
+---
+
+<Shell title="lofi demo">
+  <MagmaBackdrop client:idle />
+  <header class="topbar">
+    <h1>lofi demo</h1>
+    <StatusStrip client:load />
+  </header>
+  <IncidentBoard client:load />
+  <details class="panel">
+    <summary>Account and sync</summary>
+    <AccountGate client:load />
+  </details>
+  <details class="panel">
+    <summary>Device report</summary>
+    <DeviceStatus client:load />
+  </details>
+  <footer>
+    <p>
+      Generated from <code>@nzip/lofi@__LOFI_DEMO_VERSION__</code> by the release workflow. The
+      incident board replaces the starter's task example; everything else is the generated app.
+    </p>
+    <p>
+      <a href="https://lofi.host">lofi.host</a>
+      <a href="https://lofi.host/docs/getting-started">docs</a>
+      <a href={app.repositoryUrl} rel="noreferrer">source</a>
+    </p>
+  </footer>
+</Shell>

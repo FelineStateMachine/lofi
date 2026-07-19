@@ -1,0 +1,600 @@
+/*
+ * The demo's design language deliberately opposes the starter's calm
+ * mint-on-forest-green: charred blacks, molten gradient accents, smoke
+ * greys, sharp corners, condensed display headings over a monospace body.
+ * The page is structured as a working application: top bar with measured
+ * facts, the incident board, then account and device panels behind
+ * disclosures. The WebGL backdrop (.magma-backdrop) renders behind
+ * everything; the body gradient keeps the page intentional without WebGL.
+ */
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("/fonts/chakra-petch-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --char-0: #0c0908;
+  --char-1: #170f0a;
+  --char-2: #221510;
+  --char-line: #3a231a;
+  --ash: #cfbfb6;
+  --bone: #f6ebe2;
+  --smoke: #9c8a80;
+  --crimson: #b3122e;
+  --magma: #ff3d00;
+  --ember: #ff9d45;
+  --heat: linear-gradient(120deg, #b3122e, #ff3d00 55%, #ff9d45);
+  --focus: #ffcf99;
+  --alert: #ff8a75;
+  color: var(--ash);
+  background: var(--char-0);
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--magma);
+  color: var(--char-0);
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(120% 55% at 50% 110%, rgba(255, 61, 0, 0.16), transparent 62%),
+    radial-gradient(70% 40% at 85% 0%, rgba(179, 18, 46, 0.1), transparent 70%),
+    var(--char-0);
+  min-height: 100vh;
+}
+
+.magma-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 78rem;
+  min-height: 100vh;
+  padding: 2rem 1.5rem 3rem;
+  position: relative;
+}
+
+h1,
+h2,
+h3,
+summary {
+  font-family: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* The package and starter diagnostics panels render small kicker lines the
+   demo's structure does not use. */
+.eyebrow {
+  display: none;
+}
+
+.topbar {
+  align-items: baseline;
+  border-bottom: 1px solid var(--char-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  justify-content: space-between;
+  padding-bottom: 0.9rem;
+}
+
+.topbar h1 {
+  background: var(--heat);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 16px rgba(255, 61, 0, 0.3));
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.status-strip {
+  color: var(--smoke);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 0.4rem 1.4rem;
+  margin: 0;
+}
+
+.status-strip [data-fact="network"][data-online="no"] {
+  color: var(--alert);
+}
+
+.board {
+  background: linear-gradient(180deg, rgba(255, 61, 0, 0.05), transparent 30%), var(--char-2);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  margin-top: 1.5rem;
+  padding: 1.4rem;
+  position: relative;
+}
+
+.board::before {
+  background: var(--heat);
+  content: "";
+  height: 2px;
+  left: -1px;
+  position: absolute;
+  right: -1px;
+  top: -1px;
+}
+
+label {
+  color: var(--bone);
+  display: block;
+  font-weight: 750;
+  margin-bottom: 0.5rem;
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+select,
+button {
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+}
+
+input[type="text"],
+input:not([type]) {
+  background: #17100c;
+  caret-color: var(--ember);
+  color: var(--bone);
+  flex: 1;
+  min-width: 0;
+}
+
+select {
+  background: #17100c;
+  color: var(--bone);
+}
+
+button {
+  background: var(--heat);
+  border: 0;
+  color: #1a0703;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+button:hover {
+  box-shadow: 0 0 20px rgba(255, 61, 0, 0.4);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.state {
+  color: var(--smoke);
+  min-height: 1.5rem;
+}
+
+.columns {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-top: 1rem;
+}
+
+.column {
+  background: var(--char-1);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  min-height: 16rem;
+  padding: 1rem;
+}
+
+.column h2 {
+  border-bottom: 1px solid var(--char-line);
+  color: var(--bone);
+  display: flex;
+  font-size: 0.95rem;
+  justify-content: space-between;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.9rem;
+  padding-bottom: 0.6rem;
+}
+
+.column .count {
+  color: var(--ember);
+}
+
+.column-empty {
+  font-size: 0.8rem;
+}
+
+ul {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.incident {
+  background: var(--char-0);
+  border-left: 3px solid var(--magma);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.incident.sev-smolder {
+  border-left-color: var(--ember);
+}
+
+.incident.sev-burn {
+  border-left-color: var(--magma);
+}
+
+.incident.sev-melt {
+  border-left-color: var(--crimson);
+  box-shadow: inset 0 0 18px rgba(179, 18, 46, 0.22);
+}
+
+.incident-head {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.incident-title {
+  color: var(--bone);
+  overflow-wrap: anywhere;
+}
+
+.incident-meta {
+  color: var(--smoke);
+  font-size: 0.75rem;
+}
+
+.incident-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.incident-actions .state {
+  font-size: 0.75rem;
+  min-height: 0;
+}
+
+button.move {
+  background: transparent;
+  border: 1px solid var(--char-line);
+  color: var(--ember);
+  font-size: 0.72rem;
+  padding: 0.35rem 0.55rem;
+}
+
+button.move:hover {
+  border-color: var(--magma);
+  box-shadow: none;
+}
+
+[data-status="out"] .incident {
+  border-left-color: var(--char-line);
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+[data-status="out"] .incident-title {
+  color: var(--smoke);
+  text-decoration: line-through;
+}
+
+.panel {
+  background: var(--char-1);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  margin-top: 1rem;
+}
+
+.panel summary {
+  color: var(--bone);
+  cursor: pointer;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  padding: 0.9rem 1.2rem;
+}
+
+.panel summary::marker {
+  color: var(--magma);
+}
+
+.panel > :not(summary) {
+  margin: 0 1.2rem 1.2rem;
+}
+
+.account {
+  background: var(--char-0);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  color: var(--ash);
+  line-height: 1.6;
+  margin-top: 0;
+  padding: 1.4rem;
+}
+
+.account-out {
+  border-color: var(--char-line);
+}
+
+.account h2 {
+  color: var(--bone);
+  margin: 0 0 1rem;
+}
+
+.account-field {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.account-field input {
+  max-width: 24rem;
+  width: 100%;
+}
+
+.account-field .account-note {
+  margin: 0.35rem 0 0;
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.account-secondary {
+  background: transparent;
+  border: 1px solid var(--char-line);
+  color: var(--bone);
+}
+
+.account button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.account-error {
+  color: var(--alert);
+}
+
+.account-note {
+  color: var(--smoke);
+  font-size: 0.9rem;
+}
+
+.account dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0.5rem 0 0;
+}
+
+.account dl div {
+  background: var(--char-1);
+  border-left: 2px solid var(--char-line);
+  padding: 0.75rem;
+}
+
+.account dt {
+  color: var(--ember);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.account-caps dd {
+  color: var(--bone);
+}
+
+.device-status {
+  background: var(--char-0);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  padding: 1.4rem;
+}
+
+.device-status h2 {
+  color: var(--bone);
+  margin: 0 0 0.5rem;
+}
+
+.device-status dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.device-status dl div {
+  background: var(--char-1);
+  border-left: 2px solid var(--char-line);
+  padding: 0.75rem;
+}
+
+.device-status dt {
+  color: var(--ember);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.device-status dd {
+  margin: 0.25rem 0 0;
+}
+
+.device-category {
+  border-top: 1px solid var(--char-line);
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+}
+
+.device-category h3 {
+  color: var(--bone);
+  font-size: 1rem;
+  margin: 0 0 0.15rem;
+}
+
+.runtime-recovery {
+  border: 1px solid var(--magma);
+  border-radius: 2px;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.runtime-recovery h4,
+.runtime-recovery p {
+  margin-top: 0;
+}
+
+.device-hook {
+  color: var(--smoke);
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+}
+
+.device-hook code {
+  color: var(--ember);
+}
+
+.pwa-actions {
+  background: var(--char-1);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.pwa-actions h3 {
+  color: var(--bone);
+  margin: 0 0 0.75rem;
+}
+
+.pwa-actions p,
+.pwa-actions ol {
+  color: var(--ash);
+  line-height: 1.55;
+}
+
+.pwa-actions ol {
+  margin-bottom: 0;
+  padding-left: 1.4rem;
+}
+
+.pwa-actions .pwa-error {
+  color: var(--alert);
+}
+
+footer {
+  border-top: 1px solid var(--char-line);
+  color: var(--smoke);
+  font-size: 0.85rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+}
+
+footer code {
+  color: var(--ember);
+}
+
+footer a {
+  color: var(--ember);
+  margin-right: 1.2rem;
+}
+
+.topbar,
+.board,
+.panel,
+footer {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+.board {
+  animation-delay: 0.08s;
+}
+
+.panel:nth-of-type(1) {
+  animation-delay: 0.16s;
+}
+
+.panel:nth-of-type(2) {
+  animation-delay: 0.22s;
+}
+
+footer {
+  animation-delay: 0.28s;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 40rem) {
+  main {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+
+  .composer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

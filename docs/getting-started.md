@@ -11,7 +11,8 @@ deno task dev
 ```
 
 Open the URL printed by Astro. The starter contains a task list, an account panel when sync is
-available, and device/runtime diagnostics.
+available, and device/runtime diagnostics. A hosted instance of this same starter, restyled, runs at
+[demo.lofi.host](https://demo.lofi.host); it is generated and deployed from each release tag.
 
 Verify the local-first baseline before changing anything:
 

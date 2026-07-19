@@ -1,0 +1,40 @@
+---
+// Author-owned application shell.
+export interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+const deploymentBase = import.meta.env.BASE_URL;
+const publicAsset = (name: string) => `${deploymentBase}${name}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="theme-color" content="#0c0908" />
+    <link rel="icon" href={publicAsset("favicon.svg")} type="image/svg+xml" />
+    <link rel="apple-touch-icon" href={publicAsset("apple-touch-icon.png")} />
+    <link rel="manifest" href={publicAsset("manifest.webmanifest")} />
+    <link
+      rel="preload"
+      href={publicAsset("fonts/chakra-petch-700.woff2")}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <title>{title}</title>
+  </head>
+  <body>
+    <main><slot /></main>
+    <script>
+      import { bootLofi } from "@nzip/lofi";
+      // Importing app.ts registers defineLofiApp before the runtime boots.
+      import { app } from "../app.ts";
+      void app;
+      void bootLofi();
+    </script>
+  </body>
+</html>

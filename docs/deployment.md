@@ -164,6 +164,10 @@ The app is the only thing that needs hosting: sync is optional infrastructure th
 a managed Jazz app or at [a self-hosted sync node](/node) they run themselves — the deployment does
 not change either way.
 
+A worked example runs at [demo.lofi.host](https://demo.lofi.host): the starter app, generated from
+the published package by the release workflow and uploaded as `dist/` to Cloudflare Pages, with
+`dist/_headers.example` promoted to `_headers` so the policy below ships as a real response header.
+
 ### Content-Security-Policy
 
 Every built page carries a strict Content-Security-Policy in a `<meta>` tag: scripts and styles are

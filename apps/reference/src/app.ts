@@ -23,6 +23,12 @@ export const app = defineLofiApp({
   // Pin this to the canonical production hostname before users create recoverable
   // passkeys. Omit it in local development to use the current hostname.
   // passkey: { rpId: "app.example.com" },
+  //
+  // Update-lifecycle preferences are optional; this app runs the defaults on
+  // purpose: when local data is newer than the cached shell, the framework's
+  // minimal read-only banner renders and stale tabs reload after an update.
+  // To render your own banner from useSchemaCompat and keep stale tabs open:
+  // pwa: { updateBanner: "none", staleTabs: "prompt" },
   sync: { adapter: "jazz" as const },
   // Source/home link shown in the starter footer. Point it at your own repo.
   repositoryUrl: "https://github.com/FelineStateMachine/lofi",

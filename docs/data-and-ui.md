@@ -140,9 +140,10 @@ The `label` is the column's cryptographic identity, conventionally `"table.colum
 ciphertext to the column (a value replayed into another column refuses to open) and changing it
 later makes existing values unreadable — treat it like a column name. Constraints to design around:
 
-- **Account-private only, for now.** The key derives from the account secret, so every device
-  holding the account decrypts and nobody else does — including other members of a shared group. A
-  row read under a different account throws `EncryptedColumnError` instead of returning garbage.
+- **Account-private.** The key derives from the account secret, so every device holding the account
+  decrypts and nobody else does — including other members of a shared group. A row read under a
+  different account throws `EncryptedColumnError` instead of returning garbage. Fields the whole
+  group should read use [shared encrypted columns](#shared-encrypted-columns) instead.
 - **Not filterable, not policy-visible — enforced.** A `where` on an encrypted column is a compile
   error (the column type is excluded from filter positions), and a permission policy referencing one
   fails configuration with `AccessError` — the server cannot evaluate what it cannot read. Gate on
@@ -181,6 +182,68 @@ in an encrypted json column to seal them. A column already sealed with an explic
 keeps its own label. Optionals, defaults, non-lww merge strategies, and transforms on sealed columns
 are configuration errors: each would either leak plaintext below the seal boundary or silently
 discard author intent.
+
+### Shared encrypted columns
+
+`s.sharedEncryptedText(label, options)` and `s.sharedEncryptedJson<T>(label, options)` seal a field
+under a **group field key**: every member of the group holding the key reads it; the store operator
+never does. The key travels as ordinary synced data — wrapped to each member's public key, published
+in a key directory, delivered through the group's wrapped-key table — so the server relays key
+material it cannot open, and substituting keys is a detected active attack rather than silent
+reading.
+
+```ts
+const schema = {
+  workspaces: s.table({ name: s.string() }),
+  workspaceMembers: groupMembershipTable("workspaces"),
+  workspaceFieldKeys: sharedFieldKeyTable("workspaces"),
+  keyDirectory: sharedFieldDirectoryTable(),
+  docs: s.table({
+    workspaceId: s.ref("workspaces"),
+    title: s.string(),
+    body: s.sharedEncryptedText("docs.body", {
+      group: "workspaces",
+      groupIdColumn: "workspaceId",
+      keys: "workspaceFieldKeys",
+      directory: "keyDirectory",
+    }),
+  }),
+};
+```
+
+The two helper tables come from `@nzip/lofi/access` and get their policies from
+`sharedFieldAccess({ directory })` and the `fieldKeys` option of `groupAccess`; group operations
+created with `fieldKeys`/`directory` tables then mint, deliver, and rotate keys automatically —
+creation bootstraps the first key, an arriving member receives every held generation, and removal
+rotates to a generation the removed member never receives.
+
+**Reads are state-valued.** A shared column's row value is a `SharedFieldValue<T>`:
+`{ state: "ready", value }` once the key is installed, `{ state: "pending-key" }` while the wrap is
+still in flight — the normal condition of a freshly added member — and `{ state: "corrupt" }` when
+authentication fails. Render the pending state; never treat it as an error. Live queries
+re-materialize automatically when the key arrives. `sharedFieldReady` narrows, and
+`unwrapSharedField` throws for callers who prefer exceptions.
+
+**Writes go through lofi's write path** — the store or a declared verb — which resolves the row's
+group from `groupIdColumn` and seals under the newest key this device holds before anything is
+journaled. A write that bypasses the framework fails closed rather than storing plaintext. An update
+that patches a shared column must include the group column in the verb path (the synchronous journal
+cannot fetch the row); the store path fetches it automatically.
+
+Constraints to design around, in addition to everything that applies to encrypted columns:
+
+- **Removal is lazy rekey.** A removed member never receives keys minted after their removal, so
+  content written afterwards is sealed to them — but generations they already held keep opening,
+  because they already possess that key material and re-encrypting CRDT history is unsound under
+  concurrent merges. Removal protects future content.
+- **Key delivery is asynchronous.** A new member reads `pending-key` until a device holding the key
+  comes online and wraps for them; `reconcileSharedFieldKeys` on the group operations repairs
+  missing wraps. Members who have not yet published a directory entry cannot receive keys.
+- **Substitution is detected, not prevented.** Peer keys pin on first sight per device, and a
+  sharing identity minted by a shared-field-capable app carries the account's key fingerprint, so
+  members added person-to-person are pinned with no server first-sight window. A key that later
+  disagrees surfaces in `diagnostics.sharedFieldAlerts` and its wraps are refused until the user
+  explicitly re-trusts.
 
 ## Bind an exact typed query
 

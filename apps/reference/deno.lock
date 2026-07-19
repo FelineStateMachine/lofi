@@ -3122,7 +3122,7 @@
       "npm:vite@8.0.1"
     ],
     "links": {
-      "jsr:@nzip/lofi@0.5.0": {
+      "jsr:@nzip/lofi@0.6.0": {
         "dependencies": [
           "npm:@astrojs/check@0.9.9",
           "npm:@astrojs/preact@6.0.1",

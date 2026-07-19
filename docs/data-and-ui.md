@@ -113,19 +113,28 @@ CoValue types (`co.map`, CoText, FileStream). All three are verified with two sy
 
 ### Encrypted columns
 
-`s.encryptedText(label)` and `s.encryptedJson<T>(label)` seal a field on the client before it enters
-Jazz: the sync store holds versioned ciphertext (XChaCha20-Poly1305, a per-column subkey derived
-from the account secret), so the store operator sees that the column exists — sizes, writers,
-timestamps — but never its content. The runtime installs the key at boot; touching an encrypted
-column before then fails closed rather than writing plaintext.
+`s.encryptedText(label)`, `s.encryptedJson<T>(label)`, `s.encryptedNumber(label)`, and
+`s.encryptedDate(label)` seal a field on the client before it enters Jazz: the sync store holds
+versioned ciphertext (XChaCha20-Poly1305, a per-column subkey derived from the account secret), so
+the store operator sees that the column exists — writers, timestamps, size classes — but never its
+content. Plaintext is padded to bucketed sizes before sealing, so stored lengths reveal which size
+class a value falls in rather than its exact length; every short scalar shares one class. The
+runtime installs the key at boot; touching an encrypted column before then fails closed rather than
+writing plaintext.
 
 ```ts
 notes: s.table({
   title: s.string(),
   body: s.encryptedText("notes.body"),
   attachments: s.encryptedJson<{ name: string; size: number }[]>("notes.attachments"),
+  balance: s.encryptedNumber("notes.balance"),
+  reviewedAt: s.encryptedDate("notes.reviewedAt"),
 }),
 ```
+
+Sealed numbers view as `number` and sealed dates as `Date`, matching their plaintext counterparts;
+because the stored representation is text, sealed numbers are not subject to the 32-bit limit of
+plain integer columns. Non-finite numbers and invalid dates are rejected at write time.
 
 The `label` is the column's cryptographic identity, conventionally `"table.column"`: it binds the
 ciphertext to the column (a value replayed into another column refuses to open) and changing it

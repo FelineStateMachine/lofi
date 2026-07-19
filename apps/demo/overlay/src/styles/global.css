@@ -1,0 +1,624 @@
+/*
+ * The demo's design language deliberately opposes the starter's calm
+ * mint-on-forest-green: charred blacks, molten gradient accents, smoke
+ * greys, sharp corners, condensed display headings over a monospace body.
+ * The WebGL backdrop (.magma-backdrop) renders behind everything; the body
+ * gradient keeps the page intentional when WebGL is unavailable.
+ */
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("/fonts/chakra-petch-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --char-0: #0c0908;
+  --char-1: #170f0a;
+  --char-2: #221510;
+  --char-line: #3a231a;
+  --ash: #cfbfb6;
+  --bone: #f6ebe2;
+  --smoke: #9c8a80;
+  --crimson: #b3122e;
+  --magma: #ff3d00;
+  --ember: #ff9d45;
+  --heat: linear-gradient(120deg, #b3122e, #ff3d00 55%, #ff9d45);
+  --focus: #ffcf99;
+  --alert: #ff8a75;
+  color: var(--ash);
+  background: var(--char-0);
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--magma);
+  color: var(--char-0);
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(120% 55% at 50% 110%, rgba(255, 61, 0, 0.16), transparent 62%),
+    radial-gradient(70% 40% at 85% 0%, rgba(179, 18, 46, 0.1), transparent 70%),
+    var(--char-0);
+  min-height: 100vh;
+}
+
+.magma-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 78rem;
+  min-height: 100vh;
+  padding: 4rem 1.5rem;
+  position: relative;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.hero {
+  max-width: 58rem;
+}
+
+.eyebrow {
+  color: var(--ember);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.badge {
+  border: 1px solid var(--char-line);
+  background: var(--char-1);
+  color: var(--ember);
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+}
+
+h1 {
+  font-size: clamp(2.6rem, 7.5vw, 6.5rem);
+  letter-spacing: -0.015em;
+  line-height: 0.92;
+  margin: 0.7rem 0 1.5rem;
+  background: var(--heat);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 28px rgba(255, 61, 0, 0.28));
+}
+
+.hero > p {
+  color: var(--ash);
+  font-size: 1.05rem;
+  max-width: 48rem;
+}
+
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+}
+
+.hero-links a {
+  border: 1px solid var(--char-line);
+  color: var(--bone);
+  display: inline-block;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 0.55rem 0.9rem;
+  text-decoration: none;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+
+.hero-links a:hover {
+  border-color: var(--magma);
+  box-shadow: 0 0 18px rgba(255, 61, 0, 0.35);
+}
+
+.hero-links a.hot {
+  background: var(--heat);
+  border: 0;
+  color: #1a0703;
+}
+
+.demo-cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  margin-top: 3rem;
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(255, 61, 0, 0.06), transparent 34%), var(--char-1);
+  border: 1px solid var(--char-line);
+  padding: 1.2rem 1.2rem 1.4rem;
+  position: relative;
+}
+
+.card::before {
+  background: var(--heat);
+  content: "";
+  height: 2px;
+  left: -1px;
+  position: absolute;
+  right: -1px;
+  top: -1px;
+}
+
+.card h3 {
+  color: var(--bone);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.6rem;
+}
+
+.card p {
+  color: var(--ash);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.card a {
+  color: var(--ember);
+}
+
+.card .card-note {
+  color: var(--smoke);
+  font-size: 0.8rem;
+  margin-top: 0.7rem;
+}
+
+.island {
+  background: linear-gradient(180deg, rgba(255, 61, 0, 0.05), transparent 30%), var(--char-2);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  margin-top: 3rem;
+  min-height: 24rem;
+  padding: 1.4rem;
+  position: relative;
+}
+
+.island::before {
+  background: var(--heat);
+  content: "";
+  height: 2px;
+  left: -1px;
+  position: absolute;
+  right: -1px;
+  top: -1px;
+}
+
+.island h2 {
+  font-size: 1.4rem;
+  letter-spacing: 0.03em;
+  margin: 0.25rem 0 1.5rem;
+  color: var(--bone);
+}
+
+.device-status {
+  background: var(--char-1);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  margin-top: 1rem;
+  padding: 1.4rem;
+}
+
+.device-status h2 {
+  margin: 0.25rem 0 0.5rem;
+  color: var(--bone);
+}
+
+.device-status dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.device-status dl div {
+  background: var(--char-0);
+  border-left: 2px solid var(--char-line);
+  padding: 0.75rem;
+}
+
+.device-status dt {
+  color: var(--ember);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.device-status dd {
+  margin: 0.25rem 0 0;
+}
+
+.device-category {
+  border-top: 1px solid var(--char-line);
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+}
+
+.device-category h3 {
+  font-size: 1rem;
+  margin: 0 0 0.15rem;
+  color: var(--bone);
+}
+
+.runtime-recovery {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--magma);
+  border-radius: 2px;
+}
+
+.runtime-recovery h4,
+.runtime-recovery p {
+  margin-top: 0;
+}
+
+.device-hook {
+  color: var(--smoke);
+  font-size: 0.8rem;
+  margin: 0 0 0.75rem;
+}
+
+.device-hook code {
+  color: var(--ember);
+}
+
+.pwa-actions {
+  background: var(--char-0);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.pwa-actions h3 {
+  margin: 0 0 0.75rem;
+  color: var(--bone);
+}
+
+.pwa-actions p,
+.pwa-actions ol {
+  color: var(--ash);
+  line-height: 1.55;
+}
+
+.pwa-actions ol {
+  margin-bottom: 0;
+  padding-left: 1.4rem;
+}
+
+.pwa-actions .pwa-error {
+  color: var(--alert);
+}
+
+label {
+  display: block;
+  font-weight: 750;
+  margin-bottom: 0.5rem;
+  color: var(--bone);
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+button {
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+}
+
+input[type="text"],
+input:not([type]) {
+  background: #17100c;
+  caret-color: var(--ember);
+  color: var(--bone);
+  flex: 1;
+  min-width: 0;
+}
+
+button {
+  background: var(--heat);
+  border: 0;
+  color: #1a0703;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+button:hover {
+  box-shadow: 0 0 20px rgba(255, 61, 0, 0.4);
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.state {
+  color: var(--smoke);
+  min-height: 1.5rem;
+}
+
+.task-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.task-summary .state {
+  margin: 0;
+}
+
+.task-extinguish {
+  background: transparent;
+  border: 1px solid var(--magma);
+  color: var(--ember);
+  font-size: 0.8rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.task-extinguish:hover {
+  background: rgba(255, 61, 0, 0.12);
+}
+
+ul {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  padding: 0;
+}
+
+.task {
+  align-items: center;
+  background: var(--char-1);
+  border-left: 3px solid var(--magma);
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  box-shadow: inset 0 0 18px rgba(255, 61, 0, 0.05);
+}
+
+.task-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  margin: 0;
+  min-width: 0;
+  color: var(--bone);
+  font-weight: 400;
+}
+
+.task-toggle input {
+  accent-color: var(--magma);
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.task-toggle span {
+  overflow-wrap: anywhere;
+}
+
+.task-complete {
+  border-left-color: var(--char-line);
+  box-shadow: none;
+  opacity: 0.65;
+}
+
+.task-complete .task-toggle span {
+  color: var(--smoke);
+  text-decoration: line-through;
+}
+
+.account {
+  background: var(--char-1);
+  border: 1px solid var(--char-line);
+  border-radius: 2px;
+  color: var(--ash);
+  line-height: 1.6;
+  margin-top: 3rem;
+  padding: 1.4rem;
+  position: relative;
+}
+
+.account::before {
+  background: var(--heat);
+  content: "";
+  height: 2px;
+  left: -1px;
+  position: absolute;
+  right: -1px;
+  top: -1px;
+}
+
+.account-out {
+  border-color: var(--char-line);
+}
+
+.account h2 {
+  margin: 0.25rem 0 1rem;
+  color: var(--bone);
+}
+
+.account-field {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.account-field input {
+  max-width: 24rem;
+  width: 100%;
+}
+
+.account-field .account-note {
+  margin: 0.35rem 0 0;
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.account-secondary {
+  background: transparent;
+  border: 1px solid var(--char-line);
+  color: var(--bone);
+}
+
+.account button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.account-error {
+  color: var(--alert);
+}
+
+.account-note {
+  color: var(--smoke);
+  font-size: 0.9rem;
+}
+
+.account dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0.5rem 0 0;
+}
+
+.account dl div {
+  background: var(--char-0);
+  border-left: 2px solid var(--char-line);
+  padding: 0.75rem;
+}
+
+.account dt {
+  color: var(--ember);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.account-caps dd {
+  color: var(--bone);
+}
+
+footer {
+  color: var(--smoke);
+  margin-top: 2rem;
+}
+
+footer a {
+  color: var(--ember);
+}
+
+.hero,
+.demo-cards .card,
+.island,
+.account,
+.device-status,
+footer {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+.demo-cards .card:nth-child(1) {
+  animation-delay: 0.08s;
+}
+
+.demo-cards .card:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.demo-cards .card:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.island {
+  animation-delay: 0.28s;
+}
+
+.account {
+  animation-delay: 0.34s;
+}
+
+.device-status {
+  animation-delay: 0.4s;
+}
+
+footer {
+  animation-delay: 0.46s;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 40rem) {
+  main {
+    padding: 2.5rem 1rem;
+  }
+
+  .composer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

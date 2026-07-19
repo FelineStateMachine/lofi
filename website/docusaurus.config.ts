@@ -278,6 +278,7 @@ const config: Config = {
           items: [
             { label: "docs", to: "/docs" },
             { label: "api", to: "/api" },
+            { label: "demo", href: "https://demo.lofi.host" },
             {
               label: "github",
               href: "https://github.com/FelineStateMachine/lofi",
@@ -311,6 +312,7 @@ const config: Config = {
           items: [
             { label: "docs", to: "/docs" },
             { label: "api", to: "/api" },
+            { label: "demo", href: "https://demo.lofi.host" },
             {
               label: "github",
               href: "https://github.com/FelineStateMachine/lofi",

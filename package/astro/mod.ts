@@ -42,6 +42,7 @@ export const runtimeFiles = [
   "mutation-taxonomy.ts",
   "namespace-state.ts",
   "passkey-recovery.ts",
+  "pop.ts",
   "probe.ts",
   "provision.ts",
   "pwa.ts",

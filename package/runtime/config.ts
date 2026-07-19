@@ -19,6 +19,8 @@ export type ActiveSink = {
   appId: string;
   serverUrl: string;
   label?: string;
+  /** Present when the enrolled ticket is possession-bound to this device. */
+  pop?: { ticketId: string };
 };
 
 /**
@@ -34,6 +36,7 @@ export function activeSink(): ActiveSink | null {
       appId: declared.appId,
       serverUrl: declared.serverUrl,
       ...(declared.label ? { label: declared.label } : {}),
+      ...(declared.pop ? { pop: declared.pop } : {}),
     };
   }
   return configuredServerUrl
@@ -95,6 +98,7 @@ export function databaseConfig(
   connect = mode === "managed" && syncing(),
   onIncompatibleBrowserBrokerConfiguration: IncompatibleBrowserBrokerConfigurationHandler =
     () => {},
+  serverUrlOverride?: string,
 ): DbConfig {
   const app = getLofiApp();
   const sink = activeSink();
@@ -106,7 +110,10 @@ export function databaseConfig(
     appId: connectionAppId,
     // The same local-first secret opens the same account whether or not a server
     // is attached, so electing to sync later preserves all existing data.
-    ...(connect && sink ? { serverUrl: sink.serverUrl } : {}),
+    // A possession-bound sink connects through its token URL, minted by the
+    // proof-of-possession exchange each boot; everything else uses the sink
+    // URL verbatim.
+    ...(connect && sink ? { serverUrl: serverUrlOverride ?? sink.serverUrl } : {}),
     secret,
     driver: {
       type: "persistent",

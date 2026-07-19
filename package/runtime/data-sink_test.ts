@@ -375,6 +375,13 @@ test(
       managedDriver.dbName === `lofi-test-${ticketAppId}-ns-managed`,
       `managed dbName was ${managedDriver.dbName} — each store gets its own namespace`,
     );
+
+    const tokenUrl = "https://node.example:4802/c/token";
+    const overridden = databaseConfig("secret", "ns", "managed", true, () => {}, tokenUrl);
+    assert(
+      (overridden as { serverUrl?: string }).serverUrl === tokenUrl,
+      "a possession-bound boot must connect through the exchange's token URL",
+    );
   }),
 );
 
@@ -473,3 +480,57 @@ test("sync-scoped and malformed tickets never touch the exchange", async () => {
   }
   assert(calls === 0, "the exchange endpoint must not be called for non-provision tickets");
 });
+
+test("offering a device key binds the derived ticket; old nodes fall back to bearer", async () => {
+  const bodies: string[] = [];
+  const bindingFetcher: typeof fetch = (_input, init) => {
+    bodies.push(String(init?.body));
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ v: 1, id: "bound-id", ticket: derivedTicket, pop: true }),
+        { status: 200 },
+      ),
+    );
+  };
+  const deviceKey = { alg: "ES256" as const, spki: "test-spki" };
+  const bound = await splitTicketForEnrollment(provisionTicket, bindingFetcher, deviceKey);
+  assert(
+    bound.pop !== null && bound.pop.ticketId === "bound-id",
+    "a pop:true response must record the binding with its ticket id",
+  );
+  assert(
+    bodies.length === 1 && JSON.parse(bodies[0]).devicePublicKey.spki === "test-spki",
+    "the derive request must carry the offered device key",
+  );
+
+  // A node predating the field answers without `pop`: bearer fallback.
+  const legacyFetcher: typeof fetch = () =>
+    Promise.resolve(
+      new Response(JSON.stringify({ v: 1, id: "abc", ticket: derivedTicket }), { status: 200 }),
+    );
+  const legacy = await splitTicketForEnrollment(provisionTicket, legacyFetcher, deviceKey);
+  assert(
+    legacy.pop === null && legacy.sinkTicket === derivedTicket,
+    "a keyless response must enroll the derived ticket as pure bearer",
+  );
+});
+
+test(
+  "a possession binding declared with the ticket survives the sealed round-trip",
+  withCleanState(async () => {
+    await declareSinkFromTicket(derivedTicket, undefined, { ticketId: "bound-id" });
+    assert(
+      readDeclaredSink()?.pop?.ticketId === "bound-id",
+      "the declaration must carry the binding",
+    );
+    assert(await restoreDeclaredSink() === "restored", "the sealed record must restore");
+    assert(
+      readDeclaredSink()?.pop?.ticketId === "bound-id",
+      "the restored declaration must keep the binding",
+    );
+    assert(
+      activeSink()?.pop?.ticketId === "bound-id",
+      "the active sink must expose the binding so boot runs the exchange",
+    );
+  }),
+);

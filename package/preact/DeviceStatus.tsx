@@ -139,6 +139,13 @@ export default function DeviceStatus(): VNode {
         {runtimeDiagnostics.storeStatus.state === "no_schema" && (
           <p>{runtimeDiagnostics.storeStatus.message}</p>
         )}
+        {runtimeDiagnostics.storeStatus.state === "ticket_rejected" && (
+          <p>
+            The node no longer accepts this device's credential — the ticket was revoked, the node
+            was reset, or this device's key is gone. Clear the sync location and enroll a fresh
+            ticket; local data is intact and pushes up on re-enrollment.
+          </p>
+        )}
         {!synced && (
           <p>
             Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in <code>.env</code>{" "}

@@ -20,6 +20,7 @@
  * @module
  */
 
+import type { DevicePublicKey } from "./pop.ts";
 import {
   defaultDeviceKeyStore,
   deviceKeyProtector,
@@ -79,6 +80,12 @@ export type DataSinkDeclaration = {
    * `lofisync1.` app ticket. Unused by the browser runtime today.
    */
   node?: string;
+  /**
+   * Present when the derived ticket was bound to this device's keypair at
+   * enrollment: connecting then requires the proof-of-possession exchange,
+   * and the ticket id is what the device signs over.
+   */
+  pop?: { ticketId: string };
 };
 
 /** Raised when a sink declaration or sync ticket is rejected. */
@@ -119,12 +126,16 @@ function validateDeclaration(value: unknown): DataSinkDeclaration | null {
   ) {
     return null;
   }
+  const pop = (sink as { pop?: { ticketId?: unknown } }).pop;
   return {
     appId: sink.appId,
     serverUrl: sink.serverUrl,
     ...(sink.scope === "provision" || sink.scope === "sync" ? { scope: sink.scope } : {}),
     ...(typeof sink.label === "string" ? { label: sink.label } : {}),
     ...(typeof sink.node === "string" ? { node: sink.node } : {}),
+    ...(pop && typeof pop.ticketId === "string" && pop.ticketId
+      ? { pop: { ticketId: pop.ticketId } }
+      : {}),
   };
 }
 
@@ -345,14 +356,17 @@ export function parseSyncTicket(text: string): SyncTicket | null {
 }
 
 /**
- * Converts a ticket into a sink declaration and records it. Throws
- * {@link DataSinkError} with `invalid-ticket` for malformed tickets and the
- * declaration errors otherwise. Electing sync afterwards (see
- * `enrollSyncTicket` in `session.ts`) is what actually connects.
+ * Converts a ticket into a sink declaration and records it. A possession
+ * binding from the scope-down exchange (see {@link splitTicketForEnrollment})
+ * is carried into the declaration when present. Throws {@link DataSinkError}
+ * with `invalid-ticket` for malformed tickets and the declaration errors
+ * otherwise. Electing sync afterwards (see `enrollSyncTicket` in
+ * `session.ts`) is what actually connects.
  */
 export async function declareSinkFromTicket(
   text: string,
   keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
+  pop?: { ticketId: string } | null,
 ): Promise<DataSinkDeclaration> {
   const ticket = parseSyncTicket(text);
   if (!ticket) {
@@ -364,6 +378,7 @@ export async function declareSinkFromTicket(
     ...(ticket.scope ? { scope: ticket.scope } : {}),
     ...(ticket.label ? { label: ticket.label } : {}),
     ...(ticket.node ? { node: ticket.node } : {}),
+    ...(pop ? { pop } : {}),
   }, keyStore);
 }
 
@@ -382,6 +397,8 @@ export type TicketSplit = {
   sinkTicket: string;
   /** The provision bearer URL when the exchange split it off, else `null`. */
   provisionUrl: string | null;
+  /** The possession binding when the node accepted a device key, else `null`. */
+  pop: { ticketId: string } | null;
 };
 
 /**
@@ -397,19 +414,26 @@ export type TicketSplit = {
 export async function splitTicketForEnrollment(
   ticket: string,
   fetcher: typeof fetch = fetch,
+  devicePublicKey?: DevicePublicKey,
 ): Promise<TicketSplit> {
   const parsed = parseSyncTicket(ticket);
-  if (parsed?.scope !== "provision") return { sinkTicket: ticket, provisionUrl: null };
+  if (parsed?.scope !== "provision") return { sinkTicket: ticket, provisionUrl: null, pop: null };
   let derived: string | null = null;
+  let derivedId: string | null = null;
+  let bound = false;
   try {
     const response = await fetcher(`${parsed.url}/derive-sync-ticket`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
+      // Nodes predating the device-key field ignore it and answer without
+      // `pop`; enrollment then falls back to bearer custody.
+      body: JSON.stringify(devicePublicKey ? { devicePublicKey } : {}),
     });
     if (response.ok) {
-      const body = await response.json() as { ticket?: unknown };
+      const body = await response.json() as { ticket?: unknown; id?: unknown; pop?: unknown };
       if (typeof body.ticket === "string") derived = body.ticket;
+      if (typeof body.id === "string") derivedId = body.id;
+      bound = body.pop === true;
     }
   } catch {
     // Fall back to the ticket as pasted.
@@ -419,7 +443,11 @@ export async function splitTicketForEnrollment(
     derived !== null && derivedParsed !== null && derivedParsed.appId === parsed.appId &&
     (derivedParsed.scope ?? "sync") === "sync"
   ) {
-    return { sinkTicket: derived, provisionUrl: parsed.url };
+    return {
+      sinkTicket: derived,
+      provisionUrl: parsed.url,
+      pop: bound && derivedId !== null ? { ticketId: derivedId } : null,
+    };
   }
-  return { sinkTicket: ticket, provisionUrl: null };
+  return { sinkTicket: ticket, provisionUrl: null, pop: null };
 }

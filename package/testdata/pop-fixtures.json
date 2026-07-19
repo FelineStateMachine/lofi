@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "note": "Test-only extractable P-256 keypair for cross-repo proof-of-possession conformance. Never use outside tests.",
+  "alg": "ES256",
+  "privateJwk": {
+    "kty": "EC",
+    "alg": "ES256",
+    "crv": "P-256",
+    "d": "PzjVU88vqolSBytZmvr7J-NsmiXTGFWGmTZDduPZ9Mg",
+    "x": "ntqUm63M96Ql075mLIuJLyEp4XW5TQ2FSv8OIsOWD2A",
+    "y": "IkLhIUQUOJhAhdMe353MnNZrKipkfWa8Bo0LNW4NQs4",
+    "key_ops": [
+      "sign"
+    ],
+    "ext": true
+  },
+  "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEntqUm63M96Ql075mLIuJLyEp4XW5TQ2FSv8OIsOWD2AiQuEhRBQ4mECF0x7fncyc1msqKmR9ZrwGjQs1bg1Czg",
+  "appId": "pop-fixture-app",
+  "ticketId": "abcdef123456",
+  "nonce": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+  "message": "lofisync-pop-v1\\npop-fixture-app\\nabcdef123456\\nAwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+  "signature": "RlRq_HLxLrDCDfSWVzX898RtTZVH5KQkEOFjd7OBnOsXBShAzfkft-d7HwM9h91QjvJ9UNbXw5FFegZUNlKzdA"
+}

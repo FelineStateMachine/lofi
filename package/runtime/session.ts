@@ -27,7 +27,8 @@ import {
   syncElected,
   syncing,
 } from "./config.ts";
-import { declareSinkFromTicket, splitTicketForEnrollment } from "./data-sink.ts";
+import { declareSinkFromTicket, parseSyncTicket, splitTicketForEnrollment } from "./data-sink.ts";
+import { type DevicePublicKey, exportDevicePublicKey, getOrCreatePopKeyPair } from "./pop.ts";
 import { holdProvisionCapability } from "./provision.ts";
 import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
 import { authenticateDeviceCredential, AuthError, enrollDeviceCredential } from "./auth.ts";
@@ -315,15 +316,30 @@ export type EnrollSyncTicketOptions = {
  * scope-down exchange mints a derived sync ticket, that becomes the declared
  * sink, and the provision capability is only *held* in memory (see
  * `provision.ts` — sealing it behind a passkey is a separate, explicit
- * ceremony). Against a node without the exchange, the ticket enrolls as
- * pasted, exactly as before.
+ * ceremony). The exchange is offered this device's public key (see `pop.ts`),
+ * and when the node binds the derived ticket to it, connecting thereafter
+ * requires the proof-of-possession exchange — the enrolled credential stops
+ * being a pure bearer string. Against a node without the exchange, the ticket
+ * enrolls as pasted, exactly as before.
  */
 export async function enrollSyncTicket(
   ticket: string,
   options: EnrollSyncTicketOptions = {},
 ): Promise<Session> {
-  const split = await splitTicketForEnrollment(ticket, options.fetcher);
-  await declareSinkFromTicket(split.sinkTicket);
+  // Only a provision-scoped ticket reaches the scope-down exchange, so only
+  // then is there a binding to offer.
+  let devicePublicKey: DevicePublicKey | undefined;
+  const parsed = parseSyncTicket(ticket);
+  if (parsed?.scope === "provision") {
+    try {
+      devicePublicKey = await exportDevicePublicKey(await getOrCreatePopKeyPair(parsed.appId));
+    } catch {
+      // No usable key custody in this context; the exchange still derives a
+      // ticket, held as a bearer credential exactly as before.
+    }
+  }
+  const split = await splitTicketForEnrollment(ticket, options.fetcher, devicePublicKey);
+  await declareSinkFromTicket(split.sinkTicket, undefined, split.pop);
   if (split.provisionUrl !== null) holdProvisionCapability(split.provisionUrl);
   return await enableSyncBackup();
 }

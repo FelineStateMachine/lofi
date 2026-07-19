@@ -223,3 +223,13 @@ export {
   trustPeerKey,
   verifyAndPinFingerprint,
 } from "./shared-field-keys.ts";
+export {
+  completePopExchange,
+  type DevicePublicKey,
+  exportDevicePublicKey,
+  getOrCreatePopKeyPair,
+  memoryPopKeyStore,
+  type PopKeyStore,
+  popMessage,
+  signPopMessage,
+} from "./pop.ts";

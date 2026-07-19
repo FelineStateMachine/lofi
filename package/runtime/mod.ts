@@ -166,6 +166,7 @@ export {
   isDataSinkError,
   parseSyncTicket,
   readDeclaredSink,
+  readSinkRestoreOutcome,
   restoreDeclaredSink,
   type SinkRestoreOutcome,
   splitTicketForEnrollment,

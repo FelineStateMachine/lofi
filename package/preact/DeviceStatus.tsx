@@ -14,6 +14,7 @@ import { describeSchemaCompat } from "../runtime/schema-compat.ts";
 import { describeStorageFork, dismissStorageFork } from "../runtime/storage-fork.ts";
 import { useStorageFork } from "./use-storage-fork.ts";
 import { readSession, type Session } from "../runtime/session.ts";
+import { readSinkRestoreOutcome } from "../runtime/data-sink.ts";
 import { describeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
 
@@ -71,10 +72,13 @@ export default function DeviceStatus(): VNode {
   if (!report) return <p class="device-status">Checking device capabilities…</p>;
 
   const synced = Boolean(session?.syncAvailable);
+  const sinkUnopenable = !session?.sink && readSinkRestoreOutcome() === "unopenable";
   const sinkState = session?.sink
     ? session.sink.source === "declared"
       ? `declared — ${session.sink.label ?? session.sink.host}`
       : "configured (build default)"
+    : sinkUnopenable
+    ? "declared — record unopenable on this device"
     : "not configured";
   const syncState = session?.syncing
     ? "syncing to your account"
@@ -144,6 +148,14 @@ export default function DeviceStatus(): VNode {
             The node no longer accepts this device's credential — the ticket was revoked, the node
             was reset, or this device's key is gone. Clear the sync location and enroll a fresh
             ticket; local data is intact and pushes up on re-enrollment.
+          </p>
+        )}
+        {sinkUnopenable && (
+          <p>
+            A sync location is declared on this device, but its sealed record cannot be opened — the
+            device key that sealed it is gone, usually a cleared browser store. The device runs
+            local-only until re-enrollment. Clear the sync location and enroll a fresh ticket; local
+            data is intact and pushes up.
           </p>
         )}
         {!synced && (

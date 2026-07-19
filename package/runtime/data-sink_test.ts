@@ -11,6 +11,7 @@ import {
   isDataSinkError,
   parseSyncTicket,
   readDeclaredSink,
+  readSinkRestoreOutcome,
   restoreDeclaredSink,
   splitTicketForEnrollment,
 } from "./data-sink.ts";
@@ -152,7 +153,25 @@ test(
     );
     assert(readDeclaredSink() === null, "an unopenable record must read as absent");
     assert(localStorage.getItem(sinkKey) === stored, "an unopenable record must be left intact");
+    assert(
+      readSinkRestoreOutcome() === "unopenable",
+      "status surfaces must be able to distinguish unopenable from no sink at all",
+    );
     assert(await restoreDeclaredSink() === "restored", "the right key must still open it");
+    assert(readSinkRestoreOutcome() === "restored", "the reader must track the latest restore");
+    await restoreDeclaredSink(memoryDeviceKeyStore());
+    clearDeclaredSink();
+    assert(
+      readSinkRestoreOutcome() === "none",
+      "clearing the sink must retire the unopenable outcome — re-enrollment starts clean",
+    );
+    await declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
+    await restoreDeclaredSink(memoryDeviceKeyStore());
+    await declareDataSink({ appId: ticketAppId, serverUrl: "https://node.example:4802" });
+    assert(
+      readSinkRestoreOutcome() === "restored",
+      "a successful re-declaration must supersede an unopenable outcome",
+    );
   }),
 );
 

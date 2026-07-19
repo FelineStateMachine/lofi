@@ -66,3 +66,24 @@ export function groupMembershipTable<const Group extends string>(
     can_manage: s.boolean(),
   });
 }
+
+/**
+ * Creates the shared-field key directory table: one row per account holding
+ * its self-published x25519 public key. Declared once per app schema and
+ * given to `sharedFieldAccess`, which compiles the policy that makes it
+ * world-readable in the store with self-only writes. Public keys are public;
+ * integrity comes from fingerprint pinning, not from hiding the rows.
+ */
+export function sharedFieldDirectoryTable(): DefinedTable<{
+  user_id: StringColumn;
+  algo: StringColumn;
+  public_key: StringColumn;
+  fingerprint: StringColumn;
+}> {
+  return s.table({
+    user_id: s.string(),
+    algo: s.string(),
+    public_key: s.string(),
+    fingerprint: s.string(),
+  });
+}

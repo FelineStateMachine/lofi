@@ -87,12 +87,17 @@ Deno.test(
     assert(text.from(stored) === plaintext, "text round-trip mismatch");
     assert(text.to(plaintext) !== stored, "sealing must be randomized per write");
 
-    const json = transformOf(encryptedJson<{ n: number }>("t.meta"));
-    const value = { n: 42 };
+    const json = transformOf(encryptedJson<{ note: string }>("t.meta"));
+    // A long distinctive marker: short digit runs occur by chance in
+    // base64url ciphertext, so the no-plaintext probe needs entropy.
+    const value = { note: "distinctive-plaintext-marker" };
     const storedJson = json.to(value);
-    assert(!storedJson.includes("42"), "stored json contains plaintext content");
     assert(
-      (json.from(storedJson) as { n: number }).n === 42,
+      !storedJson.includes("distinctive-plaintext-marker"),
+      "stored json contains plaintext content",
+    );
+    assert(
+      (json.from(storedJson) as { note: string }).note === value.note,
       "json round-trip mismatch",
     );
   }),

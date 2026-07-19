@@ -9,6 +9,7 @@ import { assertSchemaWritable, schemaCompatGate, subscribeSchemaCompat } from ".
 import { resolveStoreStatus } from "./store-status.ts";
 import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
 import { setEncryptedColumnKey } from "../schema/encrypted.ts";
+import { installSharedFieldIdentityFromSecret } from "./shared-field-keys.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
   createTableStore,
@@ -255,6 +256,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     bootProgressTracker.mark("opening");
     const secret = await resolveAccountSecret();
     await installEncryptedColumnKey(secret);
+    await installSharedFieldIdentityFromSecret(secret);
     const namespace = await accountNamespace(secret);
     const db = await createDb(
       databaseConfig(

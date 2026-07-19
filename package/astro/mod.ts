@@ -50,6 +50,7 @@ export const runtimeFiles = [
   "runtime.ts",
   "schema-compat.ts",
   "session.ts",
+  "shared-field-keys.ts",
   "startup-recovery.ts",
   "storage-fork.ts",
   "store-status.ts",
@@ -83,6 +84,7 @@ export const schemaFiles = [
   "padding.ts",
   "private-table.ts",
   "shared-crypto.ts",
+  "shared-keyring.ts",
   "store.ts",
 ] as const;
 

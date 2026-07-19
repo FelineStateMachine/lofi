@@ -25,8 +25,17 @@ export type GroupAccessTemplate = {
   readonly resources: readonly AccessTable[];
   readonly groupId: string;
 };
+/** Shared-field key-directory policy template. */
+export type SharedFieldAccessTemplate = {
+  readonly kind: "shared-field-directory";
+  readonly directory: AccessTable;
+};
 /** Any built-in access policy template accepted by {@link defineAccessPolicies}. */
-export type AccessTemplate = PrivateAccessTemplate | SharedAccessTemplate | GroupAccessTemplate;
+export type AccessTemplate =
+  | PrivateAccessTemplate
+  | SharedAccessTemplate
+  | GroupAccessTemplate
+  | SharedFieldAccessTemplate;
 
 /**
  * Declares owner-only read and mutation policy for one resource table.
@@ -111,6 +120,22 @@ export function groupAccess(config: {
   };
 }
 
+/**
+ * Declares the shared-field key directory policy: every authenticated
+ * account reads the directory (public keys are public — integrity comes from
+ * fingerprint pinning), and each account writes only its own row, so the
+ * store cannot be used to impersonate a publisher through the policy layer.
+ *
+ * The directory table must be declared with the `sharedFieldDirectoryTable`
+ * helper (or match its column shape).
+ *
+ * @param config The key directory table.
+ * @returns A template for {@link defineAccessPolicies}.
+ */
+export function sharedFieldAccess(config: { directory: AccessTable }): SharedFieldAccessTemplate {
+  return { kind: "shared-field-directory", ...config };
+}
+
 type Column = {
   name?: string;
   references?: string;
@@ -151,6 +176,12 @@ function validateTemplate(template: AccessTemplate): void {
     requireColumn(template.grants, "resourceId", "Uuid", template.resource._table);
     requireColumn(template.grants, "user_id", "Text");
     requireColumn(template.grants, "can_edit", "Boolean");
+  }
+  if (template.kind === "shared-field-directory") {
+    requireColumn(template.directory, "user_id", "Text");
+    requireColumn(template.directory, "algo", "Text");
+    requireColumn(template.directory, "public_key", "Text");
+    requireColumn(template.directory, "fingerprint", "Text");
   }
   if (template.kind === "group") {
     requireColumn(template.members, "groupId", "Uuid", template.groups._table);
@@ -305,6 +336,14 @@ export function defineAccessPolicies<TApp extends object>(
         resource.allowRead.where({ $createdBy: session.user_id });
         resource.allowUpdate.where({ $createdBy: session.user_id });
         resource.allowDelete.where({ $createdBy: session.user_id });
+        continue;
+      }
+      if (template.kind === "shared-field-directory") {
+        const directory = policy[template.directory._table];
+        directory.allowRead.always();
+        directory.allowInsert.where({ user_id: session.user_id });
+        directory.allowUpdate.where({ user_id: session.user_id });
+        directory.allowDelete.where({ user_id: session.user_id });
         continue;
       }
       if (template.kind === "shared") {

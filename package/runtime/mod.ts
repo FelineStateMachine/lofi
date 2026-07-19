@@ -212,3 +212,14 @@ export {
   type JournalWriteStage,
 } from "./write-journal.ts";
 export type { EffectLogEntry } from "./diagnostics.ts";
+export {
+  clearFingerprintPins,
+  deriveSharedFieldIdentity,
+  type DirectoryPublication,
+  directoryPublicKey,
+  ensureDirectoryEntry,
+  installSharedFieldIdentityFromSecret,
+  pinnedFingerprint,
+  trustPeerKey,
+  verifyAndPinFingerprint,
+} from "./shared-field-keys.ts";

@@ -72,7 +72,10 @@ export default function NodeHome(): ReactNode {
                 <code className="inline-mono">lofisync1.</code>{" "}
                 string carries the store's identity and a bearer secret riding
                 the URL path, which is why the app needs zero changes to sync
-                somewhere new. Click a field.
+                somewhere new. And when enrollment binds a ticket to its
+                device, the string alone stops being enough: a key that never
+                leaves the device signs a fresh proof at every connect. Click a
+                field.
               </p>
             </div>
             <TicketAnatomy />
@@ -136,9 +139,12 @@ export default function NodeHome(): ReactNode {
                     reports itself unavailable instead of degrading silently.
                   </li>
                   <li>
-                    <b>Tickets are bearer credentials.</b>{" "}
-                    Plain http is for trusted LANs; beyond one, front the gate
-                    with TLS.
+                    <b>Tickets start as bearer strings.</b>{" "}
+                    Enrolling a provision ticket binds the derived credential
+                    to a device key, so a stolen string alone no longer
+                    connects — but binding defeats credential theft, not a
+                    compromised page. Plain http is for trusted LANs; beyond
+                    one, front the gate with TLS.
                   </li>
                   <li>
                     <b>Storage is SQLite or memory</b>, the engine's honest
@@ -175,7 +181,16 @@ export default function NodeHome(): ReactNode {
                       <Link to="/node/docs/tickets-explained">
                         Tickets explained
                       </Link>
-                    </b>: scopes, revocation, posture.
+                    </b>: scopes, device binding, revocation.
+                  </li>
+                  <li>
+                    <b>
+                      <Link to="/node/docs/write-verdicts">
+                        Write verdicts
+                      </Link>
+                    </b>: every rejection permanent or transient, never
+                    folklore — plus the health contract and last-seen per
+                    ticket.
                   </li>
                   <li>
                     <b>

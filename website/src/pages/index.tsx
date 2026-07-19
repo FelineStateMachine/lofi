@@ -46,8 +46,36 @@ const FEATURES: Array<{ title: string; body: ReactNode }> = [
   },
   {
     title: "Optional sync and recovery",
-    body:
-      "Users make that same account portable when you connect managed Jazz sync: a passkey where available, a recovery phrase as the portable fallback.",
+    body: (
+      <>
+        Users make that same account portable when you connect managed Jazz
+        sync: a passkey where available, a recovery phrase as the portable
+        fallback. Or they sync to <Link to="/node">a node they run</Link> — the
+        app needs zero changes either way.
+      </>
+    ),
+  },
+  {
+    title: "Server-blind fields",
+    body: (
+      <>
+        Columns are sealed on the client before they sync —{" "}
+        <code className="inline-mono">s.privateTable</code>{" "}
+        encrypts by default, and shared sealed columns extend that to groups.
+        The keys stay with users; the server relays what it cannot read.
+      </>
+    ),
+  },
+  {
+    title: "Verbs with effects",
+    body: (
+      <>
+        Tables are the nouns; mutations declared with{" "}
+        <code className="inline-mono">s.mutation</code>{" "}
+        are the verbs. Their sync-boundary effects run from a durable journal
+        on the device that performed the intent — once, even across restarts.
+      </>
+    ),
   },
   {
     title: "Narrow collaboration templates",
@@ -58,6 +86,11 @@ const FEATURES: Array<{ title: string; body: ReactNode }> = [
         API. Raw Jazz permissions stay available as an escape hatch.
       </>
     ),
+  },
+  {
+    title: "A shell that defends itself",
+    body:
+      "Generated apps ship a strict Content-Security-Policy, detect a forked storage container before it splits the account, and show honest progress on the one first load that needs the network.",
   },
   {
     title: "Local-first test helpers",
@@ -79,7 +112,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title="lofi"
-      description="lofi generates installable Deno web apps that open immediately, keep working offline, and sync when users choose. Astro shell, Preact islands, Jazz 2 CRDT sync."
+      description="lofi generates installable Deno web apps that open immediately, keep working offline, and sync when users choose — with fields the server can't read. Astro shell, Preact islands, Jazz 2 CRDT sync."
     >
       <main className="landing">
         {/* ===================== HERO: MARK + CLAIM ===================== */}
@@ -163,7 +196,8 @@ export default function Home(): ReactNode {
                 <p>
                   Connect managed Jazz sync and a user can back up the account
                   they already have — recovering it with a passkey where
-                  supported, or a 24-word phrase. Data made offline comes along.
+                  supported, or a 24-word phrase. Data made offline comes along,
+                  and a fresh device can connect and recover in either order.
                 </p>
                 <p className="life-cmd">
                   <code className="inline-mono">deno task jazz:provision</code>
@@ -334,16 +368,18 @@ export default function Home(): ReactNode {
                   </li>
                   <li>
                     <b>The data layer is Jazz 2 alpha</b>, deliberately pinned
-                    to a reviewed version. Five known engine defects at the
-                    current pin are each documented in a decision record and
-                    covered by an automated canary that fails loudly when a
-                    version bump changes the behavior.
+                    to a reviewed version. Known engine defects at the current
+                    pin are documented in decision records and pinned by
+                    automated canaries that fail loudly when a version bump
+                    changes the behavior.
                   </li>
                   <li>
-                    <b>The sync server reads unencrypted columns.</b>{" "}
-                    <Link to="/docs/threat-model">The threat model</Link>{" "}
-                    states what the server can and cannot see, and which
-                    fields you can seal.
+                    <b>Sealing has limits.</b>{" "}
+                    Private and shared columns are encrypted on the client
+                    before they sync, but structure, timing, and presence stay
+                    visible, and sealing protects future content, not merged
+                    history. <Link to="/docs/threat-model">The threat model</Link>{" "}
+                    states exactly what the server can and cannot see.
                   </li>
                   <li>
                     <b>Browser floors are real.</b>{" "}

@@ -30,6 +30,12 @@ import {
   screenshotAssetPaths,
 } from "../tooling/pwa-validation.ts";
 import { generateSchemaCompatManifest } from "../tooling/schema-manifest.ts";
+import {
+  cspPolicyWarnings,
+  mergeCspPolicies,
+  parseCspMeta,
+  renderHeadersSnippet,
+} from "../tooling/csp.ts";
 import { runDeno } from "../tooling/process.ts";
 import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
 
@@ -117,10 +123,42 @@ const engineTags = await Promise.all(
     )
   ),
 );
+const cspPolicies: string[] = [];
+const cspMissing: string[] = [];
 for (const path of distFiles.filter((file) => extname(file) === ".html")) {
   const html = await Deno.readTextFile(join("dist", path));
   const injected = injectHeadTags(html, engineTags);
   if (injected !== html) await Deno.writeTextFile(join("dist", path), injected);
+  const policy = parseCspMeta(injected);
+  if (policy === null) cspMissing.push(path);
+  else cspPolicies.push(policy);
+}
+
+// One deployable policy for the whole site: the per-page meta tags enforce
+// it already; the union feeds the preview server's real header and the
+// host-header snippet. Reported, never gated.
+const cspUnion = cspPolicies.length > 0 ? mergeCspPolicies(cspPolicies) : null;
+if (cspUnion !== null) {
+  const buildInfo = JSON.parse(await Deno.readTextFile("dist/lofi-build.json"));
+  buildInfo.csp = cspUnion;
+  await Deno.writeTextFile("dist/lofi-build.json", `${JSON.stringify(buildInfo)}\n`);
+  await Deno.writeTextFile("dist/_headers.example", renderHeadersSnippet(cspUnion));
+  const hashCount = (cspUnion.match(/'sha\d{3}-/g) ?? []).length;
+  console.log(
+    `lofi build: CSP script-src 'self' 'wasm-unsafe-eval' + ${hashCount} hashes ` +
+      "(meta-enforced; mirror as a header where your host supports it — see dist/_headers.example)",
+  );
+  for (const finding of cspPolicyWarnings(cspUnion)) console.warn(`warning: ${finding}`);
+  if (cspMissing.length > 0) {
+    console.warn(
+      `warning: ${cspMissing.length} built page(s) carry no CSP meta tag: ${cspMissing.join(", ")}`,
+    );
+  }
+} else {
+  console.warn(
+    "warning: the build carries no Content-Security-Policy (LOFI_CSP=off or no pages); " +
+      "same-origin script is the threat model's shaping attacker, so prefer the default policy",
+  );
 }
 
 const screenshotPaths = screenshotAssetPaths(productionManifest, environment.LOFI_BASE_PATH);

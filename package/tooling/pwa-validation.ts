@@ -922,7 +922,13 @@ async function filesUnder(root: string): Promise<string[]> {
   return files.sort();
 }
 
-const precacheExcludedPaths = new Set(["lofi-build.json", "lofi-precache.json", "sw.js"]);
+// _headers.example is deployment documentation, not a shell resource.
+const precacheExcludedPaths = new Set([
+  "_headers.example",
+  "lofi-build.json",
+  "lofi-precache.json",
+  "sw.js",
+]);
 
 /** Returns manifest screenshot paths, which are install presentation rather than shell resources. */
 export function screenshotAssetPaths(manifest: unknown, deploymentBase = "/"): string[] {

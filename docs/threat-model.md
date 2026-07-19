@@ -67,6 +67,13 @@ theft degrades from silent to prompted, and a prompt the user did not initiate i
 decline. At-rest theft (disk images, backups, storage exfiltration) gets the stronger guarantee:
 sealed records are ciphertext without the device key or the passkey.
 
+Generated apps also narrow the surface that creates same-origin script in the first place: every
+built page carries a Content-Security-Policy that admits only the app's own hashed scripts — no
+remote script origins, no inline execution beyond the hashed island bootstraps. The build reports
+the policy and warns on weakenings; `LOFI_CSP=off` and the extension points are documented in the
+deployment guide. A compromised dependency or injected markup then fails to execute rather than
+inheriting the page's capability.
+
 ## Where the lines move
 
 - **Shared-field encryption** is the designed next step: distributing a field key wrapped to each

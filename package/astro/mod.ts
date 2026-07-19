@@ -186,6 +186,31 @@ const managedJazzServer = process.env.LOFI_SKIP_JAZZ_MANAGED === "1"
   ? false
   : { allowLocalFirstAuth: true };
 const deploymentBase = process.env.LOFI_BASE_PATH || "/";
+// Content-Security-Policy: on by default; Astro emits a per-page meta tag
+// with hashes for its inline island scripts. 'wasm-unsafe-eval' admits the
+// Jazz engine's WebAssembly.instantiate; connect-src is absent by default
+// because the sync location is user data enrolled at runtime, not build
+// configuration. LOFI_CSP=off disables (reported by the build, not blocked).
+const cspOff = (process.env.LOFI_CSP || "").trim() === "off";
+const cspList = (name) => (process.env[name] || "").split(" ").filter(Boolean);
+const cspExtraDirectives = (process.env.LOFI_CSP_DIRECTIVES || "")
+  .split(";").map((entry) => entry.trim()).filter(Boolean);
+const cspConnect = (process.env.LOFI_CSP_CONNECT_SRC || "").trim();
+const cspSecurity = cspOff ? {} : {
+  csp: {
+    scriptDirective: {
+      resources: ["'self'", "'wasm-unsafe-eval'", ...cspList("LOFI_CSP_SCRIPT_SRC")],
+    },
+    styleDirective: { resources: ["'self'", ...cspList("LOFI_CSP_STYLE_SRC")] },
+    directives: [
+      "object-src 'none'",
+      "base-uri 'self'",
+      "worker-src 'self'",
+      ...(cspConnect ? ["connect-src " + cspConnect] : []),
+      ...cspExtraDirectives,
+    ],
+  },
+};
 
 if (Boolean(cloudAppId) !== Boolean(cloudServerUrl)) {
   throw new Error(
@@ -201,6 +226,7 @@ if (cloudAppId && cloudServerUrl) {
 export default defineConfig({
   base: deploymentBase,
   output: "static",
+  security: cspSecurity,
   trailingSlash: "always",
   integrations: [preact({ compat: true, devtools: true })],
   vite: {

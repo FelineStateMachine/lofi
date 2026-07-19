@@ -2,7 +2,14 @@ import { normalizeDeploymentBase } from "./base-path.ts";
 
 export const clientEnvironmentNames = ["JAZZ_APP_ID", "JAZZ_SERVER_URL"] as const;
 export const serverEnvironmentNames = ["JAZZ_ADMIN_SECRET", "BACKEND_SECRET"] as const;
-export const deploymentEnvironmentNames = ["LOFI_BASE_PATH"] as const;
+export const cspEnvironmentNames = [
+  "LOFI_CSP",
+  "LOFI_CSP_SCRIPT_SRC",
+  "LOFI_CSP_STYLE_SRC",
+  "LOFI_CSP_CONNECT_SRC",
+  "LOFI_CSP_DIRECTIVES",
+] as const;
+export const deploymentEnvironmentNames = ["LOFI_BASE_PATH", ...cspEnvironmentNames] as const;
 export const environmentNames = [
   ...clientEnvironmentNames,
   ...serverEnvironmentNames,
@@ -13,6 +20,8 @@ interface EnvironmentResultBase {
   presentClientNames: string[];
   presentServerNames: string[];
   basePath: string;
+  /** Content-Security-Policy tuning passed through to the build verbatim. */
+  csp: Record<string, string>;
   warnings: string[];
 }
 
@@ -55,6 +64,16 @@ export function validateEnvironment(
     errors.push(error instanceof Error ? error.message : String(error));
   }
 
+  const csp: Record<string, string> = {};
+  for (const name of cspEnvironmentNames) {
+    if (isPresent(env, name)) csp[name] = env[name].trim();
+  }
+  if (csp.LOFI_CSP !== undefined && csp.LOFI_CSP !== "off") {
+    errors.push(
+      'LOFI_CSP only accepts "off" (the default policy is on); unset it or set LOFI_CSP=off.',
+    );
+  }
+
   if (
     presentClientNames.length > 0 && presentClientNames.length !== clientEnvironmentNames.length
   ) {
@@ -85,6 +104,7 @@ export function validateEnvironment(
     presentClientNames: [...presentClientNames],
     presentServerNames: [...presentServerNames],
     basePath,
+    csp,
     warnings,
   };
   if (errors.length > 0) return { ...base, ok: false, mode: "invalid", errors };
@@ -200,6 +220,7 @@ export function childEnvironment(
     environment.JAZZ_SERVER_URL = "";
   }
   environment.LOFI_BASE_PATH = validation.basePath;
+  for (const [name, value] of Object.entries(validation.csp)) environment[name] = value;
   environment.JAZZ_ADMIN_SECRET = "";
   environment.BACKEND_SECRET = "";
   return environment;

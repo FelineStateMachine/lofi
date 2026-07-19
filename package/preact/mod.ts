@@ -4,7 +4,8 @@
  * per-write sync lifecycle ({@link useWrite}, {@link usePendingWrites},
  * {@link useSyncStatus}), first-load progress ({@link useBootProgress}), and
  * the schema-compatibility gate
- * ({@link useSchemaCompat}), plus package-owned example components
+ * ({@link useSchemaCompat}), and the storage-container fork guard
+ * ({@link useStorageFork}), plus package-owned example components
  * ({@link DeviceStatus}, {@link PwaActions}, {@link RuntimeRecovery},
  * {@link TicketEnrollForm}) that application layouts may compose or replace
  * with UI built on the same public runtime APIs.
@@ -43,6 +44,11 @@ export {
   type SchemaCompatState,
   useSchemaCompat,
 } from "./use-schema-compat.ts";
+export {
+  type StorageForkState,
+  type StorageForkSurface,
+  useStorageFork,
+} from "./use-storage-fork.ts";
 export { type BootProgress, type BootProgressPhase, useBootProgress } from "./use-boot-progress.ts";
 export {
   type DeviceCapabilitiesHook,

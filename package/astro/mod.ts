@@ -51,6 +51,7 @@ export const runtimeFiles = [
   "schema-compat.ts",
   "session.ts",
   "startup-recovery.ts",
+  "storage-fork.ts",
   "store-status.ts",
   "table-mutations.ts",
   "table-store.ts",
@@ -93,6 +94,7 @@ export const preactFiles = [
   "use-boot-progress.ts",
   "use-device-capabilities.ts",
   "use-schema-compat.ts",
+  "use-storage-fork.ts",
   "write-hooks.ts",
 ] as const;
 

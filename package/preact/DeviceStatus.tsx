@@ -11,6 +11,8 @@ import {
   subscribeRuntimeDiagnostics,
 } from "../runtime/runtime.ts";
 import { describeSchemaCompat } from "../runtime/schema-compat.ts";
+import { describeStorageFork, dismissStorageFork } from "../runtime/storage-fork.ts";
+import { useStorageFork } from "./use-storage-fork.ts";
 import { readSession, type Session } from "../runtime/session.ts";
 import { describeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
@@ -48,6 +50,7 @@ const available = (present: boolean) => (present ? "available" : "missing");
  */
 export default function DeviceStatus(): VNode {
   const { report, requestPersistence } = useDeviceCapabilities();
+  const fork = useStorageFork();
   const [pwa, setPwa] = useState<PwaState>(getPwaState());
   const [session, setSession] = useState<Session | null>(null);
   const [runtimeDiagnostics, setRuntimeDiagnostics] = useState(getRuntimeDiagnostics());
@@ -171,10 +174,19 @@ export default function DeviceStatus(): VNode {
             label="Schema compatibility"
             value={describeSchemaCompat(runtimeDiagnostics.schemaCompat)}
           />
+          <Row label="Storage container" value={describeStorageFork(fork)} />
         </dl>
         {(runtimeDiagnostics.schemaCompat.state === "data-ahead" ||
           runtimeDiagnostics.schemaCompat.state === "updating") && (
           <p>{runtimeDiagnostics.schemaCompat.message}</p>
+        )}
+        {fork.state === "fork-detected" && (
+          <>
+            <p>{fork.message}</p>
+            <button type="button" onClick={() => dismissStorageFork()}>
+              Dismiss
+            </button>
+          </>
         )}
         <PwaActions title="Install & updates" />
       </div>

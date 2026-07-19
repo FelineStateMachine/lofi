@@ -215,6 +215,7 @@ Deno.test("the watcher unwraps valid wraps and refuses forgeries and substitutio
       userId: "bob",
       configs: [{
         label: "docs.body",
+        kind: "text",
         group: "workspaces",
         groupIdColumn: "workspaceId",
         keys: "workspaceFieldKeys",

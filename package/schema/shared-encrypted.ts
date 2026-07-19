@@ -31,7 +31,7 @@ export type SharedFieldValue<T> =
   | { state: "corrupt"; code: "corrupt" | "unscoped-write" };
 
 /** Options wiring a shared column to its group, keys, and directory tables. */
-export type SharedColumnOptions = Omit<SharedColumnConfig, "label">;
+export type SharedColumnOptions = Omit<SharedColumnConfig, "label" | "kind">;
 
 /** Whether a shared field value holds decrypted content. */
 export function sharedFieldReady<T>(
@@ -92,9 +92,10 @@ function guardedWrite(label: string, value: unknown): string {
 function sharedColumn<T>(
   label: string,
   options: SharedColumnOptions,
+  kind: "text" | "json",
   decode: (plaintext: string) => T,
 ): EncryptedColumn<SharedFieldValue<T>> {
-  registerSharedColumn({ label, ...options });
+  registerSharedColumn({ label, kind, ...options });
   const built = schema.string().transform({
     to: (value: unknown) => guardedWrite(label, value),
     from: (value: string) => openStored(label, value, decode),
@@ -126,7 +127,7 @@ export function sharedEncryptedText(
   label: string,
   options: SharedColumnOptions,
 ): EncryptedColumn<SharedFieldValue<string>> {
-  return sharedColumn(label, options, (plaintext) => plaintext);
+  return sharedColumn(label, options, "text", (plaintext) => plaintext);
 }
 
 /**
@@ -138,5 +139,5 @@ export function sharedEncryptedJson<T = unknown>(
   label: string,
   options: SharedColumnOptions,
 ): EncryptedColumn<SharedFieldValue<T>> {
-  return sharedColumn(label, options, (plaintext) => JSON.parse(plaintext) as T);
+  return sharedColumn(label, options, "json", (plaintext) => JSON.parse(plaintext) as T);
 }

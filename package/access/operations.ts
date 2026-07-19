@@ -3,7 +3,19 @@ import { syncing } from "../runtime/config.ts";
 import { type DurableWrite, settleDurableWrite } from "../runtime/durability.ts";
 import { getRuntime, updateRuntimeDiagnostics } from "../runtime/runtime.ts";
 import { AccessError } from "./errors.ts";
-import { decodeSharingIdentity, type SharingIdentity } from "./identity.ts";
+import {
+  bootstrapGroupFieldKey,
+  reconcileSharedFieldKeys,
+  rotateGroupFieldKey,
+  type SharedFieldLifecycleContext,
+  wrapHeldKeysForMember,
+} from "./shared-field-lifecycle.ts";
+import { activeAppId } from "../runtime/config.ts";
+import {
+  decodeSharingIdentity,
+  decodeSharingIdentityDetails,
+  type SharingIdentity,
+} from "./identity.ts";
 import { type GroupRole, groupRoleCapabilities, groupRoles } from "./schema.ts";
 
 /** Minimum row shape accepted by collaboration operations. */
@@ -158,10 +170,39 @@ export function createGroupOperations<
 >(config: {
   groups: AccessRuntimeTable<Group, GroupInit>;
   members: AccessRuntimeTable<Member, MemberInit>;
+  /** Wrapped-field-key and directory tables, for groups hosting shared
+   * encrypted columns; the group lifecycle then mints, wraps, and rotates
+   * field keys automatically. */
+  fieldKeys?: AccessRuntimeTable<Identified, unknown>;
+  directory?: AccessRuntimeTable<Identified, unknown>;
 }): GroupOperations<Group, GroupInit, Member> {
   const findMember = async (groupId: string, userId: string): Promise<Member | null> => {
     const { db } = await getRuntime();
     return await db.one(config.members.where({ groupId, user_id: userId } as never));
+  };
+
+  // The lifecycle context resolves lazily per call: the runtime, principal,
+  // and app id all belong to the moment of the operation.
+  const lifecycleContext = async (): Promise<SharedFieldLifecycleContext | null> => {
+    if (!config.fieldKeys || !config.directory) return null;
+    const { db } = await getRuntime();
+    const userId = db.getAuthState().session?.user_id;
+    if (!userId) {
+      throw new AccessError("invalid-identity", "The current Jazz principal is not ready.");
+    }
+    const groupTable = (config.groups as unknown as { _table?: string })._table;
+    if (!groupTable) {
+      throw new AccessError("configuration", "The group table does not expose its name.");
+    }
+    return {
+      db: db as never,
+      appId: activeAppId(),
+      userId,
+      groupTable,
+      fieldKeys: config.fieldKeys as never,
+      directory: config.directory as never,
+      members: config.members as never,
+    };
   };
 
   return {
@@ -179,6 +220,8 @@ export function createGroupOperations<
           user_id: userId,
           ...groupRoleCapabilities("admin"),
         } as MemberInit));
+        const lifecycle = await lifecycleContext();
+        if (lifecycle) await bootstrapGroupFieldKey(lifecycle, group.id);
         return { group, membership };
       } catch (cause) {
         // The creator's direct delete authority on their own group row
@@ -196,7 +239,8 @@ export function createGroupOperations<
     ): Promise<Member> {
       requireSync("Adding a group member");
       assertRole(role);
-      const userId = decodeSharingIdentity(recipient);
+      const details = decodeSharingIdentityDetails(recipient);
+      const userId = details.userId;
       const existing = await findMember(groupId, userId);
       if (existing) {
         throw new AccessError(
@@ -205,13 +249,22 @@ export function createGroupOperations<
         );
       }
       const { db } = await getRuntime();
-      return await settle(
+      const membership = await settle(
         db.insert(config.members, {
           groupId,
           user_id: userId,
           ...groupRoleCapabilities(role),
         } as MemberInit),
       );
+      // Key delivery is best-effort here: a member without a directory entry
+      // sits in the documented pending state until a key-holding device runs
+      // reconcileSharedFieldKeys. The membership itself never waits on keys.
+      const lifecycle = await lifecycleContext();
+      if (lifecycle) {
+        await wrapHeldKeysForMember(lifecycle, groupId, userId, details.fingerprint)
+          .catch(() => undefined);
+      }
+      return membership;
     },
 
     async changeRole(
@@ -234,10 +287,17 @@ export function createGroupOperations<
 
     async removeMember(groupId: string, recipient: SharingIdentity | string): Promise<void> {
       requireSync("Removing a group member");
-      const member = await findMember(groupId, decodeSharingIdentity(recipient));
+      const removedUserId = decodeSharingIdentity(recipient);
+      const member = await findMember(groupId, removedUserId);
       if (!member) return;
       const { db } = await getRuntime();
       await settle(db.delete(config.members, member.id));
+      // Lazy rekey: future writes seal under a generation the removed member
+      // never receives; already-held generations remain readable to them.
+      const lifecycle = await lifecycleContext();
+      if (lifecycle) {
+        await rotateGroupFieldKey(lifecycle, groupId, removedUserId).catch(() => undefined);
+      }
     },
 
     async leaveGroup(groupId: string): Promise<void> {
@@ -256,6 +316,19 @@ export function createGroupOperations<
       requireSync("Listing group members");
       const { db } = await getRuntime();
       return await db.all(config.members.where({ groupId } as never));
+    },
+
+    async reconcileSharedFieldKeys(groupId: string): Promise<number> {
+      requireSync("Repairing shared-field keys");
+      const lifecycle = await lifecycleContext();
+      if (!lifecycle) {
+        throw new AccessError(
+          "configuration",
+          "These group operations were created without fieldKeys/directory tables; declare " +
+            "them to host shared encrypted columns.",
+        );
+      }
+      return await reconcileSharedFieldKeys(lifecycle, groupId);
     },
   };
 }
@@ -276,4 +349,8 @@ export type GroupOperations<Group, GroupInit, Member> = {
   removeMember(groupId: string, recipient: SharingIdentity | string): Promise<void>;
   leaveGroup(groupId: string): Promise<void>;
   listMembers(groupId: string): Promise<Member[]>;
+  /** Repairs missing field-key wraps for a group hosting shared columns;
+   * throws a configuration error when the operations were created without
+   * `fieldKeys`/`directory` tables. Returns the number of wraps inserted. */
+  reconcileSharedFieldKeys(groupId: string): Promise<number>;
 };

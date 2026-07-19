@@ -51,6 +51,7 @@ export const runtimeFiles = [
   "schema-compat.ts",
   "session.ts",
   "shared-field-keys.ts",
+  "shared-field-write.ts",
   "startup-recovery.ts",
   "storage-fork.ts",
   "store-status.ts",
@@ -72,6 +73,7 @@ export const accessFiles = [
   "operations.ts",
   "policies.ts",
   "schema.ts",
+  "shared-field-lifecycle.ts",
 ] as const;
 
 /** Schema facade modules vendored into `.lofi/`; kept in lockstep by the manifest test. */

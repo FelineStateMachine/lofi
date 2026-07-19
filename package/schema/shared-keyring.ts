@@ -105,6 +105,13 @@ export function getSharedFieldKey(scope: string, generation: number): Uint8Array
   return fieldKeys.get(scope)?.get(generation) ?? null;
 }
 
+/** Every generation installed for a scope, ascending; empty when none is. */
+export function heldSharedFieldGenerations(scope: string): number[] {
+  const generations = fieldKeys.get(scope);
+  if (generations === undefined) return [];
+  return [...generations.keys()].sort((left, right) => left - right);
+}
+
 /** The newest generation installed for a scope, or null when none is. */
 export function latestSharedFieldGeneration(scope: string): number | null {
   const generations = fieldKeys.get(scope);

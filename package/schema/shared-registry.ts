@@ -12,6 +12,8 @@
 export type SharedColumnConfig = {
   /** The column's cryptographic label, conventionally `"table.column"`. */
   label: string;
+  /** How the runtime value serializes into the sealed plaintext. */
+  kind: "text" | "json";
   /** The group table whose membership scopes the field key. */
   group: string;
   /** The sibling column on the row that references the group. */

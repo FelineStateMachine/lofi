@@ -1,3 +1,4 @@
+import { hasSharedColumnWrites, sealSharedColumnValues } from "./shared-field-write.ts";
 import type { Db, MutationErrorEvent, QueryBuilder, TableProxy } from "jazz-tools";
 // Package-owned reactive table store.
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
@@ -143,13 +144,39 @@ export class TableStore<T extends TableRow, Init> {
   };
 
   /** Inserts a row and waits for local durability before resolving. */
-  async insert(values: Init): Promise<void> {
-    await this.#perform(() => this.#db.insert(this.#table, values));
+  insert(values: Init): Promise<void> {
+    // The no-seal path stays fully synchronous up to #perform so pending
+    // writes register before the caller's next turn — the observability the
+    // ledger and tests rely on.
+    const tableName = (this.#table as unknown as { _table?: string })._table;
+    if (!tableName || !hasSharedColumnWrites(tableName, values as Record<string, unknown>)) {
+      return this.#perform(() => this.#db.insert(this.#table, values));
+    }
+    return (async () => {
+      const sealed = await sealSharedColumnValues(tableName, values as Record<string, unknown>);
+      await this.#perform(() => this.#db.insert(this.#table, sealed as Init));
+    })();
   }
 
   /** Updates a row and waits for local durability before resolving. */
-  async update(id: string, patch: Partial<Init>): Promise<void> {
-    await this.#perform(() => this.#db.update(this.#table, id, patch));
+  update(id: string, patch: Partial<Init>): Promise<void> {
+    const tableName = (this.#table as unknown as { _table?: string })._table;
+    if (!tableName || !hasSharedColumnWrites(tableName, patch as Record<string, unknown>)) {
+      return this.#perform(() => this.#db.update(this.#table, id, patch));
+    }
+    return (async () => {
+      // Shared columns seal here — before the engine — because only the
+      // mutation layer can fetch the row whose group column names the scope.
+      const sealed = await sealSharedColumnValues(
+        tableName,
+        patch as Record<string, unknown>,
+        () =>
+          this.#db.one(
+            (this.#table as unknown as { where(input: unknown): never }).where({ id }),
+          ) as Promise<Record<string, unknown> | null>,
+      );
+      await this.#perform(() => this.#db.update(this.#table, id, sealed as Partial<Init>));
+    })();
   }
 
   /** Deletes a row and waits for local durability before resolving. */

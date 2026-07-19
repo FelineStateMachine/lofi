@@ -634,3 +634,49 @@ Deno.test("encrypted columns round-trip through the engine and store only cipher
     await testApp.shutdown();
   }
 });
+
+// privateTable end-to-end: sealed-by-default columns round-trip through the
+// real engine, the plain-marked column still filters, and the sealed columns
+// registered for the policy guard.
+const privApp = s.defineApp({
+  privateNotes: s.privateTable("privateNotes", {
+    body: s.string(),
+    score: s.int(),
+    title: s.plain(s.string()),
+  }),
+});
+const privPermissions = s.definePermissions(privApp, ({ policy }) => {
+  policy.privateNotes.allowInsert.always();
+  policy.privateNotes.allowRead.always();
+  policy.privateNotes.allowUpdate.always();
+  policy.privateNotes.allowDelete.always();
+});
+
+Deno.test("privateTable seals by default through the engine", async () => {
+  const testApp = await createPolicyTestApp(privApp, privPermissions, expectLike);
+  setEncryptedColumnKey(new Uint8Array(32).map((_, index) => index + 1));
+  try {
+    const db = testApp.as(session("author"));
+    const row = await db.insert(privApp.privateNotes, {
+      body: "sealed by default",
+      score: 2 ** 34,
+      title: "plaintext title",
+    } as never).wait({ tier: "global" });
+    const readBack = (await db.all(privApp.privateNotes.where({ id: row.id })))[0] as {
+      body: string;
+      score: number;
+      title: string;
+    };
+    assert(readBack.body === "sealed by default", "sealed text did not round-trip");
+    assert(readBack.score === 2 ** 34, "sealed number did not round-trip");
+    const byTitle = await db.all(privApp.privateNotes.where({ title: "plaintext title" }));
+    assert(byTitle.length === 1, "the plain-marked column must stay filterable");
+    const byBody = await db.all(
+      privApp.privateNotes.where({ body: "sealed by default" } as never),
+    );
+    assert(byBody.length === 0, "a plaintext filter on a sealed column must match nothing");
+  } finally {
+    clearEncryptedColumnKey();
+    await testApp.shutdown();
+  }
+});

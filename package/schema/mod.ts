@@ -37,6 +37,7 @@ import {
   flattenNestedSchema,
   mergeNestedPermissions,
 } from "./nested.ts";
+import { plain, privateTable } from "./private-table.ts";
 
 /**
  * The curated schema DSL type. Every Jazz member is the pinned Jazz 2
@@ -85,6 +86,8 @@ export type SchemaDsl =
     encryptedJson: typeof encryptedJson;
     encryptedNumber: typeof encryptedNumber;
     encryptedDate: typeof encryptedDate;
+    privateTable: typeof privateTable;
+    plain: typeof plain;
     mutation: typeof mutation;
     effect: typeof effect;
     log: typeof log;
@@ -98,7 +101,8 @@ export type SchemaDsl =
  * place of a raw `jazz-tools` import; Jazz member names and behavior are
  * identical to the pinned Jazz 2 DSL. The lofi-owned members: nested
  * namespaces ({@link defineNestedApp}), sealed columns ({@link encryptedText},
- * {@link encryptedJson}, {@link encryptedNumber}, {@link encryptedDate}), and
+ * {@link encryptedJson}, {@link encryptedNumber}, {@link encryptedDate}, with
+ * {@link privateTable} and {@link plain} for encrypt-by-default tables), and
  * the verb grammar — {@link mutation} declares
  * callable verbs over {@link insert}, {@link update}, and {@link remove},
  * carrying {@link effect} units and {@link log} entries. Verb calls return a
@@ -130,6 +134,8 @@ export const s: SchemaDsl = {
   encryptedJson,
   encryptedNumber,
   encryptedDate,
+  privateTable,
+  plain,
   mutation,
   effect,
   log,
@@ -137,6 +143,13 @@ export const s: SchemaDsl = {
   update,
   remove,
 };
+
+export {
+  plain,
+  type PlainColumn,
+  privateTable,
+  type PrivateTableColumns,
+} from "./private-table.ts";
 
 export {
   clearEncryptedColumnKey,

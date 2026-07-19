@@ -156,6 +156,32 @@ later makes existing values unreadable — treat it like a column name. Constrai
   merge strategies and transforms cannot operate on ciphertext, and optional stays disabled until
   the engine's null handling of transformed columns is pinned.
 
+#### Encrypt by default: `s.privateTable`
+
+`s.privateTable(labelPrefix, columns)` inverts the posture from "encrypt what is sensitive" to
+"expose what the server needs": every column seals by default, and plaintext is the explicit choice.
+Labels derive as `"prefix.column"` — treat the prefix like the table name and never reuse it across
+tables.
+
+```ts
+notes: s.privateTable("notes", {
+  body: s.string(), // sealed: encryptedText("notes.body")
+  score: s.int(), // sealed: encryptedNumber("notes.score") — no i32 limit
+  reviewedAt: s.timestamp(), // sealed: encryptedDate("notes.reviewedAt")
+  meta: s.json(), // sealed: encryptedJson("notes.meta")
+  workspaceId: s.ref("workspaces"), // plaintext: foreign keys stay joinable
+  title: s.plain(s.string()), // plaintext by author choice: a filter target
+}),
+```
+
+Reference columns stay plaintext automatically — a foreign key the server cannot read cannot join or
+gate. `s.plain(column)` marks a deliberate plaintext column (a filter, sort key, or policy target)
+at the column it affects. Byte columns stay plaintext with a report — store byte payloads as base64
+in an encrypted json column to seal them. A column already sealed with an explicit `s.encrypted*`
+keeps its own label. Optionals, defaults, non-lww merge strategies, and transforms on sealed columns
+are configuration errors: each would either leak plaintext below the seal boundary or silently
+discard author intent.
+
 ## Bind an exact typed query
 
 ```ts

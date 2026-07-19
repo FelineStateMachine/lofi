@@ -81,6 +81,7 @@ export const schemaFiles = [
   "mod.ts",
   "nested.ts",
   "padding.ts",
+  "private-table.ts",
   "store.ts",
 ] as const;
 

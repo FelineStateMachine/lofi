@@ -1,5 +1,6 @@
 import { schema as s } from "jazz-tools";
 import type { CompiledPermissions } from "jazz-tools";
+import { isEncryptedColumn } from "../schema/encrypted.ts";
 import { AccessError } from "./errors.ts";
 
 /** Minimum declared Jazz table metadata consumed by access templates. */
@@ -127,6 +128,13 @@ function requireColumn(
   type: string,
   references?: string,
 ): Column {
+  if (isEncryptedColumn(table._table, name)) {
+    throw new AccessError(
+      "configuration",
+      `Access table ${table._table} declares ${name} as an encrypted column; template columns ` +
+        "are evaluated by the server, which cannot read ciphertext. Use a plaintext column.",
+    );
+  }
   const column = columns(table).find((candidate) => candidate.name === name);
   if (!column || column.column_type?.type !== type || column.references !== references) {
     const reference = references ? ` referencing ${references}` : "";
@@ -184,6 +192,69 @@ export type RawAccessPolicyContext = {
 /** Callback for app-specific rules that do not fit the built-in templates. */
 export type RawAccessPolicyExtension = (context: RawAccessPolicyContext) => void;
 
+// A policy referencing an encrypted column would compile but silently never
+// match — the server compares ciphertext it cannot read — so every rule
+// builder refuses such conditions at compile time. Object conditions are
+// checked directly; function conditions have their returned condition checked
+// against the same table, and any condition they build for another table
+// passes through that table's own guarded builder.
+function assertNoEncryptedConditionKeys(tableName: string, input: unknown): void {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return;
+  for (const key of Object.keys(input)) {
+    if (key.startsWith("$")) continue;
+    if (isEncryptedColumn(tableName, key)) {
+      throw new AccessError(
+        "configuration",
+        `Policy for ${tableName} filters on encrypted column ${key}; the server cannot ` +
+          "evaluate what it cannot read. Gate on a plaintext column instead.",
+      );
+    }
+  }
+}
+
+function guardedWhere(
+  tableName: string,
+  rule: { where(input: unknown): unknown },
+): (input: unknown) => unknown {
+  return (input: unknown) => {
+    if (typeof input === "function") {
+      return rule.where((row: unknown) => {
+        const condition = (input as (row: unknown) => unknown)(row);
+        assertNoEncryptedConditionKeys(tableName, condition);
+        return condition;
+      });
+    }
+    assertNoEncryptedConditionKeys(tableName, input);
+    return rule.where(input);
+  };
+}
+
+function guardTablePolicy(tableName: string, tablePolicy: TablePolicy): TablePolicy {
+  const guardRule = (rule: RuleBuilder): RuleBuilder => ({
+    where: guardedWhere(tableName, rule),
+    always: () => rule.always(),
+  });
+  return {
+    allowRead: guardRule(tablePolicy.allowRead),
+    allowInsert: guardRule(tablePolicy.allowInsert),
+    allowUpdate: guardRule(tablePolicy.allowUpdate),
+    allowDelete: guardRule(tablePolicy.allowDelete),
+    exists: { where: guardedWhere(tableName, tablePolicy.exists) },
+  };
+}
+
+function guardPolicies(policy: Record<string, TablePolicy>): Record<string, TablePolicy> {
+  return new Proxy(policy, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof property !== "string" || typeof value !== "object" || value === null) {
+        return value;
+      }
+      return guardTablePolicy(property, value as TablePolicy);
+    },
+  });
+}
+
 /**
  * Compiles the three narrow templates through Jazz's own policy builder. The
  * optional callback is the raw Jazz-policy escape hatch for app-specific rules.
@@ -221,8 +292,12 @@ export function defineAccessPolicies<TApp extends object>(
   for (const template of templates) validateTemplate(template);
 
   return s.definePermissions(app, (jazzContext) => {
-    const { policy, session, anyOf, allOf, allowedTo } =
-      jazzContext as unknown as RawAccessPolicyContext;
+    const rawContext = jazzContext as unknown as RawAccessPolicyContext;
+    const guarded: RawAccessPolicyContext = {
+      ...rawContext,
+      policy: guardPolicies(rawContext.policy),
+    };
+    const { policy, session, anyOf, allOf, allowedTo } = guarded;
     for (const template of templates) {
       if (template.kind === "private") {
         const resource = policy[template.resource._table];

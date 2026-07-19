@@ -19,6 +19,7 @@ import {
   schema,
   type SchemaDefinition,
 } from "jazz-tools";
+import { registerEncryptedColumns } from "./encrypted.ts";
 
 /**
  * The reserved separator between a namespace and a table in the flattened
@@ -235,6 +236,7 @@ export function defineNestedApp<const TDef extends NestedSchemaDefinition>(
   definition: TDef,
 ): NestedApp<TDef> {
   const flat = flattenNestedSchema(definition);
+  registerEncryptedColumns(flat);
   const sliceable = schema.defineSliceableApp(flat as never);
   const root: Record<string, unknown> = {};
   const allTables: object[] = [];

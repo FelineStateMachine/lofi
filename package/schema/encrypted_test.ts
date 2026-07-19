@@ -3,11 +3,16 @@
 // (versioned prefix, no plaintext in any trivial encoding).
 import {
   clearEncryptedColumnKey,
+  clearEncryptedColumnRegistry,
   EncryptedColumnError,
+  encryptedColumnsOf,
   encryptedDate,
   encryptedJson,
   encryptedNumber,
   encryptedText,
+  isEncryptedColumn,
+  matchDecrypted,
+  registerEncryptedColumns,
   setEncryptedColumnKey,
 } from "./encrypted.ts";
 import { paddedLength, padPayload, unpadPayload } from "./padding.ts";
@@ -253,3 +258,38 @@ Deno.test(
     assert(rejectedInvalidDate, "an invalid date must refuse with TypeError");
   }),
 );
+
+Deno.test("the registry records encrypted columns per table and clears", () => {
+  clearEncryptedColumnRegistry();
+  try {
+    registerEncryptedColumns({
+      journal: {
+        title: { _sqlType: "TEXT" },
+        body: encryptedText("journal.body"),
+        mood: encryptedNumber("journal.mood"),
+      },
+    });
+    assert(isEncryptedColumn("journal", "body"), "body must register as encrypted");
+    assert(isEncryptedColumn("journal", "mood"), "mood must register as encrypted");
+    assert(!isEncryptedColumn("journal", "title"), "plaintext column must not register");
+    assert(!isEncryptedColumn("elsewhere", "body"), "other tables must not register");
+    const registered = encryptedColumnsOf("journal");
+    assert(
+      registered?.get("body") === "journal.body" && registered?.get("mood") === "journal.mood",
+      "labels must be retrievable per column",
+    );
+    clearEncryptedColumnRegistry();
+    assert(!isEncryptedColumn("journal", "body"), "clear must empty the registry");
+  } finally {
+    clearEncryptedColumnRegistry();
+  }
+});
+
+Deno.test("matchDecrypted filters rows on decrypted values", () => {
+  const rows = [
+    { id: "a", body: "meeting notes" },
+    { id: "b", body: "grocery list" },
+  ];
+  const matched = matchDecrypted(rows, (row) => row.body.includes("notes"));
+  assert(matched.length === 1 && matched[0].id === "a", "predicate must select by content");
+});

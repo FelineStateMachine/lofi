@@ -24,7 +24,13 @@
  */
 import { schema } from "jazz-tools";
 import { effect, insert, log, mutation, remove, update } from "./effects.ts";
-import { encryptedDate, encryptedJson, encryptedNumber, encryptedText } from "./encrypted.ts";
+import {
+  encryptedDate,
+  encryptedJson,
+  encryptedNumber,
+  encryptedText,
+  registerEncryptedColumns,
+} from "./encrypted.ts";
 import {
   defineNestedApp,
   defineNestedPermissions,
@@ -99,8 +105,23 @@ export type SchemaDsl =
  * `WriteHandle`, observed in UI through `useWrite` and `usePendingWrites`
  * from `@nzip/lofi/preact`.
  */
+// The define entry points additionally record every encrypted column into
+// the table/column registry the access layer consults; behavior and types
+// are otherwise the pinned originals.
+function withEncryptedColumnRegistration<
+  F extends (definition: never, ...rest: never[]) => unknown,
+>(define: F): F {
+  return ((definition: unknown, ...rest: unknown[]) => {
+    registerEncryptedColumns(definition);
+    return (define as unknown as (...args: unknown[]) => unknown)(definition, ...rest);
+  }) as unknown as F;
+}
+
 export const s: SchemaDsl = {
   ...schema,
+  defineSchema: withEncryptedColumnRegistration(schema.defineSchema),
+  defineApp: withEncryptedColumnRegistration(schema.defineApp),
+  defineSliceableApp: withEncryptedColumnRegistration(schema.defineSliceableApp),
   defineNestedApp,
   defineNestedPermissions,
   mergeNestedPermissions,
@@ -119,11 +140,16 @@ export const s: SchemaDsl = {
 
 export {
   clearEncryptedColumnKey,
+  clearEncryptedColumnRegistry,
+  type EncryptedColumn,
   EncryptedColumnError,
+  encryptedColumnsOf,
   encryptedDate,
   encryptedJson,
   encryptedNumber,
   encryptedText,
+  isEncryptedColumn,
+  matchDecrypted,
   setEncryptedColumnKey,
 } from "./encrypted.ts";
 export {

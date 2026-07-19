@@ -9,6 +9,7 @@ import {
   sharedAccess,
   sharedGrantTable,
 } from "./mod.ts";
+import { clearEncryptedColumnRegistry, s as lofiSchema } from "../schema/mod.ts";
 import { assert } from "../runtime/test-assert.ts";
 
 const schema = {
@@ -448,4 +449,74 @@ Deno.test("access templates reject malformed relationship tables with actionable
     message.includes("grants") && message.includes("resourceId"),
     "configuration error was not actionable",
   );
+});
+
+Deno.test("policies referencing encrypted columns fail configuration", () => {
+  clearEncryptedColumnRegistry();
+  try {
+    // Template-consumed column: user_id sealed in a grant table. requireColumn
+    // must refuse before the type check ever compares the built schema, where
+    // an encrypted column is indistinguishable TEXT.
+    const sealedGrantApp = lofiSchema.defineApp({
+      sealedDocs: lofiSchema.table({ title: lofiSchema.string() }),
+      sealedDocGrants: lofiSchema.table({
+        resourceId: lofiSchema.ref("sealedDocs"),
+        user_id: lofiSchema.encryptedText("sealedDocGrants.user_id"),
+        can_edit: lofiSchema.boolean(),
+      }),
+    });
+    let templateMessage = "";
+    try {
+      defineAccessPolicies(sealedGrantApp, [
+        sharedAccess({
+          resource: sealedGrantApp.sealedDocs,
+          grants: sealedGrantApp.sealedDocGrants,
+        }),
+      ]);
+    } catch (error) {
+      templateMessage = error instanceof Error ? error.message : String(error);
+    }
+    assert(
+      templateMessage.includes("encrypted") && templateMessage.includes("user_id"),
+      `template with encrypted user_id compiled: ${templateMessage || "no error"}`,
+    );
+
+    // Raw-extension rules: an object condition keyed by an encrypted column
+    // must refuse — such a policy would compile but silently never match.
+    const rawApp = lofiSchema.defineApp({
+      vaultDocs: lofiSchema.table({
+        title: lofiSchema.string(),
+        secret: lofiSchema.encryptedText("vaultDocs.secret"),
+      }),
+    });
+    let objectMessage = "";
+    try {
+      defineAccessPolicies(rawApp, [privateAccess({ resource: rawApp.vaultDocs })], (context) => {
+        context.policy.vaultDocs.allowRead.where({ secret: "visible" });
+      });
+    } catch (error) {
+      objectMessage = error instanceof Error ? error.message : String(error);
+    }
+    assert(
+      objectMessage.includes("encrypted") && objectMessage.includes("secret"),
+      `object condition on encrypted column compiled: ${objectMessage || "no error"}`,
+    );
+
+    // A function condition whose returned literal is keyed by an encrypted
+    // column is checked the same way.
+    let functionMessage = "";
+    try {
+      defineAccessPolicies(rawApp, [privateAccess({ resource: rawApp.vaultDocs })], (context) => {
+        context.policy.vaultDocs.allowUpdate.where(() => ({ secret: "visible" }));
+      });
+    } catch (error) {
+      functionMessage = error instanceof Error ? error.message : String(error);
+    }
+    assert(
+      functionMessage.includes("encrypted") && functionMessage.includes("secret"),
+      `function condition on encrypted column compiled: ${functionMessage || "no error"}`,
+    );
+  } finally {
+    clearEncryptedColumnRegistry();
+  }
 });

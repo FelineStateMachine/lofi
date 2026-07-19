@@ -143,9 +143,18 @@ later makes existing values unreadable — treat it like a column name. Constrai
 - **Account-private only, for now.** The key derives from the account secret, so every device
   holding the account decrypts and nobody else does — including other members of a shared group. A
   row read under a different account throws `EncryptedColumnError` instead of returning garbage.
-- **Not filterable, not policy-visible.** `where` on an encrypted column compares ciphertext and
-  matches nothing useful, and a permission policy must not reference one — the server cannot
-  evaluate what it cannot read. Filter and gate on plaintext columns beside it.
+- **Not filterable, not policy-visible — enforced.** A `where` on an encrypted column is a compile
+  error (the column type is excluded from filter positions), and a permission policy referencing one
+  fails configuration with `AccessError` — the server cannot evaluate what it cannot read. Gate on
+  plaintext columns beside it. For filtering, rows reaching your code are already decrypted, so
+  match them client-side with `matchDecrypted` from `@nzip/lofi/schema`: narrow the query with
+  plaintext filters first, then apply the predicate, and only then any limit (a `limit()` before the
+  predicate under-fetches). Sort returned rows in code rather than ordering by an encrypted column —
+  ciphertext order is arbitrary.
+- **No chaining modifiers.** `.default()`, `.merge()`, `.transform()`, and `.optional()` are compile
+  errors on encrypted columns: a default would be applied below the seal boundary as plaintext,
+  merge strategies and transforms cannot operate on ciphertext, and optional stays disabled until
+  the engine's null handling of transformed columns is pinned.
 
 ## Bind an exact typed query
 

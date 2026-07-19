@@ -39,10 +39,12 @@ padded to bucketed sizes before sealing, so for those fields the server's view d
 a certain size class and cadence exist" — all short values share one class, and larger values reveal
 only a coarse bucket.
 
-The constraints are mechanical, not policy: an encrypted column cannot be a filter or permission
-target, because the server cannot evaluate what it cannot read; and it is account-private — a row
-shared with another account is undecryptable for them by design, and reads refuse loudly rather than
-return garbage. Details: [encrypted columns](data-and-ui.md#encrypted-columns).
+The constraints are mechanical, not policy, and enforced: a `where` on an encrypted column is a
+compile error and a permission policy referencing one fails configuration, because the server cannot
+evaluate what it cannot read; filtering on decrypted values runs client-side instead. An encrypted
+column is account-private — a row shared with another account is undecryptable for them by design,
+and reads refuse loudly rather than return garbage. Details:
+[encrypted columns](data-and-ui.md#encrypted-columns).
 
 ## Tickets: what possession grants
 

@@ -23,10 +23,12 @@
  * - The runtime installs the key at boot ({@link setEncryptedColumnKey});
  *   touching an encrypted column before that fails closed — plaintext is
  *   never written because a key was missing.
- * - Filters and policies address the stored representation. A `where` on an
- *   encrypted column compares ciphertext (useless, harmless); a permission
- *   policy must not reference one — the server cannot evaluate what it
- *   cannot read.
+ * - Filters and policies address the stored representation, which is
+ *   ciphertext, so both are rejected: a `where` on an encrypted column is a
+ *   compile error ({@link EncryptedColumn} collapses the filter position to
+ *   `never`), and a permission policy referencing one fails configuration —
+ *   the server cannot evaluate what it cannot read. Filter decrypted rows
+ *   client-side with {@link matchDecrypted}.
  * - Reading with the wrong account key (a shared row from another account)
  *   throws {@link EncryptedColumnError}. Encrypted columns belong in
  *   account-private tables; fields shared across accounts need a shared key,
@@ -38,8 +40,40 @@
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha2";
-import { schema, type StringColumn } from "jazz-tools";
+import { schema, type TypedColumnBuilder } from "jazz-tools";
 import { padPayload, unpadPayload } from "./padding.ts";
+
+declare const encryptedColumnBrand: unique symbol;
+
+// The phantom stored type is a union on purpose: the engine's where-input
+// mapping branches on the single stored sql type, so a union matches no
+// branch and every filter position for the column collapses to `never`.
+// Row and insert types read the view type and are unaffected.
+type EncryptedStoredSql = "TEXT" | "BYTEA";
+
+/**
+ * The column type of every `s.encrypted*` constructor. Structurally a valid
+ * table column with the declared view type, but excluded from `where` filters
+ * at compile time — the store holds ciphertext, so a filter could only ever
+ * compare sealed bytes. The chaining modifiers are disabled: a `.default()`
+ * would be applied below the seal boundary as plaintext, `.merge()` semantics
+ * other than last-write-wins cannot operate on ciphertext, `.transform()`
+ * would replace the seal itself, and `.optional()` stays disabled until the
+ * engine's null handling of transformed columns is pinned.
+ */
+export interface EncryptedColumn<TView> extends
+  Omit<
+    TypedColumnBuilder<EncryptedStoredSql, false, undefined, false, TView>,
+    "default" | "merge" | "transform" | "optional"
+  > {
+  readonly [encryptedColumnBrand]?: TView;
+  default(value: never): never;
+  merge(strategy: never): never;
+  transform(transform: never): never;
+  // The `this: never` parameter keeps the method arity-compatible with the
+  // base builder while making every call site a compile error.
+  optional(this: never): never;
+}
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -176,6 +210,106 @@ function open(label: string, stored: string): string {
   }
 }
 
+// Runtime identity of encrypted columns: the factory tags each builder with
+// its label, and the schema facade's define wrappers harvest the tags into a
+// table/column registry that the access layer consults — the built schema
+// types encrypted columns as ordinary TEXT, so the builders are the only
+// place the distinction exists.
+const ENCRYPTED_LABEL = Symbol("lofi.encryptedColumnLabel");
+
+const registry = new Map<string, Map<string, string>>();
+const labelLocations = new Map<string, string>();
+
+/** The encrypted-column label carried by a builder, if it has one. */
+export function encryptedColumnLabelOf(builder: unknown): string | undefined {
+  if (typeof builder !== "object" || builder === null) return undefined;
+  return (builder as { [ENCRYPTED_LABEL]?: string })[ENCRYPTED_LABEL];
+}
+
+type TableDefinitionLike = {
+  __jazzTableDefinition?: boolean;
+  columns?: Record<string, unknown>;
+};
+
+function tableColumnsOf(definition: unknown): Record<string, unknown> {
+  const like = definition as TableDefinitionLike;
+  if (like && typeof like === "object" && like.__jazzTableDefinition === true && like.columns) {
+    return like.columns;
+  }
+  return (definition ?? {}) as Record<string, unknown>;
+}
+
+/**
+ * Records every encrypted column of a schema definition under its table and
+ * column name. The schema facade's `defineSchema`/`defineApp` wrappers call
+ * this; it is idempotent for a stable definition. A label reused by a second
+ * column is reported: two columns sharing a label share a subkey and their
+ * ciphertext replays across them.
+ */
+export function registerEncryptedColumns(definition: unknown): void {
+  if (typeof definition !== "object" || definition === null) return;
+  for (const [tableName, tableDefinition] of Object.entries(definition)) {
+    for (const [columnName, builder] of Object.entries(tableColumnsOf(tableDefinition))) {
+      const label = encryptedColumnLabelOf(builder);
+      if (label === undefined) continue;
+      const location = `${tableName}.${columnName}`;
+      const existing = labelLocations.get(label);
+      if (existing !== undefined && existing !== location) {
+        console.warn(
+          `lofi schema: encrypted-column label "${label}" is used by both ${existing} and ` +
+            `${location}; shared labels share a subkey, so their ciphertext replays across ` +
+            "the two columns — give each column a unique label",
+        );
+      }
+      labelLocations.set(label, location);
+      let table = registry.get(tableName);
+      if (table === undefined) {
+        table = new Map();
+        registry.set(tableName, table);
+      }
+      table.set(columnName, label);
+    }
+  }
+}
+
+/** Whether the named column of the named table is an encrypted column. */
+export function isEncryptedColumn(tableName: string, columnName: string): boolean {
+  return registry.get(tableName)?.has(columnName) ?? false;
+}
+
+/** The registered encrypted columns of a table, keyed by column name. */
+export function encryptedColumnsOf(tableName: string): ReadonlyMap<string, string> | undefined {
+  return registry.get(tableName);
+}
+
+/** Empties the encrypted-column registry; tests call this between schemas. */
+export function clearEncryptedColumnRegistry(): void {
+  registry.clear();
+  labelLocations.clear();
+}
+
+/**
+ * Filters live-query rows on decrypted values, client-side. Encrypted columns
+ * cannot appear in `where` — the store holds ciphertext — but rows reaching
+ * the caller are already decrypted, so arbitrary predicates run locally:
+ * narrow the query with plaintext filters first, then match here, and only
+ * then apply any limit (a `limit()` before the predicate under-fetches).
+ * Sorting on an encrypted column is the same pattern: sort the returned rows,
+ * never `orderBy` the column (ciphertext order is arbitrary).
+ */
+export function matchDecrypted<T>(rows: readonly T[], predicate: (row: T) => boolean): T[] {
+  return rows.filter(predicate);
+}
+
+function sealedColumn<TView>(
+  label: string,
+  transform: { to(value: TView): string; from(value: string): TView },
+): EncryptedColumn<TView> {
+  const built = schema.string().transform(transform);
+  Object.defineProperty(built, ENCRYPTED_LABEL, { value: label });
+  return built as unknown as EncryptedColumn<TView>;
+}
+
 /**
  * A text column sealed on the client before it enters Jazz. `label` is the
  * column's stable identity, conventionally `"table.column"`; it domain-
@@ -189,22 +323,22 @@ function open(label: string, stored: string): string {
  * }),
  * ```
  */
-export function encryptedText(label: string): StringColumn<false, false, string> {
-  return schema.string().transform({
+export function encryptedText(label: string): EncryptedColumn<string> {
+  return sealedColumn(label, {
     to: (value: string) => seal(label, value),
     from: (value: string) => open(label, value),
-  }) as unknown as StringColumn<false, false, string>;
+  });
 }
 
 /**
  * A JSON-value column sealed on the client before it enters Jazz; the view
  * type is the parsed value. Same label semantics as {@link encryptedText}.
  */
-export function encryptedJson<T = unknown>(label: string): StringColumn<false, false, T> {
-  return schema.string().transform({
+export function encryptedJson<T = unknown>(label: string): EncryptedColumn<T> {
+  return sealedColumn(label, {
     to: (value: T) => seal(label, JSON.stringify(value)),
     from: (value: string) => JSON.parse(open(label, value)) as T,
-  }) as unknown as StringColumn<false, false, T>;
+  });
 }
 
 /**
@@ -214,8 +348,8 @@ export function encryptedJson<T = unknown>(label: string): StringColumn<false, f
  * range round-trip exactly up to double precision. Non-finite values are
  * rejected at write time.
  */
-export function encryptedNumber(label: string): StringColumn<false, false, number> {
-  return schema.string().transform({
+export function encryptedNumber(label: string): EncryptedColumn<number> {
+  return sealedColumn(label, {
     to: (value: number) => {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         throw new TypeError(`encrypted column "${label}" only stores finite numbers`);
@@ -232,7 +366,7 @@ export function encryptedNumber(label: string): StringColumn<false, false, numbe
       }
       return parsed;
     },
-  }) as unknown as StringColumn<false, false, number>;
+  });
 }
 
 /**
@@ -240,8 +374,8 @@ export function encryptedNumber(label: string): StringColumn<false, false, numbe
  * `Date`, matching the plain timestamp column. Same label semantics as
  * {@link encryptedText}. Invalid dates are rejected at write time.
  */
-export function encryptedDate(label: string): StringColumn<false, false, Date> {
-  return schema.string().transform({
+export function encryptedDate(label: string): EncryptedColumn<Date> {
+  return sealedColumn(label, {
     to: (value: Date) => {
       if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
         throw new TypeError(`encrypted column "${label}" only stores valid dates`);
@@ -258,5 +392,5 @@ export function encryptedDate(label: string): StringColumn<false, false, Date> {
       }
       return new Date(epochMs);
     },
-  }) as unknown as StringColumn<false, false, Date>;
+  });
 }

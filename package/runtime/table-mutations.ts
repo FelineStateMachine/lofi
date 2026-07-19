@@ -1,3 +1,4 @@
+import { sealSharedColumnValuesSync } from "./shared-field-write.ts";
 import type { Db, MutationErrorEvent, TableProxy } from "jazz-tools";
 import { syncing } from "./config.ts";
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
@@ -99,21 +100,32 @@ export class TableMutationStore<T extends TableRow, Init> {
       this.#environment.getLedger().perform<T>({
         kind: "insert",
         table: this.#table as TableProxy<unknown, unknown>,
-        values,
+        values: this.#sealSharedColumns(values as Record<string, unknown>) as Init,
       })
     );
   }
 
-  /** Updates a row. Awaiting the returned handle resolves at `saved`. */
+  /** Updates a row. Awaiting the returned handle resolves at `saved`.
+   * A patch touching a shared encrypted column must include the row's group
+   * column — the verb path seals synchronously before journaling and cannot
+   * fetch the row. */
   update(id: string, patch: Partial<Init>): WriteHandle<void> {
     return this.#track(() =>
       this.#environment.getLedger().perform<void>({
         kind: "update",
         table: this.#table as TableProxy<unknown, unknown>,
         id,
-        patch: patch as Record<string, unknown>,
+        patch: this.#sealSharedColumns(patch as Record<string, unknown>),
       })
     );
+  }
+
+  // Sealing precedes journaling so the durable journal holds ciphertext and
+  // replayed writes stay sealed.
+  #sealSharedColumns(values: Record<string, unknown>): Record<string, unknown> {
+    const tableName = (this.#table as unknown as { _table?: string })._table;
+    if (!tableName) return values;
+    return sealSharedColumnValuesSync(tableName, values);
   }
 
   /** Deletes a row. Awaiting the returned handle resolves at `saved`. */

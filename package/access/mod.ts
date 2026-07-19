@@ -20,6 +20,14 @@ export {
   type SharingIdentityDetails,
 } from "./identity.ts";
 export {
+  bootstrapGroupFieldKey,
+  reconcileSharedFieldKeys,
+  rotateGroupFieldKey,
+  type SharedFieldLifecycleContext,
+  wrapHeldKeysForMember,
+  type WrapSkip,
+} from "./shared-field-lifecycle.ts";
+export {
   type AccessRuntimeTable,
   createGroupOperations,
   createSharingOperations,

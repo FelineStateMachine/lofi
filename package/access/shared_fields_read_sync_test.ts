@@ -206,7 +206,7 @@ Deno.test("a wrapped key turns Bob's pending read into plaintext", async () => {
       db: bob as never,
       appId: "read-sync-app",
       userId: bobId,
-      configs: [{ label: "readsync.docs.body", ...SHARED_OPTIONS }],
+      configs: [{ label: "readsync.docs.body", kind: "text", ...SHARED_OPTIONS }],
       findTable: (name) =>
         name === "workspaceFieldKeys"
           ? app.workspaceFieldKeys

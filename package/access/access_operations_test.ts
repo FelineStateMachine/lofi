@@ -3,6 +3,7 @@ import {
   AccessError,
   createSharingOperations,
   decodeSharingIdentity,
+  decodeSharingIdentityDetails,
   encodeSharingIdentity,
   sharedGrantTable,
 } from "./mod.ts";
@@ -61,4 +62,31 @@ Deno.test("shared operations reject managed-sync work before touching a local-on
     code = error instanceof AccessError ? error.code : "unexpected";
   }
   assert(code === "sync-required", "local-only sharing did not report its sync precondition");
+});
+
+Deno.test("fingerprint-bearing identities round-trip and coexist with plain ones", () => {
+  const plain = encodeSharingIdentity("stable-jazz-principal");
+  assert(plain.startsWith("lofi1:"), "a fingerprintless identity stays v1");
+  const pinned = encodeSharingIdentity("stable-jazz-principal", "fp-abc123");
+  assert(pinned.startsWith("lofi2:"), "a fingerprint upgrades the identity to v2");
+  const details = decodeSharingIdentityDetails(pinned);
+  assert(
+    details.userId === "stable-jazz-principal" && details.fingerprint === "fp-abc123",
+    "v2 identity did not round-trip its parts",
+  );
+  assert(
+    decodeSharingIdentity(pinned) === "stable-jazz-principal",
+    "the principal-only decoder must accept v2",
+  );
+  assert(
+    decodeSharingIdentityDetails(plain).fingerprint === undefined,
+    "a v1 identity carries no fingerprint",
+  );
+  let code = "";
+  try {
+    decodeSharingIdentityDetails(`${plain}:unexpected-extra`);
+  } catch (error) {
+    code = error instanceof AccessError ? error.code : "unexpected";
+  }
+  assert(code === "invalid-identity", "a v1 identity with a trailing segment was accepted");
 });

@@ -13,9 +13,11 @@
 export { AccessError, type AccessErrorCode, isAccessError } from "./errors.ts";
 export {
   decodeSharingIdentity,
+  decodeSharingIdentityDetails,
   encodeSharingIdentity,
   type SharingIdentity,
   sharingIdentity,
+  type SharingIdentityDetails,
 } from "./identity.ts";
 export {
   type AccessRuntimeTable,
@@ -41,6 +43,8 @@ export {
   type RuleBuilder,
   sharedAccess,
   type SharedAccessTemplate,
+  sharedFieldAccess,
+  type SharedFieldAccessTemplate,
   type TablePolicy,
 } from "./policies.ts";
 export {
@@ -48,5 +52,6 @@ export {
   type GroupRole,
   groupRoleCapabilities,
   groupRoles,
+  sharedFieldDirectoryTable,
   sharedGrantTable,
 } from "./schema.ts";

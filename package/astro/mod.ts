@@ -84,7 +84,9 @@ export const schemaFiles = [
   "padding.ts",
   "private-table.ts",
   "shared-crypto.ts",
+  "shared-encrypted.ts",
   "shared-keyring.ts",
+  "shared-registry.ts",
   "store.ts",
 ] as const;
 

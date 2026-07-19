@@ -53,5 +53,6 @@ export {
   groupRoleCapabilities,
   groupRoles,
   sharedFieldDirectoryTable,
+  sharedFieldKeyTable,
   sharedGrantTable,
 } from "./schema.ts";

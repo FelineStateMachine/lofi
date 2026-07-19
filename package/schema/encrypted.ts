@@ -301,12 +301,22 @@ export function matchDecrypted<T>(rows: readonly T[], predicate: (row: T) => boo
   return rows.filter(predicate);
 }
 
+/**
+ * Tags a live builder as an encrypted column so the registry harvest — and
+ * through it the access layer's policy guard — treats it as sealed. The
+ * shared-column factories tag their builders with this too.
+ */
+export function markEncryptedColumn<T extends object>(builder: T, label: string): T {
+  Object.defineProperty(builder, ENCRYPTED_LABEL, { value: label });
+  return builder;
+}
+
 function sealedColumn<TView>(
   label: string,
   transform: { to(value: TView): string; from(value: string): TView },
 ): EncryptedColumn<TView> {
   const built = schema.string().transform(transform);
-  Object.defineProperty(built, ENCRYPTED_LABEL, { value: label });
+  markEncryptedColumn(built, label);
   return built as unknown as EncryptedColumn<TView>;
 }
 

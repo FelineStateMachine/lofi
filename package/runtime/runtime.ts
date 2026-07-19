@@ -9,7 +9,16 @@ import { assertSchemaWritable, schemaCompatGate, subscribeSchemaCompat } from ".
 import { resolveStoreStatus } from "./store-status.ts";
 import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
 import { setEncryptedColumnKey } from "../schema/encrypted.ts";
-import { installSharedFieldIdentityFromSecret } from "./shared-field-keys.ts";
+import {
+  ensureDirectoryEntry,
+  installSharedFieldIdentityFromSecret,
+  type SharedFieldWatchAlert,
+  startSharedFieldKeyWatcher,
+} from "./shared-field-keys.ts";
+import { clearSharedFieldKeys, sharedFieldIdentityOrNull } from "../schema/shared-keyring.ts";
+import { sharedColumnConfigs } from "../schema/shared-registry.ts";
+import { recordSharedFieldAlert } from "./diagnostics.ts";
+import { activeAppId } from "./config.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
   createTableStore,
@@ -55,6 +64,7 @@ type RuntimeSlot = {
   diagnosticListeners: Set<() => void>;
   principal: string | null;
   serverConfigured: boolean;
+  stopSharedFieldWatcher?: () => void;
 };
 
 const slotName = "__LOFI_ALPHA53_RUNTIME__";
@@ -256,6 +266,10 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     bootProgressTracker.mark("opening");
     const secret = await resolveAccountSecret();
     await installEncryptedColumnKey(secret);
+    // Field keys from a previous principal must never survive into a new
+    // client; the watcher re-installs the current account's keys as wraps
+    // arrive.
+    clearSharedFieldKeys();
     await installSharedFieldIdentityFromSecret(secret);
     const namespace = await accountNamespace(secret);
     const db = await createDb(
@@ -280,6 +294,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     }
     state.principal = db.getAuthState().session?.user_id ?? null;
     state.serverConfigured = connect;
+    startSharedFieldRuntime(state, db, connect);
     state.diagnostics.storageState = "persistent-driver-open";
     state.diagnostics.startupFailure = null;
     state.diagnostics.clientsCreated += 1;
@@ -295,7 +310,56 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
 
 // Shutdown deliberately avoids `logout()`, which would clear local account
 // state that must carry forward into a restored or sync-enabled runtime.
+// The shared-field runtime: one wrapped-key watcher per client, plus the
+// one-time directory self-publication. Both exist only when the schema
+// declares shared columns and a sync location is active — local-only apps
+// never pay for them.
+function startSharedFieldRuntime(state: RuntimeSlot, db: Db, connect: boolean): void {
+  const configs = sharedColumnConfigs();
+  const userId = db.getAuthState().session?.user_id;
+  const identity = sharedFieldIdentityOrNull();
+  if (configs.length === 0 || !connect || !userId || !identity) return;
+  const alert = (input: SharedFieldWatchAlert) => {
+    recordSharedFieldAlert(state.diagnostics, { ...input, at: new Date().toISOString() });
+    notifyDiagnostics(state);
+  };
+  state.stopSharedFieldWatcher = startSharedFieldKeyWatcher({
+    db: db as never,
+    appId: activeAppId(),
+    userId,
+    configs,
+    findTable: (name) => findRuntimeTable(name),
+    onAlert: alert,
+  });
+  const directoryNames = new Set(configs.map((config) => config.directory));
+  for (const directoryName of directoryNames) {
+    const directory = findRuntimeTable(directoryName);
+    if (!directory) continue;
+    void ensureDirectoryEntry({ db: db as never, directory, userId, identity })
+      .then((outcome) => {
+        if (outcome.state === "self-key-conflict") {
+          recordSharedFieldAlert(state.diagnostics, {
+            code: "self-key-conflict",
+            userId,
+            detail: "the published directory key for this account does not match its derived key",
+            at: new Date().toISOString(),
+          });
+          notifyDiagnostics(state);
+        }
+      }).catch(() => {
+        // Publication retries on the next boot; reads stay pending meanwhile.
+      });
+  }
+}
+
+function stopSharedFieldRuntime(state: RuntimeSlot): void {
+  state.stopSharedFieldWatcher?.();
+  state.stopSharedFieldWatcher = undefined;
+  clearSharedFieldKeys();
+}
+
 async function destroyClient(state: RuntimeSlot, db: Db): Promise<void> {
+  stopSharedFieldRuntime(state);
   await db.shutdown();
   state.diagnostics.activeClients -= 1;
   notifyDiagnostics(state);

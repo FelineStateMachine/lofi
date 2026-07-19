@@ -38,6 +38,7 @@ import {
   mergeNestedPermissions,
 } from "./nested.ts";
 import { plain, privateTable } from "./private-table.ts";
+import { sharedEncryptedJson, sharedEncryptedText } from "./shared-encrypted.ts";
 
 /**
  * The curated schema DSL type. Every Jazz member is the pinned Jazz 2
@@ -88,6 +89,8 @@ export type SchemaDsl =
     encryptedDate: typeof encryptedDate;
     privateTable: typeof privateTable;
     plain: typeof plain;
+    sharedEncryptedText: typeof sharedEncryptedText;
+    sharedEncryptedJson: typeof sharedEncryptedJson;
     mutation: typeof mutation;
     effect: typeof effect;
     log: typeof log;
@@ -136,6 +139,8 @@ export const s: SchemaDsl = {
   encryptedDate,
   privateTable,
   plain,
+  sharedEncryptedText,
+  sharedEncryptedJson,
   mutation,
   effect,
   log,
@@ -150,6 +155,29 @@ export {
   privateTable,
   type PrivateTableColumns,
 } from "./private-table.ts";
+
+export {
+  type SharedColumnOptions,
+  sharedEncryptedJson,
+  sharedEncryptedText,
+  sharedFieldReady,
+  type SharedFieldValue,
+  unwrapSharedField,
+} from "./shared-encrypted.ts";
+export { SharedFieldError } from "./shared-crypto.ts";
+export {
+  clearSharedFieldKeys,
+  getSharedFieldKey,
+  installSharedFieldKey,
+  latestSharedFieldGeneration,
+  sharedKeyScope,
+  subscribeSharedKeyring,
+} from "./shared-keyring.ts";
+export {
+  clearSharedColumnRegistry,
+  type SharedColumnConfig,
+  sharedColumnConfigs,
+} from "./shared-registry.ts";
 
 export {
   clearEncryptedColumnKey,

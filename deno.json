@@ -1,6 +1,6 @@
 {
   "name": "@nzip/lofi",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "MIT",
   "description": "A local-first Deno PWA framework with durable local data, recoverable accounts, optional Jazz sync, mutations with sync-boundary effects, and private, direct-share, or group access templates.",
   "exports": {

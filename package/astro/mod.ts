@@ -212,6 +212,7 @@ export default defineConfig({
         { find: /^npm:preact@[^/]+\\/jsx-runtime$/, replacement: "preact/jsx-runtime" },
         { find: /^npm:preact@[^/]+$/, replacement: "preact" },
         { find: /^npm:@noble\\/ciphers@[^/]+\\/chacha$/, replacement: "@noble/ciphers/chacha" },
+        { find: /^npm:@noble\\/curves@[^/]+\\/ed25519$/, replacement: "@noble/curves/ed25519" },
         { find: /^npm:@noble\\/hashes@[^/]+\\/hkdf$/, replacement: "@noble/hashes/hkdf" },
         { find: /^npm:@noble\\/hashes@[^/]+\\/sha2$/, replacement: "@noble/hashes/sha2" },
         { find: /^npm:jazz-tools@[^/]+\\/passkey-backup$/, replacement: "jazz-tools/passkey-backup" },

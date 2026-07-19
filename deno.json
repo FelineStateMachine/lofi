@@ -85,7 +85,8 @@
     "semiColons": true,
     "singleQuote": false,
     "exclude": [
-      "website"
+      "website",
+      ".claude"
     ]
   },
   "lint": {
@@ -95,7 +96,8 @@
       ]
     },
     "exclude": [
-      "website"
+      "website",
+      ".claude"
     ]
   },
   "publish": {

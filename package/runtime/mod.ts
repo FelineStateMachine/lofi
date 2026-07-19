@@ -157,3 +157,32 @@ export {
   type TableStoreOptions,
 } from "./table-store.ts";
 export { settleUiMutation } from "./ui-mutation.ts";
+export { classifyMutationError, type MutationErrorClass } from "./mutation-taxonomy.ts";
+export {
+  WriteHandle,
+  WriteRejectedError,
+  type WriteRejection,
+  type WriteStage,
+} from "./write-handle.ts";
+export {
+  armWriteLedger,
+  getWriteLedger,
+  type LedgerWriteOptions,
+  type LedgerWriteRequest,
+  type PendingWritesSnapshot,
+  type PendingWriteSummary,
+  type RowSyncStatus,
+  WriteLedger,
+  type WriteLedgerEnvironment,
+} from "./write-ledger.ts";
+export {
+  createDefaultJournalStorage,
+  createMemoryJournalStorage,
+  type JournalDocument,
+  type JournalEffectState,
+  journalIdFor,
+  type JournalStorage,
+  type JournalWriteRecord,
+  type JournalWriteStage,
+} from "./write-journal.ts";
+export type { EffectLogEntry } from "./diagnostics.ts";

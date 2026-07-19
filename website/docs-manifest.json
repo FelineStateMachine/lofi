@@ -23,6 +23,10 @@
           "label": "Data and UI"
         },
         {
+          "id": "nouns-and-verbs",
+          "label": "Nouns and verbs"
+        },
+        {
           "id": "permissions",
           "label": "Permissions"
         },

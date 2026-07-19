@@ -2,6 +2,33 @@ import type { SchemaCompatState } from "./schema-compat.ts";
 import type { RuntimeStartupFailure } from "./startup-recovery.ts";
 import type { RuntimeStoreStatus } from "./store-status.ts";
 
+/** One structured entry recorded by the built-in `s.log` effect unit. */
+export type EffectLogEntry = {
+  /** The author-chosen log label. */
+  label: string;
+  /** The declaring verb's name, or `null` for writes without a verb. */
+  verb: string | null;
+  /** The written table's name. */
+  table: string;
+  /** The written row's id. */
+  rowId: string;
+  /** Which fate settled the write. */
+  fate: "synced" | "rejected";
+  /** Epoch milliseconds when the entry was recorded. */
+  at: number;
+};
+
+// Recent-entry window for the s.log diagnostic feed.
+const maxEffectLogEntries = 20;
+
+/** Appends one `s.log` entry, keeping the bounded recent window. */
+export function recordEffectLogEntry(
+  diagnostics: RuntimeDiagnostics,
+  entry: EffectLogEntry,
+): void {
+  diagnostics.effectLog = [...diagnostics.effectLog.slice(-(maxEffectLogEntries - 1)), entry];
+}
+
 /**
 // Package-owned runtime diagnostics.
  * Runtime-owned observability counters. These describe the framework's storage,
@@ -25,6 +52,18 @@ export type RuntimeDiagnostics = {
   pendingGlobalWrites: number;
   lastWriteDurability: "none" | "local" | "global" | "failed";
   mutationErrors: number;
+  /** Journaled writes that have not yet settled as synced or rejected. */
+  journaledPendingWrites: number;
+  /** Pending writes whose declared intent lifespan has passed (surfacing only). */
+  expiredPendingWrites: number;
+  /** Effect handler invocations that threw; failed obligations re-arm at boot. */
+  effectHandlerFailures: number;
+  /** Obligations retired because their delivery window closed undelivered. */
+  expiredObligations: number;
+  /** Obligations quarantined after repeated handler failures. */
+  quarantinedObligations: number;
+  /** Recent structured entries recorded by the built-in `s.log` effect unit. */
+  effectLog: readonly EffectLogEntry[];
 };
 
 export function createDiagnostics(): RuntimeDiagnostics {
@@ -46,5 +85,11 @@ export function createDiagnostics(): RuntimeDiagnostics {
     pendingGlobalWrites: 0,
     lastWriteDurability: "none",
     mutationErrors: 0,
+    journaledPendingWrites: 0,
+    expiredPendingWrites: 0,
+    effectHandlerFailures: 0,
+    expiredObligations: 0,
+    quarantinedObligations: 0,
+    effectLog: [],
   };
 }

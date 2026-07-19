@@ -1,11 +1,10 @@
 import type { Db, MutationErrorEvent, TableProxy } from "jazz-tools";
 import { syncing } from "./config.ts";
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
-import { settleDurableWrite } from "./durability.ts";
 import { getRuntime, runtimeRecreatedEvent, updateRuntimeDiagnostics } from "./runtime.ts";
-import { assertSchemaWritable } from "./schema-compat.ts";
 import type { TableRow } from "./table-store.ts";
-import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
+import type { WriteHandle } from "./write-handle.ts";
+import { getWriteLedger, type WriteLedger } from "./write-ledger.ts";
 
 /** Observable state shared by every mutation consumer for one table. */
 export type TableMutationSnapshot = {
@@ -15,11 +14,6 @@ export type TableMutationSnapshot = {
 };
 
 type Listener = () => void;
-type MutationHandle<T> = {
-  /** The vendor batch id, used to attribute asynchronous rejections. */
-  batchId?: unknown;
-  wait(options: { tier: "local" | "global" }): Promise<T>;
-};
 
 // Own-batch attribution keeps a bounded window of recent writes; late
 // rejections older than this are diagnostics-only.
@@ -29,15 +23,10 @@ const MAX_TRACKED_BATCHES = 128;
 export type TableMutationEnvironment = {
   getDb(): Promise<Db>;
   syncConfigured(): boolean;
+  /** The per-write ledger table mutations route through. */
+  getLedger(): WriteLedger;
   subscribeRuntimeRecreation(listener: () => void): () => void;
   updateDiagnostics(update: (diagnostics: RuntimeDiagnostics) => void): void;
-  /**
-   * Runs before each mutation reaches the database: rejects to refuse the
-   * write (the schema-compatibility gate), and may resolve with a release
-   * function that is invoked once the write settles locally (the cross-tab
-   * write lock). Absent means writes are never guarded.
-   */
-  guardWrite?(): Promise<(() => void) | void>;
 };
 
 /** Framework-neutral typed mutations and observable durability for one table. */
@@ -93,19 +82,41 @@ export class TableMutationStore<T extends TableRow, Init> {
     return this.#listeners.size;
   }
 
-  /** Inserts and returns the typed created row after local durability. */
-  async insert(values: Init): Promise<T> {
-    return await this.#perform((db) => db.insert(this.#table, values));
+  /**
+   * Inserts a row. Awaiting the returned handle resolves with the typed
+   * created row at `saved`; the handle's stage promises track the sync fate.
+   */
+  insert(values: Init): WriteHandle<T> {
+    return this.#track(() =>
+      this.#environment.getLedger().perform<T>({
+        kind: "insert",
+        table: this.#table as TableProxy<unknown, unknown>,
+        values,
+      })
+    );
   }
 
-  /** Updates a row and resolves after local durability. */
-  async update(id: string, patch: Partial<Init>): Promise<void> {
-    await this.#perform((db) => db.update(this.#table, id, patch));
+  /** Updates a row. Awaiting the returned handle resolves at `saved`. */
+  update(id: string, patch: Partial<Init>): WriteHandle<void> {
+    return this.#track(() =>
+      this.#environment.getLedger().perform<void>({
+        kind: "update",
+        table: this.#table as TableProxy<unknown, unknown>,
+        id,
+        patch: patch as Record<string, unknown>,
+      })
+    );
   }
 
-  /** Deletes a row and resolves after local durability. */
-  async remove(id: string): Promise<void> {
-    await this.#perform((db) => db.delete(this.#table, id));
+  /** Deletes a row. Awaiting the returned handle resolves at `saved`. */
+  remove(id: string): WriteHandle<void> {
+    return this.#track(() =>
+      this.#environment.getLedger().perform<void>({
+        kind: "remove",
+        table: this.#table as TableProxy<unknown, unknown>,
+        id,
+      })
+    );
   }
 
   /** Releases listeners owned by an evicted or hot-reloaded store. */
@@ -116,35 +127,49 @@ export class TableMutationStore<T extends TableRow, Init> {
     this.#stop();
   }
 
-  async #perform<Result>(create: (db: Db) => MutationHandle<Result>): Promise<Result> {
+  #track<Result>(start: () => WriteHandle<Result>): WriteHandle<Result> {
     if (this.#disposed) throw new Error("table mutation store has been released");
-    // The guard runs before the mutation reaches the vendor: a refusal (the
-    // schema-compatibility gate) surfaces like any mutation failure, and the
-    // returned release ends this write's hold on the cross-tab write lock
-    // once the write settles to the local tier — the quiescence bar an
-    // upgrade swap waits on.
-    let releaseGuard: (() => void) | undefined;
+    const generation = ++this.#writeGeneration;
+    let handle: WriteHandle<Result>;
     try {
-      releaseGuard = (await this.#environment.guardWrite?.()) ?? undefined;
+      // A refusal — the ledger's write guard (schema-compatibility gate) or a
+      // current-policy violation — leaves through this call with no journal
+      // entry; the ledger has already counted it.
+      handle = start();
     } catch (error) {
-      this.#updateDiagnostics((diagnostics) => diagnostics.mutationErrors += 1);
       this.#fail(error);
       throw error;
     }
-    try {
-      const db = await this.#environment.getDb();
-      let mutation: MutationHandle<Result>;
-      try {
-        mutation = create(db);
-      } catch (error) {
-        this.#updateDiagnostics((diagnostics) => diagnostics.mutationErrors += 1);
-        this.#fail(error);
-        throw error;
-      }
-      return await this.#settle(mutation);
-    } finally {
-      releaseGuard?.();
-    }
+    this.#trackBatch(handle.batchId);
+    this.#set({ pending: this.#snapshot.pending + 1, durability: "none", error: null });
+    // Generation guards keep a superseded write's late outcome — success or
+    // rejection — diagnosable without overwriting the newer write's state.
+    handle.saved.then(
+      () => {
+        this.#trackBatch(handle.batchId);
+        this.#set({
+          pending: Math.max(0, this.#snapshot.pending - 1),
+          ...(generation === this.#writeGeneration ? { durability: "local" as const } : {}),
+        });
+      },
+      (error) => {
+        this.#set({ pending: Math.max(0, this.#snapshot.pending - 1) });
+        if (generation === this.#writeGeneration) this.#fail(error);
+      },
+    );
+    handle.synced.then(
+      () => {
+        // Without configured sync the ledger settles at local durability; the
+        // table-scoped durability label stays `local` in that mode.
+        if (generation === this.#writeGeneration && this.#environment.syncConfigured()) {
+          this.#set({ durability: "global", error: null });
+        }
+      },
+      (error) => {
+        if (generation === this.#writeGeneration) this.#fail(error);
+      },
+    );
+    return handle;
   }
 
   #ownsBatch(event: MutationErrorEvent): boolean {
@@ -152,49 +177,15 @@ export class TableMutationStore<T extends TableRow, Init> {
     // Attribution is only possible when the vendor exposes batch ids on both
     // sides; without them, surface every event rather than silence real errors.
     if (batchId === undefined || !this.#batchTracking) return true;
-    return this.#ownBatches.has(batchId);
+    return this.#ownBatches.has(String(batchId));
   }
 
-  #trackBatch<Result>(mutation: MutationHandle<Result>): void {
-    if (mutation.batchId === undefined) return;
+  #trackBatch(batchId: string | null): void {
+    if (batchId === null) return;
     this.#batchTracking = true;
-    this.#ownBatches.add(mutation.batchId);
+    this.#ownBatches.add(batchId);
     if (this.#ownBatches.size > MAX_TRACKED_BATCHES) {
       this.#ownBatches.delete(this.#ownBatches.values().next().value);
-    }
-  }
-
-  async #settle<Result>(mutation: MutationHandle<Result>): Promise<Result> {
-    const generation = ++this.#writeGeneration;
-    this.#trackBatch(mutation);
-    this.#set({ pending: this.#snapshot.pending + 1, durability: "none", error: null });
-    try {
-      // Generation guards keep a superseded write's late outcome — success or
-      // rejection — diagnosable without overwriting the newer write's state.
-      return await settleDurableWrite(
-        mutation,
-        (update) => this.#updateDiagnostics(update),
-        this.#environment.syncConfigured() ? "background" : "none",
-        {
-          onLocal: () =>
-            this.#set({
-              pending: Math.max(0, this.#snapshot.pending - 1),
-              ...(generation === this.#writeGeneration ? { durability: "local" as const } : {}),
-            }),
-          onGlobal: () => {
-            if (generation === this.#writeGeneration) {
-              this.#set({ durability: "global", error: null });
-            }
-          },
-          onGlobalError: (error) => {
-            if (generation === this.#writeGeneration) this.#fail(error);
-          },
-        },
-      );
-    } catch (error) {
-      this.#set({ pending: Math.max(0, this.#snapshot.pending - 1) });
-      this.#fail(error);
-      throw error;
     }
   }
 
@@ -309,14 +300,14 @@ export class TableMutationRegistry {
         this.#environment,
         () => this.#evictIfUnused(entries!, table._table),
       );
-      entry = { store: store as TableMutationStore<TableRow, unknown>, leases: 0 };
+      entry = { store: store as unknown as TableMutationStore<TableRow, unknown>, leases: 0 };
       entries.set(table._table, entry);
       this.#stores.add(entry.store);
     }
     entry.leases += 1;
     let retained = true;
     return {
-      store: entry.store as TableMutationStore<T, Init>,
+      store: entry.store as unknown as TableMutationStore<T, Init>,
       release: () => {
         if (!retained) return;
         retained = false;
@@ -344,15 +335,12 @@ export class TableMutationRegistry {
 const defaultRegistry = new TableMutationRegistry({
   getDb: async () => (await getRuntime()).db,
   syncConfigured: syncing,
+  getLedger: getWriteLedger,
   subscribeRuntimeRecreation(listener) {
     globalThis.addEventListener(runtimeRecreatedEvent, listener);
     return () => globalThis.removeEventListener(runtimeRecreatedEvent, listener);
   },
   updateDiagnostics: updateRuntimeDiagnostics,
-  async guardWrite() {
-    await assertSchemaWritable();
-    return await acquireUpgradeWriteLock();
-  },
 });
 
 /** Acquires the package-wide typed mutation surface for one table. */

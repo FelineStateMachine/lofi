@@ -23,6 +23,7 @@
  * @module
  */
 import { schema } from "jazz-tools";
+import { effect, insert, log, mutation, remove, update } from "./effects.ts";
 import { encryptedJson, encryptedText } from "./encrypted.ts";
 import {
   defineNestedApp,
@@ -76,6 +77,12 @@ export type SchemaDsl =
     flattenNestedSchema: typeof flattenNestedSchema;
     encryptedText: typeof encryptedText;
     encryptedJson: typeof encryptedJson;
+    mutation: typeof mutation;
+    effect: typeof effect;
+    log: typeof log;
+    insert: typeof insert;
+    update: typeof update;
+    remove: typeof remove;
   };
 
 /**
@@ -92,6 +99,12 @@ export const s: SchemaDsl = {
   flattenNestedSchema,
   encryptedText,
   encryptedJson,
+  mutation,
+  effect,
+  log,
+  insert,
+  update,
+  remove,
 };
 
 export {
@@ -112,6 +125,30 @@ export {
   nestedAppTables,
   type NestedSchemaDefinition,
 } from "./nested.ts";
+export {
+  clearEffectDeclarations,
+  effect,
+  type EffectContext,
+  type EffectHandlers,
+  type EffectRow,
+  type EffectUnit,
+  insert,
+  type InsertVerb,
+  log,
+  mutation,
+  type MutationDescriptor,
+  type MutationOp,
+  type MutationOpKind,
+  type MutationOptions,
+  type MutationRuntime,
+  type MutationVerb,
+  remove,
+  type RemoveVerb,
+  resolveEffectUnit,
+  setMutationRuntime,
+  update,
+  type UpdateVerb,
+} from "./effects.ts";
 
 // Store provisioning (./store.ts) is deliberately NOT re-exported here: the
 // Jazz schema loader bundles the author's schema module graph — this facade

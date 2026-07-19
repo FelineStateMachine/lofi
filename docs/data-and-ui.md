@@ -194,9 +194,12 @@ await records.update(created.id, { archived: true });
 await records.remove(created.id);
 ```
 
-`insert` returns the created row, including its generated `id`. Mutation promises resolve only after
-local durability. When managed sync is active, global confirmation continues in the background and
-updates the shared table-scoped state:
+Each method returns a thenable `WriteHandle`: awaiting `insert` resolves with the created row,
+including its generated `id`, once the write is durable on this device. The handle's `saved` and
+`synced` promises and its `stage` property expose the write's sync fate; named verbs with effect
+handlers build on the same lifecycle — see [Nouns and verbs](nouns-and-verbs.md). When managed sync
+is active, global confirmation continues in the background and updates the shared table-scoped
+state:
 
 | Field        | Values                              | Meaning                            |
 | ------------ | ----------------------------------- | ---------------------------------- |

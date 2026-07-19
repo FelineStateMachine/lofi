@@ -26,6 +26,13 @@ export {
   usePwaState,
 } from "./PwaActions.tsx";
 export { TicketEnrollForm, type TicketEnrollFormProps } from "./TicketEnrollForm.tsx";
+export { usePendingWrites, useSyncStatus, useWrite, type WriteState } from "./write-hooks.ts";
+export type { WriteHandle, WriteRejection, WriteStage } from "../runtime/write-handle.ts";
+export type {
+  PendingWritesSnapshot,
+  PendingWriteSummary,
+  RowSyncStatus,
+} from "../runtime/write-ledger.ts";
 export {
   type SchemaCompatReason,
   type SchemaCompatState,

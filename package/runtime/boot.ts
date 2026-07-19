@@ -71,6 +71,12 @@ export async function bootLofi(): Promise<void> {
   }
   startCompatibilityGate();
   await import("./lifecycle.ts");
+  // Arm the write ledger so journaled writes reconcile and outstanding effect
+  // obligations re-run before any island mounts. A boot that cannot open the
+  // runtime surfaces through its own diagnostics, never through arming.
+  void import("./write-ledger.ts")
+    .then((ledger) => ledger.armWriteLedger())
+    .catch(() => undefined);
   registerProductionServiceWorker();
   if (import.meta.env.DEV) void import("./probe.ts");
 }

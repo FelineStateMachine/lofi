@@ -1,13 +1,8 @@
 import { schema } from "jazz-tools";
 import { assert, assertCount } from "../runtime/test-assert.ts";
 import type { WriteHandle } from "../runtime/write-handle.ts";
-import {
-  clearEffectDeclarations,
-  type EffectContext,
-  type MutationDescriptor,
-  s,
-  setMutationRuntime,
-} from "./mod.ts";
+import { type EffectContext, s } from "./mod.ts";
+import { clearEffectDeclarations, type MutationDescriptor, setMutationRuntime } from "./effects.ts";
 
 const app = schema.defineApp({
   orders: schema.table({ item: schema.string(), qty: schema.int() }),
@@ -39,7 +34,7 @@ Deno.test("verbs carry their declared units and dispatch call-site arguments", (
   });
   const placeOrder = s.mutation("placeOrder", s.insert(app.orders), {
     effects: [chargeCard, s.log("order-placed")],
-    expires: 60_000,
+    expiresAfterMs: 60_000,
   });
   placeOrder({ item: "tea", qty: 2 });
   assertCount(recorder.dispatched.length, 1, "the verb call must reach the dispatcher");
@@ -54,7 +49,7 @@ Deno.test("verbs carry their declared units and dispatch call-site arguments", (
     (args[0] as { item: string }).item === "tea",
     "call-site values must be forwarded untouched",
   );
-  assert(descriptor.expiresMs === 60_000, "the intent lifespan must ride the descriptor");
+  assert(descriptor.expiresAfterMs === 60_000, "the intent lifespan must ride the descriptor");
   clearEffectDeclarations();
 });
 

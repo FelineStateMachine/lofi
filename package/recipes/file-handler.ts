@@ -6,10 +6,12 @@
  */
 
 import {
+  type InstalledAppLaunchConsumer,
   type InstalledAppLaunchQueue,
-  type InstalledLaunchConsumer,
   installInstalledAppLaunchQueueConsumer,
 } from "./launch-handler.ts";
+
+export type { InstalledAppLaunchConsumer, InstalledAppLaunchQueue } from "./launch-handler.ts";
 
 /** A minimal read-only file handle delivered by an installed-app launch. */
 export type InstalledAppFileHandle = {
@@ -198,7 +200,7 @@ export async function prepareFileImportDrafts<Parsed>(
 /** Feature-detect `launchQueue` and turn file launches into validated drafts. */
 export function installFileLaunchConsumer<Parsed>(
   options: InstallFileLaunchConsumerOptions<Parsed>,
-): InstalledLaunchConsumer {
+): InstalledAppLaunchConsumer {
   validateOptions(options);
   let generation = 0;
   const consumer = installInstalledAppLaunchQueueConsumer({

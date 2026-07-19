@@ -1,4 +1,7 @@
-import { discoverRelatedApplications } from "./related-app-discovery.ts";
+import {
+  discoverRelatedApplications,
+  type VerifiedRelatedApplication,
+} from "./related-app-discovery.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -49,7 +52,7 @@ Deno.test("related app discovery rejects invented declarations", async () => {
       { platform: "invented", id: "app" },
       { platform: "play" },
       { platform: "play", id: "app", url: "http://store.example/app" },
-    ]
+    ] as readonly VerifiedRelatedApplication[]
   ) {
     let rejected = false;
     try {

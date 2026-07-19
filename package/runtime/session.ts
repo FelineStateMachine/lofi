@@ -61,7 +61,11 @@ export type SessionSink = {
 
 /** A snapshot of the account: what is possible and what the user has chosen. */
 export type Session = {
-  /** Stable, app-scoped Jazz sharing identity for the active account. */
+  /**
+   * Stable, app-scoped Jazz sharing identity for the active account. Named
+   * `user_id` because it relays the sync principal's vocabulary verbatim —
+   * the same identifier permission rows and directory tables carry.
+   */
   user_id: string | null;
   /** Whether a sync location exists (declared or compiled), so backup + sync is possible. */
   syncAvailable: boolean;
@@ -220,7 +224,11 @@ export async function createBackupPasskey(label?: string): Promise<boolean> {
   }
 }
 
-/** Non-secret confirmation that a recoverable passkey was created for an account and RP-ID. */
+/**
+ * Non-secret confirmation that a recoverable passkey was created for an
+ * account and RP-ID. `user_id` relays the sync principal's vocabulary
+ * verbatim, matching {@link Session.user_id}.
+ */
 export type PasskeyBackupReceipt = { user_id: string; rpId: string };
 
 /**

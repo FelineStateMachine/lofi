@@ -2,7 +2,11 @@ import type { VNode } from "preact";
 import { useState } from "preact/hooks";
 import { AuthError } from "../runtime/auth.ts";
 import { isDataSinkError, parseSyncTicket } from "../runtime/data-sink.ts";
-import { provisionCapabilityStatus, sealProvisionCapability } from "../runtime/provision.ts";
+import {
+  provisionCapabilityStatus,
+  type SealOutcome,
+  sealProvisionCapability,
+} from "../runtime/provision.ts";
 import { enrollSyncTicket, type Session } from "../runtime/session.ts";
 
 /** Dependencies {@link TicketEnrollForm} accepts for testing and composition. */
@@ -14,7 +18,7 @@ export interface TicketEnrollFormProps {
   /** Enrollment implementation; defaults to the runtime's `enrollSyncTicket`. */
   readonly enroll?: (ticket: string) => Promise<Session>;
   /** Sealing implementation; defaults to the runtime's `sealProvisionCapability`. */
-  readonly seal?: () => Promise<{ portable: boolean }>;
+  readonly seal?: () => Promise<SealOutcome>;
 }
 
 type Phase =

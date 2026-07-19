@@ -140,7 +140,13 @@ function defaultEnvironment(): Pick<
   }
 }
 
-/** Creates an isolated guard, primarily for tests; boot uses the shared one. */
+/**
+ * Creates an isolated storage-fork guard over injectable browser surfaces.
+ * The package-wide wrappers (`getStorageForkState`, `subscribeStorageFork`,
+ * `dismissStorageFork`) read the shared {@link storageForkGuard} that boot
+ * arms; this factory exists for isolated instances — deterministic tests and
+ * custom hosts that manage their own guard.
+ */
 export function createStorageForkGuard(
   dependencies: StorageForkGuardDependencies = {},
 ): StorageForkGuard {

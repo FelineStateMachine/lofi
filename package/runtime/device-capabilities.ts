@@ -1,3 +1,5 @@
+import { type PrfSupport, readPrfSupport } from "./auth.ts";
+
 /** Browser capabilities that determine whether lofi can provide its runtime guarantees. */
 export type DeviceCapabilityReport = {
   // Package-owned device capability checks.
@@ -8,7 +10,7 @@ export type DeviceCapabilityReport = {
   messageChannel: boolean;
   durableDriverSupported: boolean;
   webAuthn: boolean;
-  prf: "available" | "not-reported" | "unknown" | "unavailable";
+  prf: PrfSupport;
   persistentPermission: "granted" | "not-granted" | "unavailable" | "error";
   displayMode: "standalone" | "browser";
 };
@@ -24,24 +26,6 @@ function browserStorage(): StorageManagerWithOpfs | undefined {
   return typeof navigator === "undefined"
     ? undefined
     : navigator.storage as StorageManagerWithOpfs | undefined;
-}
-
-type PublicKeyCredentialCapabilities = typeof PublicKeyCredential & {
-  getClientCapabilities?: () => Promise<Record<string, boolean>>;
-};
-
-async function readPrfCapability(
-  webAuthn: boolean,
-): Promise<DeviceCapabilityReport["prf"]> {
-  if (!webAuthn) return "unavailable";
-  const publicKeyCredential = PublicKeyCredential as PublicKeyCredentialCapabilities;
-  if (typeof publicKeyCredential.getClientCapabilities !== "function") return "unknown";
-  try {
-    const capabilities = await publicKeyCredential.getClientCapabilities();
-    return capabilities["extension:prf"] === true ? "available" : "not-reported";
-  } catch {
-    return "unknown";
-  }
 }
 
 /** Reads synchronous browser capabilities needed by the durable Jazz driver. */
@@ -73,7 +57,7 @@ export function durableCapabilityReport(): DurableCapabilityReport {
 export async function readDeviceCapabilityReport(): Promise<DeviceCapabilityReport> {
   const base = durableCapabilityReport();
   const storage = browserStorage();
-  const prf = await readPrfCapability(base.webAuthn);
+  const prf = await readPrfSupport(base.webAuthn);
   if (typeof storage?.persisted !== "function") {
     return { ...base, prf, persistentPermission: "unavailable" };
   }
@@ -123,6 +107,13 @@ export class DurableStorageUnsupportedError extends Error {
     );
     this.report = report;
   }
+}
+
+/** True when an error is a browser unable to provide the durable-storage contract. */
+export function isDurableStorageUnsupportedError(
+  error: unknown,
+): error is DurableStorageUnsupportedError {
+  return error instanceof DurableStorageUnsupportedError;
 }
 
 /** Throws unless the current browser can open lofi's persistent local driver. */

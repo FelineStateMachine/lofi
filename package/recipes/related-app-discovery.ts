@@ -4,9 +4,22 @@
  * @module
  */
 
+const platformList = [
+  "amazon",
+  "chrome_web_store",
+  "chromeos_play",
+  "f-droid",
+  "play",
+  "webapp",
+  "windows",
+] as const;
+
+/** Store platform identifier accepted in a `related_applications` declaration. */
+export type RelatedApplicationPlatform = (typeof platformList)[number];
+
 /** A product-owned related application declaration. */
 export type VerifiedRelatedApplication = {
-  readonly platform: string;
+  readonly platform: RelatedApplicationPlatform;
   readonly id?: string;
   readonly url?: string;
 };
@@ -16,9 +29,19 @@ export type RelatedApplicationClient = {
   getInstalledRelatedApps(): Promise<readonly unknown[]>;
 };
 
+/**
+ * Presentation-only discovery outcome. `installed` is the only status that
+ * carries matches; `unsupported`, `none`, and `failed` are equally normal
+ * states that keep the ordinary PWA experience.
+ */
+export type RelatedApplicationDiscoveryStatus = "unsupported" | "none" | "failed" | "installed";
+
 /** Presentation-only discovery result. */
 export type RelatedApplicationDiscovery =
-  | { status: "unsupported" | "none" | "failed"; installed: readonly [] }
+  | {
+    status: Exclude<RelatedApplicationDiscoveryStatus, "installed">;
+    installed: readonly [];
+  }
   | { status: "installed"; installed: readonly VerifiedRelatedApplication[] };
 
 /** Options for matching browser results against product-owned declarations. */
@@ -33,15 +56,7 @@ export type DiscoverRelatedApplicationsOptions = {
  * The one shared `related_applications` grammar: manifest validation imports
  * these so the validator can never accept a declaration this recipe rejects.
  */
-export const relatedApplicationPlatforms: ReadonlySet<string> = new Set([
-  "amazon",
-  "chrome_web_store",
-  "chromeos_play",
-  "f-droid",
-  "play",
-  "webapp",
-  "windows",
-]);
+export const relatedApplicationPlatforms: ReadonlySet<string> = new Set(platformList);
 
 /** Bounded, trimmed, control-character-free manifest string field. */
 export function isBoundedManifestString(value: unknown): value is string {

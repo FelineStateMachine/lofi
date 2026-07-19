@@ -15,11 +15,19 @@ export type TableRow = { id: string };
 export type RowOf<Table> = Table extends { readonly _rowType: infer Row } ? Row : never;
 
 /**
- * A declared schema table (`schema.<name>`). It is both an insert/update/delete
+ * A declared schema table (`schema.<name>`). It is both an insert/update/remove
  * target and a query source, so the store accepts the intersection Jazz expects.
  * `T` is the row type and `Init` the insert type (row minus server-owned fields).
  */
 export type TableHandle<T extends TableRow, Init> = TableProxy<T, Init> & QueryBuilder<T>;
+
+/**
+ * How far the latest write has travelled: `none` before any write settles,
+ * `local` once saved on this device (the resting state when sync is not
+ * configured), `global` once the store confirms it, `failed` when it was
+ * denied.
+ */
+export type WriteDurability = "none" | "local" | "global" | "failed";
 
 /** Reactive table state including rows and the last observed durability tier. */
 export type TableSnapshot<T extends TableRow> = {
@@ -27,18 +35,12 @@ export type TableSnapshot<T extends TableRow> = {
   status: "loading" | "ready" | "error";
   /** The current typed rows of the table. */
   rows: T[];
-  /**
-   * How far the latest write has travelled: `none` before any write settles,
-   * `local` once saved on this device (the resting state when sync is not
-   * configured), `global` once the store confirms it, `failed` when it was
-   * denied.
-   */
-  durability: "none" | "local" | "global" | "failed";
+  /** The latest write's deepest tier; see {@link WriteDurability}. */
+  durability: WriteDurability;
   /** The latest subscription or write error message, or `null`. */
   error: string | null;
 };
 
-type Listener = () => void;
 type MutationHandle = {
   /** The vendor batch id, used to attribute asynchronous rejections. */
   batchId?: unknown;
@@ -79,7 +81,7 @@ export class TableStore<T extends TableRow, Init> {
   readonly #syncConfigured: () => boolean;
   readonly #diagnosticsChanged: () => void;
   readonly #guardWrite?: () => Promise<(() => void) | void>;
-  readonly #listeners = new Set<Listener>();
+  readonly #listeners = new Set<() => void>();
   readonly #stopMutationErrors: () => void;
   readonly #ownBatches = new Set<unknown>();
   #batchTracking = false;
@@ -122,7 +124,7 @@ export class TableStore<T extends TableRow, Init> {
   getSnapshot = (): TableSnapshot<T> => this.#snapshot;
 
   /** Subscribes to snapshot changes and opens the vendor subscription on first use. */
-  subscribe = (listener: Listener): () => void => {
+  subscribe = (listener: () => void): () => void => {
     const subscriber = () => listener();
     this.#listeners.add(subscriber);
     this.#diagnostics.activeConsumers += 1;
@@ -179,9 +181,19 @@ export class TableStore<T extends TableRow, Init> {
     })();
   }
 
-  /** Deletes a row and waits for local durability before resolving. */
-  async delete(id: string): Promise<void> {
+  /** Removes a row and waits for local durability before resolving. */
+  async remove(id: string): Promise<void> {
     await this.#perform(() => this.#db.delete(this.#table, id));
+  }
+
+  /**
+   * Removes a row and waits for local durability before resolving.
+   *
+   * @deprecated Use {@link TableStore.remove} — the removal verb every other
+   * mutation surface uses. This alias remains for one release.
+   */
+  delete(id: string): Promise<void> {
+    return this.remove(id);
   }
 
   // The guard runs before the mutation reaches the vendor: a refusal (the

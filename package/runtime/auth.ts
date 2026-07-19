@@ -263,7 +263,12 @@ function requireStableRpId(dependencies: AuthDependencies): string {
 
 // --- Capability ---------------------------------------------------------------
 
-async function readPrfSupport(webAuthn: boolean): Promise<PrfSupport> {
+/**
+ * Reads whether the WebAuthn PRF extension can be used on this client:
+ * `unavailable` without WebAuthn, `unknown` when the client cannot report
+ * capabilities, otherwise the client's own answer.
+ */
+export async function readPrfSupport(webAuthn: boolean): Promise<PrfSupport> {
   if (!webAuthn) return "unavailable";
   const publicKeyCredential = PublicKeyCredential as ClientCapabilities;
   if (typeof publicKeyCredential.getClientCapabilities !== "function") return "unknown";

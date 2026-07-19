@@ -18,10 +18,21 @@
  * until {@link applyPwaUpdate} lands a newer bundle — and install/update
  * state through {@link getPwaState}.
  *
+ * Shared encrypted fields span three entry points: declaring an encrypted
+ * column lives in `@nzip/lofi/schema`, group policy and key lifecycle live in
+ * `@nzip/lofi/access`, and pin remediation lives here — a `peer-key-changed`
+ * alert in {@link RuntimeDiagnostics.sharedFieldAlerts} is resolved with
+ * {@link trustPeerKey} after out-of-band verification.
+ *
  * @module
  */
 
-export { defineLofiApp, type LofiAppConfig, LofiConfigurationError } from "./app.ts";
+export {
+  defineLofiApp,
+  isLofiConfigurationError,
+  type LofiAppConfig,
+  LofiConfigurationError,
+} from "./app.ts";
 export {
   type AuthCapability,
   type AuthDependencies,
@@ -45,6 +56,10 @@ export { bootLofi } from "./boot.ts";
 export {
   type BootProgress,
   type BootProgressPhase,
+  type BootProgressTracker,
+  type BootProgressTrackerDependencies,
+  createBootProgressTracker,
+  type EngineAssetReference,
   getBootProgress,
   subscribeBootProgress,
 } from "./boot-progress.ts";
@@ -55,6 +70,7 @@ export {
   lockProvisionCapability,
   type ProvisionCapabilityStatus,
   provisionCapabilityStatus,
+  type SealOutcome,
   sealProvisionCapability,
   unlockProvisionCapability,
 } from "./provision.ts";
@@ -64,9 +80,11 @@ export {
   type DurableCapabilityReport,
   durableCapabilityReport,
   DurableStorageUnsupportedError,
+  isDurableStorageUnsupportedError,
   readDeviceCapabilityReport,
   requestPersistentStorage,
 } from "./device-capabilities.ts";
+export { type DeviceKeyStore, EnvelopeError, isEnvelopeError } from "./envelope.ts";
 export {
   applyPwaUpdate,
   checkPwaUpdate,
@@ -86,13 +104,18 @@ export {
   requestPwaInstall,
   subscribePwaState,
 } from "./pwa.ts";
-export { type RuntimeDiagnostics } from "./diagnostics.ts";
+export { type RuntimeDiagnostics, type SharedFieldAlert } from "./diagnostics.ts";
 export {
+  createSchemaCompatGate,
   describeSchemaCompat,
   getSchemaCompatState,
+  isSchemaCompatibilityError,
+  type SchemaCompatGate,
+  type SchemaCompatGateDependencies,
   SchemaCompatibilityError,
   type SchemaCompatReason,
   type SchemaCompatState,
+  type SchemaCompatUpdateSurface,
   subscribeSchemaCompat,
 } from "./schema-compat.ts";
 export {
@@ -100,6 +123,8 @@ export {
   describeStorageFork,
   dismissStorageFork,
   getStorageForkState,
+  type StorageForkDiagnostics,
+  type StorageForkDiagnosticsSurface,
   type StorageForkGuard,
   storageForkGuard,
   type StorageForkGuardDependencies,
@@ -108,6 +133,7 @@ export {
 } from "./storage-fork.ts";
 export {
   acquireLiveQuery,
+  type LiveQueryEnvironment,
   type LiveQueryLease,
   type LiveQuerySnapshot,
   type LiveQueryStore,
@@ -124,6 +150,7 @@ export {
   subscribeRuntimeDiagnostics,
 } from "./runtime.ts";
 export {
+  isRuntimeStartupError,
   reloadAfterRuntimeStartupFailure,
   RuntimeStartupError,
   type RuntimeStartupFailure,
@@ -132,6 +159,7 @@ export {
 export { describeStoreStatus, type RuntimeStoreStatus } from "./store-status.ts";
 export {
   acquireTableMutations,
+  type TableMutationEnvironment,
   type TableMutationLease,
   type TableMutationSnapshot,
   type TableMutationStore,
@@ -170,9 +198,7 @@ export {
   readSinkRestoreOutcome,
   restoreDeclaredSink,
   type SinkRestoreOutcome,
-  splitTicketForEnrollment,
   type SyncTicket,
-  type TicketSplit,
 } from "./data-sink.ts";
 export { RecoveryError } from "./recovery.ts";
 export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";
@@ -183,10 +209,12 @@ export {
   type TableSnapshot,
   type TableStore,
   type TableStoreOptions,
+  type WriteDurability,
 } from "./table-store.ts";
 export { settleUiMutation } from "./ui-mutation.ts";
 export { classifyMutationError, type MutationErrorClass } from "./mutation-taxonomy.ts";
 export {
+  isWriteRejectedError,
   WriteHandle,
   WriteRejectedError,
   type WriteRejection,
@@ -199,6 +227,7 @@ export {
   type LedgerWriteRequest,
   type PendingWritesSnapshot,
   type PendingWriteSummary,
+  type ProbeTable,
   type RowSyncStatus,
   WriteLedger,
   type WriteLedgerEnvironment,
@@ -208,30 +237,20 @@ export {
   createMemoryJournalStorage,
   type JournalDocument,
   type JournalEffectState,
+  type JournalEffectStatus,
   journalIdFor,
   type JournalStorage,
   type JournalWriteRecord,
   type JournalWriteStage,
 } from "./write-journal.ts";
 export type { EffectLogEntry } from "./diagnostics.ts";
-export {
-  clearFingerprintPins,
-  deriveSharedFieldIdentity,
-  type DirectoryPublication,
-  directoryPublicKey,
-  ensureDirectoryEntry,
-  installSharedFieldIdentityFromSecret,
-  pinnedFingerprint,
-  trustPeerKey,
-  verifyAndPinFingerprint,
-} from "./shared-field-keys.ts";
-export {
-  completePopExchange,
-  type DevicePublicKey,
-  exportDevicePublicKey,
-  getOrCreatePopKeyPair,
-  memoryPopKeyStore,
-  type PopKeyStore,
-  popMessage,
-  signPopMessage,
-} from "./pop.ts";
+export { pinnedFingerprint, trustPeerKey, verifyAndPinFingerprint } from "./shared-field-keys.ts";
+export type {
+  EffectContext,
+  EffectHandlers,
+  EffectRow,
+  EffectUnit,
+  MutationDescriptor,
+  MutationOp,
+  MutationOpKind,
+} from "../schema/effects.ts";

@@ -1,3 +1,11 @@
+/**
+ * Playwright trace-archive sanitization: a minimal ZIP reader/writer plus the
+ * pass that drops private resource entries and redacts the retained trace
+ * metadata before an archive is kept as a failure artifact.
+ *
+ * @module
+ */
+
 const LOCAL_FILE = 0x04034b50;
 const CENTRAL_FILE = 0x02014b50;
 const END_OF_CENTRAL_DIRECTORY = 0x06054b50;

@@ -98,16 +98,29 @@ export type SharingOperations<Resource, Grant> = {
   sharedWithMe(): Promise<Resource[]>;
 };
 
+/** Table pair consumed by {@link createSharingOperations}. */
+export type SharingOperationsConfig<
+  Resource extends Identified,
+  ResourceInit,
+  Grant extends SharedGrantRow,
+  GrantInit,
+> = {
+  /** The resource table whose rows are shared with other accounts. */
+  resource: AccessRuntimeTable<Resource, ResourceInit>;
+  /** The resource's grant table, declared with `sharedGrantTable` (or matching
+   * its column shape) and covered by a `sharedAccess` policy template. */
+  grants: AccessRuntimeTable<Grant, GrantInit>;
+};
+
 /** Creates direct-share operations that wait for local and global durability. */
 export function createSharingOperations<
   Resource extends Identified,
   ResourceInit,
   Grant extends SharedGrantRow,
   GrantInit,
->(config: {
-  resource: AccessRuntimeTable<Resource, ResourceInit>;
-  grants: AccessRuntimeTable<Grant, GrantInit>;
-}): SharingOperations<Resource, Grant> {
+>(
+  config: SharingOperationsConfig<Resource, ResourceInit, Grant, GrantInit>,
+): SharingOperations<Resource, Grant> {
   const findGrant = async (resourceId: string, userId: string): Promise<Grant | null> => {
     const { db } = await getRuntime();
     return await db.one(config.grants.where({ resourceId, user_id: userId } as never));
@@ -169,21 +182,38 @@ export function createSharingOperations<
   };
 }
 
+/** Tables consumed by {@link createGroupOperations}. */
+export type GroupOperationsConfig<
+  Group extends Identified,
+  GroupInit,
+  Member extends GroupMembershipRow,
+  MemberInit,
+> = {
+  /** The group table whose rows anchor membership and group-owned resources. */
+  groups: AccessRuntimeTable<Group, GroupInit>;
+  /** The group's membership table, declared with `groupMembershipTable` (or
+   * matching its column shape) and covered by a `groupAccess` policy template. */
+  members: AccessRuntimeTable<Member, MemberInit>;
+  /** The group's wrapped-field-key table (declared with `sharedFieldKeyTable`),
+   * for groups hosting shared encrypted columns. Provide it together with
+   * `directory`; the operations then mint, wrap, and rotate field keys
+   * automatically. */
+  fieldKeys?: AccessRuntimeTable<Identified, unknown>;
+  /** The app's shared-field key directory table (declared with
+   * `sharedFieldDirectoryTable`), for groups hosting shared encrypted columns.
+   * Provide it together with `fieldKeys`. */
+  directory?: AccessRuntimeTable<Identified, unknown>;
+};
+
 /** Creates fixed-role group membership operations for a declared table pair. */
 export function createGroupOperations<
   Group extends Identified,
   GroupInit,
   Member extends GroupMembershipRow,
   MemberInit,
->(config: {
-  groups: AccessRuntimeTable<Group, GroupInit>;
-  members: AccessRuntimeTable<Member, MemberInit>;
-  /** Wrapped-field-key and directory tables, for groups hosting shared
-   * encrypted columns; the group lifecycle then mints, wraps, and rotates
-   * field keys automatically. */
-  fieldKeys?: AccessRuntimeTable<Identified, unknown>;
-  directory?: AccessRuntimeTable<Identified, unknown>;
-}): GroupOperations<Group, GroupInit, Member> {
+>(
+  config: GroupOperationsConfig<Group, GroupInit, Member, MemberInit>,
+): GroupOperations<Group, GroupInit, Member> {
   const findMember = async (groupId: string, userId: string): Promise<Member | null> => {
     const { db } = await getRuntime();
     return await db.one(config.members.where({ groupId, user_id: userId } as never));

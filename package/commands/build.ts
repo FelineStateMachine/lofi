@@ -30,6 +30,7 @@ import {
   screenshotAssetPaths,
 } from "../tooling/pwa-validation.ts";
 import { generateSchemaCompatManifest } from "../tooling/schema-manifest.ts";
+import type { LofiBuildInfo } from "../tooling/build-info.ts";
 import {
   cspPolicyWarnings,
   mergeCspPolicies,
@@ -74,17 +75,13 @@ exitOnFailure(
   "production build",
 );
 
-await Deno.writeTextFile(
-  "dist/lofi-build.json",
-  `${
-    JSON.stringify({
-      lofiVersion: LOFI_VERSION,
-      sourceHash,
-      basePath: environment.LOFI_BASE_PATH,
-      builtAt: new Date().toISOString(),
-    })
-  }\n`,
-);
+const buildInfo: LofiBuildInfo = {
+  lofiVersion: LOFI_VERSION,
+  sourceHash,
+  basePath: environment.LOFI_BASE_PATH,
+  builtAt: new Date().toISOString(),
+};
+await Deno.writeTextFile("dist/lofi-build.json", `${JSON.stringify(buildInfo)}\n`);
 const serviceWorkerPath = "dist/sw.js";
 const serviceWorker = await readPackageAsset("../runtime/sw.js");
 await Deno.writeTextFile(
@@ -139,7 +136,6 @@ for (const path of distFiles.filter((file) => extname(file) === ".html")) {
 // host-header snippet. Reported, never gated.
 const cspUnion = cspPolicies.length > 0 ? mergeCspPolicies(cspPolicies) : null;
 if (cspUnion !== null) {
-  const buildInfo = JSON.parse(await Deno.readTextFile("dist/lofi-build.json"));
   buildInfo.csp = cspUnion;
   await Deno.writeTextFile("dist/lofi-build.json", `${JSON.stringify(buildInfo)}\n`);
   await Deno.writeTextFile("dist/_headers.example", renderHeadersSnippet(cspUnion));

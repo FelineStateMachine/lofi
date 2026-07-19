@@ -5,7 +5,7 @@
 import { createDb } from "jazz-tools";
 import { startLocalJazzServer } from "jazz-tools/testing";
 import { assert } from "../runtime/test-assert.ts";
-import { nestedAppDeployTarget, s } from "./mod.ts";
+import { nestedAppDeployTarget, type NestedAppRoot, s } from "./mod.ts";
 import { provisionStore, readStoreStatus, StoreProvisionError, type StoreTarget } from "./store.ts";
 
 // The first app on the store.
@@ -194,11 +194,13 @@ Deno.test("provisioning is confined to the app's own namespaces", async () => {
     adminSecret: "unused",
   };
 
-  // A flat app has no namespace and therefore no tenant boundary.
+  // A flat app has no namespace and therefore no tenant boundary. The cast
+  // models a dynamic caller bypassing the NestedAppRoot brand; the runtime
+  // defense must still refuse it.
   const flat = s.defineApp({ tasks: s.table({ text: s.string() }) });
   let flatError = "";
   try {
-    await readStoreStatus(flat, target);
+    await readStoreStatus(flat as unknown as NestedAppRoot, target);
   } catch (error) {
     flatError = error instanceof StoreProvisionError ? error.code : String(error);
   }

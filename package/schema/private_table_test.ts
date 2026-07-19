@@ -1,9 +1,10 @@
 // privateTable contract: every column seals by default with a derived label,
 // refs and plain-marked columns stay plaintext, bytes stay plaintext with a
 // report, and configurations the seal boundary cannot honor are refused.
-import { clearEncryptedColumnRegistry, encryptedColumnsOf, s } from "./mod.ts";
+import { encryptedColumnsOf, s } from "./mod.ts";
 import {
   clearEncryptedColumnKey,
+  clearEncryptedColumnRegistry,
   encryptedColumnLabelOf,
   setEncryptedColumnKey,
 } from "./encrypted.ts";

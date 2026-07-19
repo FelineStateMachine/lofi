@@ -247,7 +247,13 @@ export function waitForActivation(worker: ServiceWorker): Promise<void> {
   });
 }
 
-/** Creates an isolated PWA controller, primarily for custom integration and tests. */
+/**
+ * Creates an isolated PWA controller over injectable browser surfaces. The
+ * package-wide wrappers (`getPwaState`, `subscribePwaState`,
+ * `requestPwaInstall`, `checkPwaUpdate`, `applyPwaUpdate`) drive the shared
+ * {@link pwaController}; this factory exists for isolated instances —
+ * deterministic tests and custom hosts that manage their own controller.
+ */
 export function createPwaController(dependencies: PwaControllerDependencies = {}): PwaController {
   const subscribers = new Set<(state: PwaState) => void>();
   const observedUpdateWorkers = new WeakSet<ServiceWorker>();

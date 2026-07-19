@@ -11,12 +11,9 @@ export type LiveQuerySnapshot<T extends TableRow> = {
   error: string | null;
 };
 
-type Listener = () => void;
-type QuerySubscriptionDb = Pick<Db, "subscribeAll">;
-
 /** Runtime seams used by a live-query registry. Exported for deterministic framework tests. */
 export type LiveQueryEnvironment = {
-  getDb(): Promise<QuerySubscriptionDb>;
+  getDb(): Promise<Pick<Db, "subscribeAll">>;
   subscribeRuntimeRecreation(listener: () => void): () => void;
   /** Fires when a shared field key is installed; stores resubscribe so rows
    * previously surfaced as key-pending re-materialize into plaintext. Key
@@ -47,7 +44,7 @@ export class LiveQueryStore<T extends TableRow> {
   readonly #query: QueryBuilder<T>;
   readonly #environment: LiveQueryEnvironment;
   readonly #onIdle: () => void;
-  readonly #listeners = new Set<Listener>();
+  readonly #listeners = new Set<() => void>();
   #snapshot: LiveQuerySnapshot<T> = { status: "loading", rows: [], error: null };
   #vendorUnsubscribe: (() => void) | null = null;
   #stopRuntimeRecreation: (() => void) | null = null;
@@ -70,7 +67,7 @@ export class LiveQueryStore<T extends TableRow> {
   getSnapshot = (): LiveQuerySnapshot<T> => this.#snapshot;
 
   /** Subscribes one consumer and returns an idempotent cleanup function. */
-  subscribe = (listener: Listener): () => void => {
+  subscribe = (listener: () => void): () => void => {
     if (this.#disposed) throw new Error("live query store has been released");
     const subscriber = () => listener();
     this.#listeners.add(subscriber);

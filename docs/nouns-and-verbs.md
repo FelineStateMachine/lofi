@@ -105,15 +105,15 @@ fate. Repeated calls with one label share one unit.
 
 Obligations, intents, and residue each have a lifespan and a defined afterlife.
 
-- **Obligations** — `s.effect(name, table, handlers, { expiresAfter })` declares a delivery window
+- **Obligations** — `s.effect(name, table, handlers, { expiresAfterMs })` declares a delivery window
   in milliseconds, measured from the write. When the write synced but the obligation could not be
   delivered inside the window (device offline, handler failing), the obligation retires as expired:
   no handler fires — the write happened, so compensation would be wrong — diagnostics count it, and
   the entry becomes prunable. External-tier handlers whose receivers keep finite idempotency windows
   should always set this.
-- **Intents** — `s.mutation(name, op, { expires })` declares the intent's lifespan. A write still
-  pending past it is surfaced: the pending-writes set marks it `expired` and diagnostics count it.
-  The runtime cannot withdraw a locally accepted write — the engine re-proposes pending batches
+- **Intents** — `s.mutation(name, op, { expiresAfterMs })` declares the intent's lifespan. A write
+  still pending past it is surfaced: the pending-writes set marks it `expired` and diagnostics count
+  it. The runtime cannot withdraw a locally accepted write — the engine re-proposes pending batches
   until the store answers, and a rolled-back batch primitive exists only for uncommitted batches —
   so an overdue intent is reported, never retired: retiring it as rejected could fire compensation
   for a write that later syncs anyway. When store-side expiry enforcement lands, an overdue intent

@@ -21,7 +21,14 @@
  * @module
  */
 import type { CompiledPermissions } from "jazz-tools";
-import { NESTED_SEPARATOR, nestedAppDeployTarget, nestedAppTables } from "./nested.ts";
+import {
+  NESTED_SEPARATOR,
+  nestedAppDeployTarget,
+  type NestedAppRoot,
+  nestedAppTables,
+} from "./nested.ts";
+
+export type { NestedAppRoot } from "./nested.ts";
 
 /** The store to provision: where it is, which app it hosts, and the admin opt-in. */
 export type StoreTarget = {
@@ -39,7 +46,11 @@ export type StoreTarget = {
   adminSecret?: string;
 };
 
-/** How a store's deployed schema relates to this app's slice. */
+/**
+ * How a store's deployed schema relates to this app's slice. State literals
+ * are snake_case because they relay the sync node's status vocabulary
+ * verbatim.
+ */
 export type StoreStatus =
   /** Nothing is deployed; writes against the store would hang. Remedy: create. */
   | { state: "no_schema" }
@@ -68,11 +79,19 @@ export type StoreProvisionResult = {
 export class StoreProvisionError extends Error {
   /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "StoreProvisionError";
-  /** Stable category for provisioning flows. */
-  readonly code: "http" | "schema-drift" | "not-nested" | "outside-namespace";
+  /**
+   * Stable category for provisioning flows. `http` — the store answered a
+   * request with a failure or unparseable body. `schema-drift` — the store's
+   * copy of this app's namespaces differs from the declaration; surfaced,
+   * never auto-repaired. `not-nested` — the supplied app value is not a
+   * nested-app root. `outside-namespace` — the permissions bundle names a
+   * table outside this app's declared namespaces. `policy-literal` — a policy
+   * condition carries a literal value the wire encoding does not support.
+   */
+  readonly code: "http" | "schema-drift" | "not-nested" | "outside-namespace" | "policy-literal";
   /** Creates a provisioning rejection with a stable category. */
   constructor(
-    code: "http" | "schema-drift" | "not-nested" | "outside-namespace",
+    code: StoreProvisionError["code"],
     message: string,
   ) {
     super(message);
@@ -121,14 +140,17 @@ function encodeLiteral(value: unknown): unknown {
   if (value instanceof Date) return { type: "Timestamp", value: value.getTime() };
   if (value instanceof Uint8Array) {
     throw new StoreProvisionError(
-      "outside-namespace",
+      "policy-literal",
       "bytes literals in policy conditions are not supported by store provisioning",
     );
   }
   if (typeof value === "boolean") return { type: "Boolean", value };
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
-      throw new StoreProvisionError("http", "policy literals only support finite numbers");
+      throw new StoreProvisionError(
+        "policy-literal",
+        "policy literals only support finite numbers",
+      );
     }
     if (!Number.isInteger(value)) return { type: "Double", value };
     if (value >= -2147483648 && value <= 2147483647) return { type: "Integer", value };
@@ -141,7 +163,7 @@ function encodeLiteral(value: unknown): unknown {
   if (Array.isArray(value)) return { type: "Array", value: value.map(encodeLiteral) };
   if (isRecord(value) && typeof value.type === "string") return value;
   throw new StoreProvisionError(
-    "http",
+    "policy-literal",
     "policy literals must be scalars, arrays, Date, or tagged values",
   );
 }
@@ -337,7 +359,7 @@ type AppSlice = {
   namespaces: ReadonlySet<string>;
 };
 
-function appSlice(app: unknown): AppSlice {
+function appSlice(app: NestedAppRoot): AppSlice {
   if (nestedAppTables(app) === null) {
     throw new StoreProvisionError(
       "not-nested",
@@ -402,11 +424,16 @@ function classify(slice: AppSlice, artifacts: StoreArtifacts): StoreStatus {
 
 /**
  * Classifies the store's deployed schema against this app's slice without
- * changing anything. `no_schema` matters beyond provisioning: against an
- * empty store, client writes hang rather than fail, so callers should reach
- * this state before ever attaching sync to a fresh store.
+ * changing anything. `app` must be a nested-app root from
+ * `s.defineNestedApp` — the namespace is what scopes an app's view of a
+ * shared store. `no_schema` matters beyond provisioning: against an empty
+ * store, client writes hang rather than fail, so callers should reach this
+ * state before ever attaching sync to a fresh store.
  */
-export async function readStoreStatus(app: unknown, target: StoreTarget): Promise<StoreStatus> {
+export async function readStoreStatus(
+  app: NestedAppRoot,
+  target: StoreTarget,
+): Promise<StoreStatus> {
   return classify(appSlice(app), await fetchStore(target));
 }
 
@@ -462,6 +489,16 @@ async function ensureSliceConnectivity(
   });
 }
 
+/** What {@link provisionStore} deploys, and where. */
+export type ProvisionStoreOptions = {
+  /** The nested-app root (from `s.defineNestedApp`) whose slice is provisioned. */
+  app: NestedAppRoot;
+  /** The app's compiled permissions bundle for its own namespaces. */
+  permissions: CompiledPermissions;
+  /** The store to provision, with its admin opt-in. */
+  target: StoreTarget;
+};
+
 /**
  * Creates or updates this app's slice in the store. The stored head schema is
  * fetched verbatim and only extended: missing tables of this app's namespaces
@@ -474,11 +511,9 @@ async function ensureSliceConnectivity(
  * Drift is never repaired: a store whose copy of this app's namespaces
  * differs from the declaration throws with the differing tables.
  */
-export async function provisionStore(options: {
-  app: unknown;
-  permissions: CompiledPermissions;
-  target: StoreTarget;
-}): Promise<StoreProvisionResult> {
+export async function provisionStore(
+  options: ProvisionStoreOptions,
+): Promise<StoreProvisionResult> {
   const slice = appSlice(options.app);
   assertOwnNamespacePermissions(slice, options.permissions);
   const artifacts = await fetchStore(options.target);
@@ -552,7 +587,10 @@ export async function provisionStore(options: {
   return { status: "updated", headHash: published.hash };
 }
 
-/** The result of the ticket-scoped store-status preflight. */
+/**
+ * The result of the ticket-scoped store-status preflight. State literals are
+ * snake_case because they relay the sync node's status vocabulary verbatim.
+ */
 export type TicketStoreStatus =
   /** A schema is deployed; `headHash` is the newest stored schema hash. */
   | { state: "deployed"; appId: string; headHash: string }

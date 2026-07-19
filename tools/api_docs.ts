@@ -483,7 +483,7 @@ type PageGroup = {
 
 const pageOrder = NODE_MODE
   ? ["node", "testing"]
-  : ["runtime", "astro", "access", "preact", "testing", "cli"];
+  : ["runtime", "schema", "schema-store", "astro", "access", "preact", "testing", "cli"];
 const groups = new Map<string, PageGroup>();
 for (const entry of activeEntrypoints) {
   const group = groups.get(entry.page) ?? {

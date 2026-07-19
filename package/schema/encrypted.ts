@@ -45,11 +45,13 @@ import { padPayload, unpadPayload } from "./padding.ts";
 
 declare const encryptedColumnBrand: unique symbol;
 
-// The phantom stored type is a union on purpose: the engine's where-input
-// mapping branches on the single stored sql type, so a union matches no
-// branch and every filter position for the column collapses to `never`.
-// Row and insert types read the view type and are unaffected.
-type EncryptedStoredSql = "TEXT" | "BYTEA";
+/**
+ * The phantom stored SQL type of encrypted columns. The union is deliberate:
+ * the engine's where-input mapping branches on a single stored sql type, so a
+ * union matches no branch and every filter position for the column collapses
+ * to `never`. Row and insert types read the view type and are unaffected.
+ */
+export type EncryptedStoredSql = "TEXT" | "BYTEA";
 
 /**
  * The column type of every `s.encrypted*` constructor. Structurally a valid

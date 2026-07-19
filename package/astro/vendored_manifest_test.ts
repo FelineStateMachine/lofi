@@ -1,10 +1,9 @@
 // Repo contract test: the static `.lofi/` vendoring manifests must track the
 // actual package directories. The lists are static because the published
 // package cannot enumerate directories over JSR — this test is what fails
-// when a new runtime module lands without being added to the manifest
-// (namespace-state.ts and transport-gate.ts shipped exactly that way and
-// broke every generated project's build until vendoring caught up).
-import { accessFiles, preactFiles, recipeFiles, runtimeFiles, schemaFiles } from "./mod.ts";
+// when a package module lands without being added to the manifest, which
+// would otherwise surface only as a broken build in generated projects.
+import { accessFiles, preactFiles, recipeFiles, runtimeFiles, schemaFiles } from "./manifest.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);

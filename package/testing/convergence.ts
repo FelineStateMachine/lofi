@@ -68,18 +68,47 @@ export interface ConcurrentOfflineScenario<
   readonly failureLabel?: string;
 }
 
+/** The lifecycle stages the convergence runner moves through, in order. */
+export type ConvergenceStage =
+  | "readiness"
+  | "going offline"
+  | "concurrent edits"
+  | "local persistence"
+  | "pending-work hook"
+  | "reconnection"
+  | "convergence";
+
+/** Options for {@link ConvergenceScenarioError}, extending `ErrorOptions` with the capture outcome. */
+export interface ConvergenceScenarioErrorOptions extends ErrorOptions {
+  /** The failure raised while capturing artifacts, when capture itself failed. */
+  captureError?: unknown;
+}
+
 /** Thrown when a convergence scenario fails, naming the stage that failed via {@link stage}. */
 export class ConvergenceScenarioError extends Error {
   /** Always `"ConvergenceScenarioError"`. */
   override readonly name = "ConvergenceScenarioError";
 
   /**
+   * The failure raised by the fixture's `captureFailure` while this error was
+   * being produced — e.g. a `snapshot` callback that violates the value-free
+   * rule — or `undefined` when the artifacts were captured. The scenario
+   * failure itself stays in {@link Error.cause}.
+   */
+  readonly captureError?: unknown;
+
+  /**
    * Builds the error, recording which lifecycle stage was in progress.
    * @param stage the lifecycle stage that was in progress when the scenario failed
-   * @param options standard error options, e.g. a `cause` from the failing hook
+   * @param options standard error options, e.g. a `cause` from the failing hook,
+   * plus the artifact-capture failure when capture also failed
    */
-  constructor(readonly stage: string, options?: ErrorOptions) {
-    super(`Concurrent offline convergence failed during ${stage}`, options);
+  constructor(readonly stage: ConvergenceStage, options?: ConvergenceScenarioErrorOptions) {
+    const captureNote = options?.captureError !== undefined
+      ? "; failure-artifact capture also failed (see captureError)"
+      : "";
+    super(`Concurrent offline convergence failed during ${stage}${captureNote}`, options);
+    this.captureError = options?.captureError;
   }
 }
 
@@ -113,7 +142,7 @@ export async function runConcurrentOfflineConvergence<Edit, Client extends Offli
       controller.signal.removeEventListener("abort", onAbort);
     }
   };
-  let stage = "readiness";
+  let stage: ConvergenceStage = "readiness";
   try {
     await withinDeadline(
       Promise.all(fixture.clients.map((client) => scenario.ready(client, controller.signal))),
@@ -143,11 +172,18 @@ export async function runConcurrentOfflineConvergence<Edit, Client extends Offli
     stage = "convergence";
     await withinDeadline(scenario.converged(fixture, controller.signal));
   } catch (error) {
-    await fixture.captureFailure(
-      scenario.failureLabel ?? `offline-convergence-${stage}`,
-      scenario.snapshot,
-    ).catch(() => undefined);
-    throw new ConvergenceScenarioError(stage, { cause: error });
+    // A capture failure never masks the scenario failure: the scenario error
+    // stays the thrown error, and the capture failure rides along on it.
+    let captureError: unknown;
+    try {
+      await fixture.captureFailure(
+        scenario.failureLabel ?? `offline-convergence-${stage}`,
+        scenario.snapshot,
+      );
+    } catch (failure) {
+      captureError = failure ?? new Error("failure-artifact capture rejected without a reason");
+    }
+    throw new ConvergenceScenarioError(stage, { cause: error, captureError });
   } finally {
     clearTimeout(timeout);
     await Promise.allSettled(

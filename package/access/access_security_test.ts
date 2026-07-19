@@ -9,7 +9,8 @@ import {
   sharedAccess,
   sharedGrantTable,
 } from "./mod.ts";
-import { clearEncryptedColumnRegistry, s as lofiSchema } from "../schema/mod.ts";
+import { s as lofiSchema } from "../schema/mod.ts";
+import { clearEncryptedColumnRegistry } from "../schema/encrypted.ts";
 import { assert } from "../runtime/test-assert.ts";
 
 const schema = {

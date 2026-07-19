@@ -7,6 +7,7 @@ import {
   flattenNestedSchema,
   NESTED_SEPARATOR,
   nestedAppDeployTarget,
+  type NestedAppRoot,
   nestedAppTables,
   s,
 } from "./mod.ts";
@@ -71,9 +72,14 @@ Deno.test("nested table handles are constructed once and shared with the registr
 });
 
 Deno.test("nestedAppTables returns null for flat apps so the runtime keeps its one-level walk", () => {
+  // The casts model dynamic callers that bypass the NestedAppRoot brand; the
+  // runtime defense must still answer null instead of misdetecting.
   const flat = s.defineApp({ tasks: s.table({ text: s.string() }) });
-  assert(nestedAppTables(flat) === null, "flat app misdetected as nested");
-  assert(nestedAppTables(undefined) === null, "undefined misdetected as nested");
+  assert(nestedAppTables(flat as unknown as NestedAppRoot) === null, "flat app misdetected");
+  assert(
+    nestedAppTables(undefined as unknown as NestedAppRoot) === null,
+    "undefined misdetected as nested",
+  );
 });
 
 Deno.test("the deploy target exposes every table under its mangled global name", () => {
@@ -83,7 +89,9 @@ Deno.test("the deploy target exposes every table under its mangled global name",
   }
   assert("wasmSchema" in target, "deploy target is missing wasmSchema");
   throws(
-    () => nestedAppDeployTarget(root.taskapp),
+    // A namespace is not the root; the cast models a dynamic caller and the
+    // runtime defense must refuse it.
+    () => nestedAppDeployTarget(root.taskapp as unknown as NestedAppRoot),
     "requires a root value",
     "deploy target on a namespace",
   );

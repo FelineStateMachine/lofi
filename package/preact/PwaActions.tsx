@@ -9,7 +9,14 @@ import {
 import { type StorageForkSurface, useStorageFork } from "./use-storage-fork.ts";
 
 export { pwaFailureMessage } from "../runtime/pwa.ts";
-export type { PwaController, PwaFailureCode, PwaState, PwaUpdateState } from "../runtime/pwa.ts";
+export type {
+  PwaController,
+  PwaFailureCode,
+  PwaInstallState,
+  PwaState,
+  PwaUpdateState,
+  PwaWorkerState,
+} from "../runtime/pwa.ts";
 
 /**
  * Subscribes a Preact component to an isolated or shared PWA controller.

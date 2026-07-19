@@ -198,12 +198,14 @@ test("every mutation exposes pending work and waits for local durability", async
   assertCount(counts.pendingLocalWrites, 0, "a retained local write must leave no pending work");
   await store.update("row-1", { text: "edited" });
   await store.update("row-1", { completed: true });
+  await store.remove("row-1");
+  // The deprecated alias must keep routing through the same removal path.
   await store.delete("row-1");
 
-  assertCount(counts.localWaitCalls, 4, "each accepted mutation must await local durability");
+  assertCount(counts.localWaitCalls, 5, "each accepted mutation must await local durability");
   assert(
-    db.writes.map((write) => write.operation).join(",") === "insert,update,update,delete",
-    "insert, edit, complete, and delete must reach the Jazz boundary",
+    db.writes.map((write) => write.operation).join(",") === "insert,update,update,delete,delete",
+    "insert, edit, complete, and both removal spellings must reach the Jazz boundary",
   );
   assert(store.getSnapshot().durability === "local", "the UI may claim local after the wait");
   assert(

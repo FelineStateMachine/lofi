@@ -11,7 +11,7 @@
  * @module
  */
 
-import type { Page } from "npm:playwright@1.61.1";
+import type { Page } from "playwright";
 
 /** Options for {@link withVirtualAuthenticator}. */
 export interface VirtualAuthenticatorOptions {

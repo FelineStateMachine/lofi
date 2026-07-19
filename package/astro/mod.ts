@@ -4,124 +4,44 @@
  * {@link prepareLofiAstroConfig} materializes version-matched runtime aliases
  * and Jazz configuration into the ignored `.lofi/` directory.
  *
+ * The generated configuration reads these environment variables at Astro
+ * config-load time:
+ *
+ * - `LOFI_BASE_PATH` — deployment base path for the built site (default `/`).
+ * - `LOFI_CSP` — set to `off` to disable the Content-Security-Policy meta tags
+ *   Astro emits per page (on by default).
+ * - `LOFI_CSP_SCRIPT_SRC` — space-separated sources appended to the
+ *   `script-src` directive.
+ * - `LOFI_CSP_STYLE_SRC` — space-separated sources appended to the
+ *   `style-src` directive.
+ * - `LOFI_CSP_CONNECT_SRC` — sources for a `connect-src` directive; absent by
+ *   default because the sync location is user data enrolled at runtime.
+ * - `LOFI_CSP_DIRECTIVES` — semicolon-separated additional CSP directives.
+ * - `JAZZ_APP_ID` — cloud-mode Jazz application id; requires
+ *   `JAZZ_SERVER_URL`.
+ * - `JAZZ_SERVER_URL` — cloud-mode Jazz sync server URL; requires
+ *   `JAZZ_APP_ID`.
+ * - `LOFI_SKIP_JAZZ_MANAGED` — set to `1` to skip starting the managed local
+ *   Jazz server during development.
+ *
  * @module
  */
 
 import { join, resolve } from "node:path";
+import { accessFiles, preactFiles, recipeFiles, runtimeFiles, schemaFiles } from "./manifest.ts";
 
 /** Options for materializing the package-owned Astro configuration. */
 export type LofiAstroOptions = {
   /** Project root. Defaults to the directory from which Astro was invoked. */
   root?: string;
   /**
-   * Reserved. The generated integration always reads the Jazz schema and
-   * permissions from `src`; any other value throws.
+   * The directory the generated integration reads the Jazz schema and
+   * permissions from. `src` is the contract: the type admits nothing else,
+   * and the runtime check rejects any other value.
    * @default "src"
    */
-  schemaDir?: string;
+  schemaDir?: "src";
 };
-
-/**
- * Runtime modules vendored into a project's `.lofi/` directory. Static because
- * the published package cannot list directories over JSR; the manifest test
- * fails when this list and `package/runtime/` drift apart.
- */
-export const runtimeFiles = [
-  "app.ts",
-  "auth.ts",
-  "boot-progress.ts",
-  "boot.ts",
-  "config.ts",
-  "data-sink.ts",
-  "device-capabilities.ts",
-  "diagnostics.ts",
-  "durability.ts",
-  "env.d.ts",
-  "envelope.ts",
-  "foreground-recovery.ts",
-  "inspector.ts",
-  "lifecycle.ts",
-  "live-query-store.ts",
-  "mod.ts",
-  "mutation-taxonomy.ts",
-  "namespace-state.ts",
-  "passkey-recovery.ts",
-  "pop.ts",
-  "probe.ts",
-  "provision.ts",
-  "pwa.ts",
-  "recovery.ts",
-  "resource-lifecycle.ts",
-  "runtime.ts",
-  "schema-compat.ts",
-  "session.ts",
-  "shared-field-keys.ts",
-  "shared-field-write.ts",
-  "startup-recovery.ts",
-  "storage-fork.ts",
-  "store-status.ts",
-  "table-mutations.ts",
-  "table-store.ts",
-  "transport-gate.ts",
-  "ui-mutation.ts",
-  "upgrade-coordination.ts",
-  "write-handle.ts",
-  "write-journal.ts",
-  "write-ledger.ts",
-] as const;
-
-/** Access modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
-export const accessFiles = [
-  "errors.ts",
-  "identity.ts",
-  "mod.ts",
-  "operations.ts",
-  "policies.ts",
-  "schema.ts",
-  "shared-field-lifecycle.ts",
-] as const;
-
-/** Schema facade modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
-export const schemaFiles = [
-  "compat.ts",
-  "effects.ts",
-  "encrypted.ts",
-  "mod.ts",
-  "nested.ts",
-  "padding.ts",
-  "private-table.ts",
-  "shared-crypto.ts",
-  "shared-encrypted.ts",
-  "shared-keyring.ts",
-  "shared-registry.ts",
-  "store.ts",
-] as const;
-
-/** Preact modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
-export const preactFiles = [
-  "DeviceStatus.tsx",
-  "live-data.ts",
-  "mod.ts",
-  "PwaActions.tsx",
-  "RuntimeRecovery.tsx",
-  "TicketEnrollForm.tsx",
-  "use-boot-progress.ts",
-  "use-device-capabilities.ts",
-  "use-schema-compat.ts",
-  "use-storage-fork.ts",
-  "write-hooks.ts",
-] as const;
-
-/** Recipe modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
-export const recipeFiles = [
-  "file-handler.ts",
-  "launch-handler.ts",
-  "protocol-handler.ts",
-  "related-app-discovery.ts",
-  "scope-extension.ts",
-  "web-share.ts",
-  "window-controls-overlay.ts",
-] as const;
 
 async function readPackageFile(path: string): Promise<string> {
   const url = new URL(path, import.meta.url);
@@ -331,10 +251,18 @@ export default defineConfig({
 /**
  * Materializes the package-owned Astro/Jazz integration into an ignored tooling
  * directory so Astro's Node-compatible config loader can consume it.
+ *
+ * Vendors the runtime, access, preact, recipe, and schema modules into
+ * `.lofi/package/` and writes `.lofi/astro.config.ts`, rewriting the config
+ * only when its content changes.
+ *
+ * @param options The project root and schema directory; both optional.
+ * @returns The absolute path of the generated `.lofi/astro.config.ts`.
  */
 export async function prepareLofiAstroConfig(options: LofiAstroOptions = {}): Promise<string> {
   const projectRoot = resolve(options.root ?? Deno.cwd());
-  if (options.schemaDir && options.schemaDir !== "src") {
+  // Type-level contract; kept at runtime against unchecked JavaScript callers.
+  if (options.schemaDir !== undefined && options.schemaDir !== "src") {
     throw new Error("custom schemaDir is not supported by the generated lofi Astro integration");
   }
   const toolingDir = join(projectRoot, ".lofi");

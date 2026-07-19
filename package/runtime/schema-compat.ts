@@ -59,7 +59,7 @@ const updatingMessage = "Updating the app… editing resumes when the update fin
  * Raised when a mutation is refused because the local data is ahead of the
  * running code. It surfaces through the ordinary error path of whatever
  * performed the write — a verb call's handle fails, a table
- * `insert`/`update`/`delete` rejects — with no journal entry or effect;
+ * `insert`/`update`/`remove` rejects — with no journal entry or effect;
  * reads keep working. The remediation is updating the app: watch
  * {@link SchemaCompatState} via `useSchemaCompat` or
  * {@link subscribeSchemaCompat}, and offer `applyPwaUpdate` when the update
@@ -70,6 +70,11 @@ export class SchemaCompatibilityError extends Error {
   override readonly name = "SchemaCompatibilityError";
   /** Stable category for write-refusal classification. */
   readonly code = "schema-data-ahead";
+}
+
+/** True when an error is a write refused because local data is ahead of this code. */
+export function isSchemaCompatibilityError(error: unknown): error is SchemaCompatibilityError {
+  return error instanceof SchemaCompatibilityError;
 }
 
 /** The update surface the gate drives as its remediation. */
@@ -126,7 +131,13 @@ function defaultLoadManifest(): Promise<unknown> {
   );
 }
 
-/** Creates an isolated gate, primarily for tests; boot uses the shared one. */
+/**
+ * Creates an isolated compatibility gate over injectable browser surfaces.
+ * The package-wide wrappers ({@link getSchemaCompatState},
+ * {@link subscribeSchemaCompat}, {@link assertSchemaWritable}) all read the
+ * shared gate that boot starts; this factory exists for isolated instances —
+ * deterministic tests and custom hosts that manage their own gate.
+ */
 export function createSchemaCompatGate(
   dependencies: SchemaCompatGateDependencies = {},
 ): SchemaCompatGate {

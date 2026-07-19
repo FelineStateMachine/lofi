@@ -164,6 +164,26 @@ The app is the only thing that needs hosting: sync is optional infrastructure th
 a managed Jazz app or at [a self-hosted sync node](/node) they run themselves — the deployment does
 not change either way.
 
+### Content-Security-Policy
+
+Every built page carries a strict Content-Security-Policy in a `<meta>` tag: scripts and styles are
+admitted only from the app's own origin plus the exact hashes of the inline island bootstraps, with
+`'wasm-unsafe-eval'` for the sync engine's WebAssembly and `object-src 'none'`, `base-uri 'self'`,
+`worker-src 'self'` alongside. The meta tag enforces on every host, including hosts that cannot set
+response headers — on those, it is the effective mechanism. Where your host supports response
+headers, mirror the policy as a real `Content-Security-Policy` header using the generated
+`dist/_headers.example`: a header additionally covers `frame-ancestors` (ignored in meta by spec)
+and governs the service worker's own execution. `deno task preview` sends the header so the header
+path is exercised before deployment.
+
+Tuning happens through the environment at build time: `LOFI_CSP_SCRIPT_SRC`, `LOFI_CSP_STYLE_SRC`,
+and `LOFI_CSP_DIRECTIVES` extend the policy (space-separated sources; semicolon-separated
+directives), `LOFI_CSP_CONNECT_SRC` pins the sync origin for apps with a fixed managed sink — note
+that pinning it breaks runtime enrollment to any other node, which is why it is not set by default
+(the sync location is user data, not build configuration) — and `LOFI_CSP=off` disables the policy
+entirely. The build reports the shipped policy and warns on weakenings (`'unsafe-inline'`, remote
+script origins, missing pages, or a disabled policy); what ships is the author's call.
+
 ### Offline cache policy
 
 The build's precache manifest contains required shell resources only. Mutable shell assets (HTML,

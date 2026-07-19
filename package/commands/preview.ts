@@ -18,7 +18,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   Deno.exit(2);
 }
 
-let identity: { lofiVersion?: string; sourceHash?: string; basePath?: string };
+let identity: { lofiVersion?: string; sourceHash?: string; basePath?: string; csp?: string };
 try {
   identity = JSON.parse(await Deno.readTextFile("dist/lofi-build.json"));
 } catch {
@@ -48,9 +48,15 @@ Deno.serve({ hostname: "127.0.0.1", port }, async (request) => {
   const path = join("dist", relative);
   try {
     const body = await Deno.readFile(path);
-    return new Response(request.method === "HEAD" ? null : body, {
-      headers: { "content-type": productionContentType(path) },
-    });
+    const contentType = productionContentType(path);
+    const headers: Record<string, string> = { "content-type": contentType };
+    // The built pages enforce the policy via meta; preview also sends the
+    // real header so the header path — including frame-ancestors and the
+    // service worker's own execution — is exercised before deployment.
+    if (identity.csp && (contentType.startsWith("text/html") || relative === "sw.js")) {
+      headers["content-security-policy"] = `${identity.csp}; frame-ancestors 'none'`;
+    }
+    return new Response(request.method === "HEAD" ? null : body, { headers });
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) return new Response("Not found", { status: 404 });
     throw error;

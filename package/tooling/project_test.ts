@@ -60,6 +60,9 @@ Deno.test("precache URLs are portable app-shell URLs", () => {
     "index.html",
     "lofi-build.json",
     "lofi-precache.json",
+    // The schema compatibility manifest is shell state: an offline shell must
+    // still know its own schema range, so it stays in the precache.
+    "lofi-schema.json",
     "assets\\client.js",
     "manifest.webmanifest",
     "screenshot-wide.png",
@@ -68,6 +71,7 @@ Deno.test("precache URLs are portable app-shell URLs", () => {
     JSON.stringify(urls) === JSON.stringify([
       "./",
       "./assets/client.js",
+      "./lofi-schema.json",
       "./manifest.webmanifest",
     ]),
     `unexpected precache URLs: ${JSON.stringify(urls)}`,

@@ -25,6 +25,7 @@ import {
   productionPwaIssues,
   screenshotAssetPaths,
 } from "../tooling/pwa-validation.ts";
+import { generateSchemaCompatManifest } from "../tooling/schema-manifest.ts";
 import { runDeno } from "../tooling/process.ts";
 import { exitOnFailure, validatedCommandEnvironment } from "./shared.ts";
 
@@ -80,6 +81,20 @@ await Deno.writeTextFile(
   serviceWorkerPath,
   serviceWorker.replace("__LOFI_BUILD_REVISION__", sourceHash),
 );
+// The revision↔schema compatibility manifest. Written before the dist walk so
+// it joins the precache: an offline shell must still know its own schema
+// range for the boot compatibility gate.
+let schemaManifest;
+try {
+  schemaManifest = await generateSchemaCompatManifest({ revision: sourceHash });
+} catch (error) {
+  console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(
+    "error: the schema compatibility manifest could not be generated; fix src/schema.ts, then rerun `deno task build`",
+  );
+  Deno.exit(1);
+}
+await Deno.writeTextFile("dist/lofi-schema.json", `${JSON.stringify(schemaManifest)}\n`);
 const productionManifest = JSON.parse(await Deno.readTextFile("dist/manifest.webmanifest"));
 // One walk serves the precache manifest, the shell checks, and the route
 // count below.

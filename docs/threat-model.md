@@ -79,14 +79,25 @@ An app-connect ticket is a bearer credential with 256-bit entropy.
   everyday transport credential and dies with its parent on revocation), and the provision original
   is sealed behind the user's passkey or kept only in memory, with the user's password manager as
   the durable copy.
+- The **derived sync ticket is possession-bound in use** against a node that supports the exchange:
+  enrollment offers a non-extractable device key, and connecting thereafter means answering a fresh
+  challenge with a signature only that device can produce. The everyday credential then stops being
+  a pure bearer string — a copy lifted from a backup, a log line, or a pasted URL no longer connects
+  from anywhere else. Losing the device key (a wiped browser store) is deliberately unrecoverable;
+  re-enrolling a fresh ticket is the recovery.
 
 **Same-origin script (XSS) is the attacker this custody is shaped around.** Script running on the
-app's origin can use whatever the page can use: it can drive the silent open of the sync
-declaration, so a compromised origin leaks transport capability. What it cannot do silently is
-obtain admin capability — unlocking sealed provision material is a user-verifying passkey prompt, so
-theft degrades from silent to prompted, and a prompt the user did not initiate is the signal to
-decline. At-rest theft (disk images, backups, storage exfiltration) gets the stronger guarantee:
-sealed records are ciphertext without the device key or the passkey.
+app's origin can use whatever the page can use: the page's own device key answers the challenge for
+whatever runs inside it, so a compromised origin holds transport capability while its page is live.
+Possession binding narrows what that compromise is worth — the credential material script can read
+no longer connects from anywhere else, because the signing key cannot leave the device. Exfiltration
+loses its value; in-page abuse remains, and the Content-Security-Policy below is the control aimed
+at that residue. What script cannot do silently is obtain admin capability — unlocking sealed
+provision material is a user-verifying passkey prompt, so theft degrades from silent to prompted,
+and a prompt the user did not initiate is the signal to decline. At-rest theft (disk images,
+backups, storage exfiltration) gets the stronger guarantee: sealed records are ciphertext without
+the device key or the passkey, and the sync credential inside them is bound to a key that was never
+in the record at all.
 
 Generated apps also narrow the surface that creates same-origin script in the first place: every
 built page carries a Content-Security-Policy that admits only the app's own hashed scripts — no

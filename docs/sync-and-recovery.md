@@ -95,6 +95,13 @@ Semantics to rely on:
   `TicketEnrollForm` (`@nzip/lofi/preact`) is shaped for exactly that custody — the ticket is a
   `current-password` field a manager saves on first paste and autofills later. Against a node
   without the exchange, the ticket enrolls as pasted, exactly as before.
+- **The derived ticket binds to a device key when the node supports it.** The scope-down exchange is
+  offered the public half of a non-extractable device keypair; a node that accepts records the
+  binding, and every boot thereafter proves possession — a fresh challenge signature — before
+  connecting through a short-lived connect token. A ticket string lifted from the device then no
+  longer connects from anywhere else. A failed proof (revocation, a reset node, a wiped device key)
+  behaves like a revoked ticket; losing the device key is deliberately unrecoverable, and
+  re-enrollment is the recovery.
 - If the node revokes the ticket, requests fail with 401 and live sockets close; treat the stored
   sink as dead and surface re-enrollment rather than retrying silently.
 

@@ -19,6 +19,7 @@ import { clearSharedFieldKeys, sharedFieldIdentityOrNull } from "../schema/share
 import { sharedColumnConfigs } from "../schema/shared-registry.ts";
 import { recordSharedFieldAlert } from "./diagnostics.ts";
 import { activeAppId } from "./config.ts";
+import { completePopExchange, getOrCreatePopKeyPair } from "./pop.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
   createTableStore,
@@ -272,6 +273,28 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     clearSharedFieldKeys();
     await installSharedFieldIdentityFromSecret(secret);
     const namespace = await accountNamespace(secret);
+    // A possession-bound sink proves the device key before connecting: the
+    // exchange mints a connect token the sync client carries as a path
+    // segment. A failed exchange (node restart, revocation, key loss) boots
+    // without an override — the connection then fails like a revoked ticket
+    // and the existing re-enrollment surface takes over.
+    //
+    // There is deliberately no re-exchange on reconnect: the client cannot
+    // change its server URL after creation, the token's TTL slides on every
+    // use, and every runtime recreation passes back through here. The
+    // residual — a document idle past the TTL that then reconnects — fails
+    // like a revoked ticket and recovers on reload.
+    let serverUrlOverride: string | undefined;
+    const popSink = activeSink();
+    if (connect && popSink?.pop) {
+      const keyPair = await getOrCreatePopKeyPair(popSink.appId);
+      serverUrlOverride = await completePopExchange({
+        serverUrl: popSink.serverUrl,
+        appId: popSink.appId,
+        ticketId: popSink.pop.ticketId,
+        keyPair,
+      }) ?? undefined;
+    }
     const db = await createDb(
       databaseConfig(
         secret,
@@ -279,6 +302,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
         runtimeMode,
         connect,
         createBrokerIncompatibilityHandler(runtimeMode, record),
+        serverUrlOverride,
       ),
     );
     // Browser `createDb()` returns before its persistent worker bridge has

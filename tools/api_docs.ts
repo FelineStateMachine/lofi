@@ -368,13 +368,14 @@ function renderJsDoc(jsDoc: JsDoc | undefined): string {
   const tags = jsDoc.tags ?? [];
   const params = tags.filter((tag) => tag.kind === "param" && tag.doc);
   if (params.length > 0) {
-    out.push("| Parameter | Description |");
-    out.push("| --- | --- |");
-    for (const tag of params) {
-      out.push(
-        `| \`${tag.name}\` | ${renderJsDocText(tag.doc ?? "").replaceAll("\n", " ")} |`,
-      );
-    }
+    const rows = [
+      "| Parameter | Description |",
+      "| --- | --- |",
+      ...params.map((tag) =>
+        `| \`${tag.name}\` | ${renderJsDocText(tag.doc ?? "").replaceAll("\n", " ")} |`
+      ),
+    ];
+    out.push(rows.join("\n"));
   }
   for (const tag of tags) {
     if (tag.kind === "return" && tag.doc) {

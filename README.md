@@ -30,9 +30,9 @@ deno task dev
 
 Open the URL printed by the development server. The starter is a small task app: add a task and
 reload the page to see that it remains in durable local storage. Once the page is open, disconnect
-the network and you can keep reading and writing data locally. Prefer to look first? The current
-release's starter, restyled, runs at [demo.lofi.host](https://demo.lofi.host) — deployed by the
-release workflow from the published package.
+the network and you can keep reading and writing data locally. Prefer to look first? A reworked
+build of the starter runs at [demo.lofi.host](https://demo.lofi.host), deployed by the release
+workflow from the published package.
 
 The generated app starts in local-only mode. You do not need an account, a backend, or an `.env`
 file to begin building. To provision managed Jazz sync, scaffold with `--sync` or run

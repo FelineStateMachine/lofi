@@ -39,10 +39,10 @@
   ],
   "shortcuts": [
     {
-      "name": "Open tasks",
-      "short_name": "Tasks",
-      "description": "Open the demo task list",
-      "url": "./#tasks",
+      "name": "Open incidents",
+      "short_name": "Incidents",
+      "description": "Open the demo incident board",
+      "url": "./#incidents",
       "icons": [
         {
           "src": "./icon-192.png",

@@ -17,7 +17,10 @@ import { LOFI_VERSION } from "../package/version.ts";
 
 /** Overlay files that intentionally have no counterpart in the starter. */
 export const NEW_FILES: readonly string[] = [
+  "src/islands/IncidentBoard.tsx",
   "src/islands/MagmaBackdrop.tsx",
+  "src/islands/StatusStrip.tsx",
+  "src/islands/use-incidents.ts",
   "public/fonts/chakra-petch-700.woff2",
   "public/fonts/OFL.txt",
 ];

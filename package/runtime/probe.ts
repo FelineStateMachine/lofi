@@ -9,6 +9,7 @@ import {
   reloadBrowserRuntime,
   subscribeRuntimeDiagnostics,
 } from "./runtime.ts";
+import { describeStoreStatus } from "./store-status.ts";
 import { isTransportPausedByInspector, setTransportPausedByInspector } from "./transport-gate.ts";
 
 export type LofiDevelopmentBridge = InspectorAdapter;
@@ -59,6 +60,7 @@ async function readSnapshot(): Promise<InspectorSnapshot> {
       transport: activeServerUrl()
         ? isTransportPausedByInspector() ? "paused by inspector" : "live detail unavailable"
         : "not configured",
+      store: describeStoreStatus(diagnostics.storeStatus),
       pendingLocalWrites: diagnostics.pendingLocalWrites,
       pendingGlobalWrites: diagnostics.pendingGlobalWrites,
       lastWrite: diagnostics.lastWriteDurability,

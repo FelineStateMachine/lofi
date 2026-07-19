@@ -16,6 +16,7 @@ export type InspectorSnapshot = {
   sync: {
     mode: "local-only" | "managed configured";
     transport: "paused by inspector" | "live detail unavailable" | "not configured";
+    store: string;
     pendingLocalWrites: number;
     pendingGlobalWrites: number;
     lastWrite: "none" | "local" | "global" | "failed";
@@ -63,6 +64,7 @@ export function inspectorRows(snapshot: InspectorSnapshot): InspectorRow[] {
     { label: "Storage startup", value: snapshot.storage.startupFailure },
     { label: "Sync mode", value: snapshot.sync.mode },
     { label: "Transport", value: snapshot.sync.transport },
+    { label: "Store", value: snapshot.sync.store },
     { label: "Pending lofi local", value: String(snapshot.sync.pendingLocalWrites) },
     { label: "Pending lofi global", value: String(snapshot.sync.pendingGlobalWrites) },
     { label: "Last write", value: snapshot.sync.lastWrite },

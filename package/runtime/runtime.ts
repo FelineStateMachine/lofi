@@ -3,7 +3,8 @@ import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
 // Package-owned Jazz runtime.
 import { getLofiApp } from "./app.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
-import { appId, databaseConfig, syncing } from "./config.ts";
+import { activeSink, appId, databaseConfig, syncing } from "./config.ts";
+import { resolveStoreStatus } from "./store-status.ts";
 import { setEncryptedColumnKey } from "../schema/encrypted.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
@@ -201,7 +202,17 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
   const record = (failure: RuntimeStartupFailure) => recordStartupFailure(state, failure);
   state.diagnostics.storageState = "persistent-requested";
   state.diagnostics.startupFailure = null;
+  state.diagnostics.storeStatus = { state: "unchecked", reason: "sync-not-connected" };
   notifyDiagnostics(state);
+  // The store preflight rides alongside database creation, never in front of
+  // it: local-first boot must not wait on the network. resolveStoreStatus maps
+  // every failure and timeout to a diagnostic value, so this only records
+  // state — a schema-less or drifted store surfaces here at boot instead of as
+  // a hanging first write, and is never repaired from here.
+  void resolveStoreStatus({ connect, sink: activeSink() }).then((status) => {
+    state.diagnostics.storeStatus = status;
+    notifyDiagnostics(state);
+  });
   return await runRuntimeStartup(runtimeMode, async () => {
     assertDurableBrowser();
     const secret = await resolveAccountSecret();

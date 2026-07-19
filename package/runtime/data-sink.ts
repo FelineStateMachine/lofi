@@ -303,6 +303,20 @@ const TICKET_PREFIX = "lofisync1.";
 const TICKET_PATH = /^\/t\/[A-Za-z0-9_-]{43}$/;
 
 /**
+ * Whether a server URL carries an app-connect ticket path (`/t/<secret>`) and
+ * therefore fronts a lofi-node gate, which is what exposes the metadata-only
+ * store-status endpoint. First-party Jazz servers and open-mode node URLs do
+ * not match.
+ */
+export function isTicketServerUrl(serverUrl: string): boolean {
+  try {
+    return TICKET_PATH.test(new URL(serverUrl).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parses a pasted or scanned app-connect ticket. Returns `null` on any
  * malformed input — paste paths never throw. The ticket URL is a bearer
  * credential: hold it only as long as enrollment needs it.

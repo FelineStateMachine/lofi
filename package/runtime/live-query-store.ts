@@ -1,6 +1,7 @@
 import type { Db, QueryBuilder } from "jazz-tools";
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
 import { getRuntime, runtimeRecreatedEvent, updateRuntimeDiagnostics } from "./runtime.ts";
+import { subscribeSharedKeyring } from "../schema/shared-keyring.ts";
 import type { TableRow } from "./table-store.ts";
 
 /** Honest read state for an arbitrary typed Jazz query. */
@@ -17,6 +18,12 @@ type QuerySubscriptionDb = Pick<Db, "subscribeAll">;
 export type LiveQueryEnvironment = {
   getDb(): Promise<QuerySubscriptionDb>;
   subscribeRuntimeRecreation(listener: () => void): () => void;
+  /** Fires when a shared field key is installed; stores resubscribe so rows
+   * previously surfaced as key-pending re-materialize into plaintext. Key
+   * installs are rare (boot, membership changes), so restarting every active
+   * query is simpler than tracking which queries touch shared columns and
+   * costs nothing in steady state. */
+  subscribeSharedKeyring?(listener: () => void): () => void;
   updateDiagnostics(update: (diagnostics: RuntimeDiagnostics) => void): void;
 };
 
@@ -44,6 +51,7 @@ export class LiveQueryStore<T extends TableRow> {
   #snapshot: LiveQuerySnapshot<T> = { status: "loading", rows: [], error: null };
   #vendorUnsubscribe: (() => void) | null = null;
   #stopRuntimeRecreation: (() => void) | null = null;
+  #stopKeyring: (() => void) | null = null;
   #generation = 0;
   #disposed = false;
 
@@ -104,6 +112,8 @@ export class LiveQueryStore<T extends TableRow> {
       this.#stopRuntimeRecreation = this.#environment.subscribeRuntimeRecreation(() =>
         this.#restart()
       );
+      this.#stopKeyring = this.#environment.subscribeSharedKeyring?.(() => this.#restart()) ??
+        null;
       this.#connect();
     } catch (error) {
       this.#fail(error);
@@ -149,6 +159,8 @@ export class LiveQueryStore<T extends TableRow> {
     this.#closeVendorSubscription();
     this.#stopRuntimeRecreation?.();
     this.#stopRuntimeRecreation = null;
+    this.#stopKeyring?.();
+    this.#stopKeyring = null;
   }
 
   #closeVendorSubscription(): void {
@@ -256,6 +268,7 @@ const defaultRegistry = new LiveQueryRegistry({
     globalThis.addEventListener(runtimeRecreatedEvent, listener);
     return () => globalThis.removeEventListener(runtimeRecreatedEvent, listener);
   },
+  subscribeSharedKeyring,
   updateDiagnostics,
 });
 

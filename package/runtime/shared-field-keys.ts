@@ -11,12 +11,17 @@ import {
   publicKeyFingerprint,
   SharedFieldError,
   sharedFieldPublicKey,
+  unwrapFieldKey,
 } from "../schema/shared-crypto.ts";
 import {
   clearSharedFieldIdentity,
   installSharedFieldIdentity,
+  installSharedFieldKey,
+  requireSharedFieldIdentity,
   type SharedFieldIdentity,
+  sharedKeyScope,
 } from "../schema/shared-keyring.ts";
+import type { SharedColumnConfig } from "../schema/shared-registry.ts";
 
 export { clearSharedFieldIdentity };
 
@@ -216,4 +221,158 @@ export function directoryPublicKey(row: { public_key: string; algo: string }): U
     throw new SharedFieldError("wrap-invalid", "directory entry holds a malformed public key");
   }
   return bytes;
+}
+
+// --- Wrapped-key watcher -----------------------------------------------------
+
+type WatcherDb = {
+  subscribeAll(
+    query: unknown,
+    onDelta: (delta: { all: unknown[] }) => void,
+    onError?: (error: unknown) => void,
+  ): () => void;
+  all(query: unknown): Promise<unknown[]>;
+};
+
+type WrappedKeyRow = {
+  groupId: string;
+  recipient_user_id: string;
+  sender_user_id: string;
+  generation: number;
+  wrapped_key: string;
+  sender_fingerprint: string;
+};
+
+/** One anomaly the watcher surfaces instead of installing a key. */
+export type SharedFieldWatchAlert = {
+  code: "peer-key-changed" | "wrap-invalid";
+  userId: string;
+  detail: string;
+};
+
+/**
+ * Watches the wrapped-key tables named by the shared-column registry for
+ * rows addressed to this account, resolves each sender's public key through
+ * the pin store, unwraps, and installs field keys into the keyring. A sender
+ * whose published key disagrees with its pin, or a wrap that fails
+ * authentication, surfaces as an alert and installs nothing — refusing the
+ * key IS the detection.
+ *
+ * Returns a teardown that closes every subscription.
+ */
+export function startSharedFieldKeyWatcher(input: {
+  db: WatcherDb;
+  appId: string;
+  userId: string;
+  configs: readonly SharedColumnConfig[];
+  findTable(name: string): { where(condition: Record<string, unknown>): unknown } | null;
+  onAlert(alert: SharedFieldWatchAlert): void;
+}): () => void {
+  const stops: Array<() => void> = [];
+  const watched = new Set<string>();
+  for (const config of input.configs) {
+    const watchKey = `${config.keys}|${config.directory}|${config.group}`;
+    if (watched.has(watchKey)) continue;
+    watched.add(watchKey);
+    const keysTable = input.findTable(config.keys);
+    const directoryTable = input.findTable(config.directory);
+    if (!keysTable || !directoryTable) {
+      input.onAlert({
+        code: "wrap-invalid",
+        userId: input.userId,
+        detail: `shared column "${config.label}" names undeclared table ` +
+          `"${!keysTable ? config.keys : config.directory}"`,
+      });
+      continue;
+    }
+    const processed = new Set<string>();
+    const stop = input.db.subscribeAll(
+      keysTable.where({ recipient_user_id: input.userId }),
+      (delta) => {
+        for (const raw of delta.all as WrappedKeyRow[]) {
+          const rowKey = `${config.group}/${raw.groupId}#${raw.generation}@${raw.sender_user_id}` +
+            `:${raw.wrapped_key}`;
+          if (processed.has(rowKey)) continue;
+          processed.add(rowKey);
+          void installWrappedKey(input, config, directoryTable, raw);
+        }
+      },
+      () => {
+        // Subscription errors surface through the live-query stores consumers
+        // actually watch; the watcher retries on the next runtime recreation.
+      },
+    );
+    stops.push(stop);
+  }
+  return () => {
+    for (const stop of stops) stop();
+  };
+}
+
+async function installWrappedKey(
+  input: {
+    db: WatcherDb;
+    appId: string;
+    userId: string;
+    onAlert(alert: SharedFieldWatchAlert): void;
+  },
+  config: SharedColumnConfig,
+  directoryTable: { where(condition: Record<string, unknown>): unknown },
+  row: WrappedKeyRow,
+): Promise<void> {
+  try {
+    const identity = requireSharedFieldIdentity();
+    const entries = await input.db.all(
+      directoryTable.where({ user_id: row.sender_user_id }),
+    ) as Array<{ user_id: string; algo: string; public_key: string }>;
+    const entry = entries[0];
+    if (entry === undefined) {
+      input.onAlert({
+        code: "wrap-invalid",
+        userId: row.sender_user_id,
+        detail: `a wrap from ${row.sender_user_id} arrived before its directory entry`,
+      });
+      return;
+    }
+    const senderPublic = directoryPublicKey(entry);
+    const observedFingerprint = publicKeyFingerprint(senderPublic);
+    if (!verifyAndPinFingerprint(input.appId, row.sender_user_id, observedFingerprint)) {
+      input.onAlert({
+        code: "peer-key-changed",
+        userId: row.sender_user_id,
+        detail: `the published key for ${row.sender_user_id} no longer matches its pin; ` +
+          "refusing its wraps until the key is re-trusted",
+      });
+      return;
+    }
+    if (row.sender_fingerprint !== observedFingerprint) {
+      input.onAlert({
+        code: "wrap-invalid",
+        userId: row.sender_user_id,
+        detail: "a wrap's declared sender fingerprint disagrees with the directory",
+      });
+      return;
+    }
+    const fieldKey = unwrapFieldKey({
+      wrapped: row.wrapped_key,
+      recipientSecret: identity.secret,
+      senderPublic,
+      context: {
+        groupTable: config.group,
+        groupId: row.groupId,
+        generation: row.generation,
+        recipientUserId: input.userId,
+        senderUserId: row.sender_user_id,
+      },
+    });
+    installSharedFieldKey(sharedKeyScope(config.group, row.groupId), row.generation, fieldKey);
+  } catch (error) {
+    input.onAlert({
+      code: "wrap-invalid",
+      userId: row.sender_user_id,
+      detail: error instanceof SharedFieldError
+        ? error.message
+        : `a wrap failed to install: ${String(error)}`,
+    });
+  }
 }

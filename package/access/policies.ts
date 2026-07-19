@@ -24,6 +24,8 @@ export type GroupAccessTemplate = {
   readonly members: AccessTable;
   readonly resources: readonly AccessTable[];
   readonly groupId: string;
+  /** The group's wrapped-field-key table, when it hosts shared columns. */
+  readonly fieldKeys?: AccessTable;
 };
 /** Shared-field key-directory policy template. */
 export type SharedFieldAccessTemplate = {
@@ -110,6 +112,10 @@ export function groupAccess(config: {
   members: AccessTable;
   resources: AccessTable | readonly AccessTable[];
   groupId: string;
+  /** Wrapped-field-key table for groups hosting shared encrypted columns
+   * (declared with `sharedFieldKeyTable`). Readable by each row's recipient
+   * or any member; writable by a member signing as themselves. */
+  fieldKeys?: AccessTable;
 }): GroupAccessTemplate {
   return {
     kind: "group",
@@ -117,6 +123,7 @@ export function groupAccess(config: {
     members: config.members,
     resources: Array.isArray(config.resources) ? config.resources : [config.resources],
     groupId: config.groupId,
+    ...(config.fieldKeys ? { fieldKeys: config.fieldKeys } : {}),
   };
 }
 
@@ -192,6 +199,15 @@ function validateTemplate(template: AccessTemplate): void {
     requireColumn(template.members, "can_manage", "Boolean");
     for (const resource of template.resources) {
       requireColumn(resource, template.groupId, "Uuid", template.groups._table);
+    }
+    if (template.fieldKeys) {
+      requireColumn(template.fieldKeys, "groupId", "Uuid", template.groups._table);
+      requireColumn(template.fieldKeys, "recipient_user_id", "Text");
+      requireColumn(template.fieldKeys, "sender_user_id", "Text");
+      requireColumn(template.fieldKeys, "generation", "Integer");
+      requireColumn(template.fieldKeys, "wrapped_key", "Text");
+      requireColumn(template.fieldKeys, "recipient_fingerprint", "Text");
+      requireColumn(template.fieldKeys, "sender_fingerprint", "Text");
     }
   }
 }
@@ -444,6 +460,28 @@ export function defineAccessPolicies<TApp extends object>(
               { $createdBy: session.user_id },
               hasCapability(row[template.groupId], "can_create"),
             ]),
+          ])
+        );
+      }
+      if (template.fieldKeys) {
+        // Wrapped field keys: recipients and members read (members see who
+        // holds keys, which key repair needs); any member may wrap but only
+        // as themselves — a malicious member is already inside the crypto
+        // boundary, so restricting senders to admins buys nothing and hurts
+        // availability. Recipients may shed their own wraps; admins clean up.
+        const fieldKeys = policy[template.fieldKeys._table];
+        fieldKeys.allowRead.where((row: Record<string, unknown>) =>
+          anyOf([{ recipient_user_id: session.user_id }, isMember(row.groupId)])
+        );
+        fieldKeys.allowInsert.where((row: Record<string, unknown>) =>
+          allOf([{ sender_user_id: session.user_id }, isMember(row.groupId)])
+        );
+        fieldKeys.allowUpdate.where({ sender_user_id: session.user_id });
+        fieldKeys.allowDelete.where((row: Record<string, unknown>) =>
+          anyOf([
+            { sender_user_id: session.user_id },
+            { recipient_user_id: session.user_id },
+            isAdmin(row.groupId),
           ])
         );
       }

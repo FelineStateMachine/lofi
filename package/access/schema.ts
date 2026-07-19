@@ -1,5 +1,5 @@
 import { schema as s } from "jazz-tools";
-import type { BooleanColumn, DefinedTable, RefColumn, StringColumn } from "jazz-tools";
+import type { BooleanColumn, DefinedTable, IntColumn, RefColumn, StringColumn } from "jazz-tools";
 
 function requireTableName(name: string, helper: string): void {
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
@@ -85,5 +85,33 @@ export function sharedFieldDirectoryTable(): DefinedTable<{
     algo: s.string(),
     public_key: s.string(),
     fingerprint: s.string(),
+  });
+}
+
+/** Creates the wrapped-field-key table for one group table: one row per
+ * (recipient, generation) holding the group's field key sealed to that
+ * member's public key. Rows are ordinary synced data the server relays but
+ * cannot open; the sender's static key inside the wrap is what makes a
+ * server-minted row a detected forgery rather than a readable key. */
+export function sharedFieldKeyTable<const Group extends string>(
+  group: Group,
+): DefinedTable<{
+  groupId: RefColumn<Group>;
+  recipient_user_id: StringColumn;
+  sender_user_id: StringColumn;
+  generation: IntColumn;
+  wrapped_key: StringColumn;
+  recipient_fingerprint: StringColumn;
+  sender_fingerprint: StringColumn;
+}> {
+  requireTableName(group, "sharedFieldKeyTable");
+  return s.table({
+    groupId: s.ref(group),
+    recipient_user_id: s.string(),
+    sender_user_id: s.string(),
+    generation: s.int(),
+    wrapped_key: s.string(),
+    recipient_fingerprint: s.string(),
+    sender_fingerprint: s.string(),
   });
 }

@@ -89,6 +89,19 @@ export type RuntimeDiagnostics = {
   quarantinedObligations: number;
   /** Recent structured entries recorded by the built-in `s.log` effect unit. */
   effectLog: readonly EffectLogEntry[];
+  /** Recent shared-field key alerts: substitutions, forged wraps, self-key
+   * conflicts. A non-empty list is the detection surface the threat model
+   * promises — render it, never swallow it. */
+  sharedFieldAlerts: readonly SharedFieldAlert[];
+};
+
+/** One detected shared-field key anomaly. */
+export type SharedFieldAlert = {
+  code: "peer-key-changed" | "self-key-conflict" | "wrap-invalid";
+  /** The account the anomaly concerns (the sender or self). */
+  userId: string;
+  detail: string;
+  at: string;
 };
 
 export function createDiagnostics(): RuntimeDiagnostics {
@@ -116,5 +129,19 @@ export function createDiagnostics(): RuntimeDiagnostics {
     expiredObligations: 0,
     quarantinedObligations: 0,
     effectLog: [],
+    sharedFieldAlerts: [],
   };
+}
+
+const maxSharedFieldAlerts = 20;
+
+/** Appends a shared-field alert, keeping the most recent entries. */
+export function recordSharedFieldAlert(
+  diagnostics: RuntimeDiagnostics,
+  alert: SharedFieldAlert,
+): void {
+  diagnostics.sharedFieldAlerts = [
+    ...diagnostics.sharedFieldAlerts.slice(-(maxSharedFieldAlerts - 1)),
+    alert,
+  ];
 }

@@ -82,6 +82,7 @@ export const schemaFiles = [
   "nested.ts",
   "padding.ts",
   "private-table.ts",
+  "shared-crypto.ts",
   "store.ts",
 ] as const;
 
@@ -173,6 +174,7 @@ import { resolve } from "node:path";
 // node_modules where Vite resolves bare specifiers. Loading them here pins
 // them into the project's node_modules at config time.
 import "@noble/ciphers/chacha";
+import "@noble/curves/ed25519";
 import "@noble/hashes/hkdf";
 import "@noble/hashes/sha2";
 

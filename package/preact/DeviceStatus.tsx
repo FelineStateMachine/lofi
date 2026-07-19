@@ -11,6 +11,7 @@ import {
   subscribeRuntimeDiagnostics,
 } from "../runtime/runtime.ts";
 import { readSession, type Session } from "../runtime/session.ts";
+import { describeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
 
 /**
@@ -131,7 +132,11 @@ export default function DeviceStatus(): VNode {
         <dl>
           <Row label="Sync" value={syncState} />
           <Row label="Sync location" value={sinkState} />
+          <Row label="Store" value={describeStoreStatus(runtimeDiagnostics.storeStatus)} />
         </dl>
+        {runtimeDiagnostics.storeStatus.state === "no_schema" && (
+          <p>{runtimeDiagnostics.storeStatus.message}</p>
+        )}
         {!synced && (
           <p>
             Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in <code>.env</code>{" "}

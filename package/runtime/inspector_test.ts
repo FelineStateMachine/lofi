@@ -20,6 +20,7 @@ const snapshot: InspectorSnapshot = {
   sync: {
     mode: "managed configured",
     transport: "live detail unavailable",
+    store: "no schema deployed — provision the store",
     pendingLocalWrites: 1,
     pendingGlobalWrites: 2,
     lastWrite: "local",
@@ -52,6 +53,10 @@ test("inspector rows retain truthful unavailable and pending states", () => {
   assert(
     rows["Storage startup"] === "broker-incompatible",
     "startup failure classification was omitted",
+  );
+  assert(
+    rows.Store === "no schema deployed — provision the store",
+    "the store preflight state was omitted",
   );
   assert(rows["Multi-tab role"] === "unavailable", "multi-tab role was fabricated");
   assert(!JSON.stringify(rows).includes("secret"), "inspector rows exposed a secret-shaped field");

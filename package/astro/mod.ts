@@ -48,6 +48,7 @@ export const runtimeFiles = [
   "runtime.ts",
   "session.ts",
   "startup-recovery.ts",
+  "store-status.ts",
   "table-mutations.ts",
   "table-store.ts",
   "transport-gate.ts",

@@ -57,6 +57,11 @@ const preflight = await readTicketStoreStatus(ticketUrl);
 writes hang rather than fail, so an app should reach this state — and prompt the user — before ever
 attaching sync to a fresh store.
 
+The browser runtime runs this preflight itself on every boot that connects managed sync to a
+ticket-gated sink, recording the answer as `storeStatus` in runtime diagnostics. It never blocks
+local readiness and never provisions anything; it only names the state, so a schema-less store shows
+up as a boot diagnostic instead of a hanging first write.
+
 ## Provision
 
 ```ts

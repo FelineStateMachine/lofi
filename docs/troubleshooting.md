@@ -127,6 +127,16 @@ Clearing site data partially — IndexedDB without localStorage, or a browser "f
 rather than guessing. Local data is untouched. Re-enroll the ticket (paste it again) to declare the
 sink and resume syncing under the same account.
 
+## Sync is connected but writes to a self-hosted store never complete
+
+Against a store with no deployed schema, writes hang rather than fail. When the active sink is a
+ticket-gated node URL, the runtime checks the store at boot and records the result as `storeStatus`
+in runtime diagnostics; the development inspector's **Store** row and the `DeviceStatus` panel
+display it. `no_schema` means the store has never been provisioned for this app — follow
+[Store provisioning](store-provisioning.md), then reload. The runtime only reports store state; it
+never provisions or repairs a store on its own, and for non-ticket sinks the row stays
+`not checked`.
+
 ## Recovery does not restore a recent item
 
 The phrase restores account authority, not unsynced device storage. Data returns only if it reached

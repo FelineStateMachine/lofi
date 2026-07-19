@@ -94,6 +94,7 @@ export {
   type RuntimeStartupFailure,
   type RuntimeStartupFailureCode,
 } from "./startup-recovery.ts";
+export { describeStoreStatus, type RuntimeStoreStatus } from "./store-status.ts";
 export {
   acquireTableMutations,
   type TableMutationLease,

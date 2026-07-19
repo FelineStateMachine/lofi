@@ -1,4 +1,5 @@
 import type { RuntimeStartupFailure } from "./startup-recovery.ts";
+import type { RuntimeStoreStatus } from "./store-status.ts";
 
 /**
 // Package-owned runtime diagnostics.
@@ -8,6 +9,7 @@ import type { RuntimeStartupFailure } from "./startup-recovery.ts";
 export type RuntimeDiagnostics = {
   storageState: "persistent-requested" | "persistent-driver-open" | "failed";
   startupFailure: RuntimeStartupFailure | null;
+  storeStatus: RuntimeStoreStatus;
   clientsCreated: number;
   activeClients: number;
   activeConsumers: number;
@@ -27,6 +29,7 @@ export function createDiagnostics(): RuntimeDiagnostics {
   return {
     storageState: "persistent-requested",
     startupFailure: null,
+    storeStatus: { state: "unchecked", reason: "sync-not-connected" },
     clientsCreated: 0,
     activeClients: 0,
     activeConsumers: 0,

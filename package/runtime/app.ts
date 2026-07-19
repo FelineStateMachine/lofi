@@ -43,6 +43,13 @@ export type LofiAppConfig<Schema = unknown> = {
      * keeps the document read-only and asks the user to reload.
      */
     staleTabs?: "reload" | "prompt";
+    /**
+     * `default` renders the framework's minimal notice when an installed
+     * WebKit app starts in a fresh storage container while local data exists
+     * in the browser; `none` suppresses it for apps that render their own
+     * from `useStorageFork`.
+     */
+    forkNotice?: "default" | "none";
   };
   sync: { adapter: "jazz" };
   repositoryUrl?: string;

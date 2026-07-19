@@ -8,6 +8,7 @@ import {
   resolvePwaResources,
 } from "./pwa.ts";
 import { mountDefaultCompatBanner, schemaCompatGate } from "./schema-compat.ts";
+import { mountDefaultForkNotice, storageForkGuard } from "./storage-fork.ts";
 import { configureUpgradeCoordinator } from "./upgrade-coordination.ts";
 
 let booted = false;
@@ -61,6 +62,10 @@ function startCompatibilityGate(): void {
 export async function bootLofi(): Promise<void> {
   if (booted || typeof document === "undefined") return;
   booted = true;
+  // The fork guard snapshots container freshness from localStorage, so it
+  // must run before any other module stores a key there.
+  storageForkGuard.start();
+  mountDefaultForkNotice();
   // The sink envelope must be open before lifecycle.ts reads the sync
   // location at import time. A restore failure degrades to local-only; it
   // must never brick boot.

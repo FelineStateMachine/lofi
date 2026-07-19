@@ -1,6 +1,8 @@
 import { render } from "npm:preact-render-to-string@6.7.0";
 import type { PwaController, PwaState } from "../runtime/pwa.ts";
+import type { StorageForkState } from "../runtime/storage-fork.ts";
 import { PwaActions, pwaFailureMessage } from "./PwaActions.tsx";
+import type { StorageForkSurface } from "./use-storage-fork.ts";
 
 function controller(state: PwaState): PwaController {
   return {
@@ -16,8 +18,23 @@ function controller(state: PwaState): PwaController {
   };
 }
 
-function renderState(state: PwaState): string {
-  return render(<PwaActions controller={controller(state)} />);
+function fork(state: StorageForkState): StorageForkSurface {
+  return {
+    getState: () => state,
+    subscribe(subscriber) {
+      subscriber(state);
+      return () => undefined;
+    },
+  };
+}
+
+function renderState(state: PwaState, forkState?: StorageForkState): string {
+  return render(
+    <PwaActions
+      controller={controller(state)}
+      fork={forkState ? fork(forkState) : undefined}
+    />,
+  );
 }
 
 Deno.test("PwaActions renders a Chromium action only while the prompt is available", () => {
@@ -36,6 +53,39 @@ Deno.test("PwaActions renders complete iOS Add to Home Screen guidance", () => {
     if (!html.includes(step)) throw new Error(`iOS guidance omitted: ${step}`);
   }
   if (/unavailable in (?:the )?EU/i.test(html)) throw new Error("obsolete EU guidance returned");
+});
+
+Deno.test("PwaActions leads iOS guidance with the fork warning while data is at risk", () => {
+  const html = renderState(
+    { worker: "ready", install: "manual-ios", update: "idle" },
+    { state: "browser-data-at-risk" },
+  );
+  const warning = html.indexOf("stays in Safari and is not carried over");
+  const steps = html.indexOf("Open the Share menu.");
+  if (warning === -1) throw new Error("the iOS fork warning was omitted");
+  if (steps === -1 || warning > steps) {
+    throw new Error("the fork warning does not precede the install steps");
+  }
+});
+
+Deno.test("PwaActions omits the fork warning without local-only data", () => {
+  const html = renderState(
+    { worker: "ready", install: "manual-ios", update: "idle" },
+    { state: "idle" },
+  );
+  if (html.includes("pwa-fork-warning")) throw new Error("the fork warning rendered without risk");
+});
+
+Deno.test("PwaActions never warns about forking outside the iOS branch", () => {
+  for (const install of ["available", "manual-browser"] as const) {
+    const html = renderState(
+      { worker: "ready", install, update: "idle" },
+      { state: "browser-data-at-risk" },
+    );
+    if (html.includes("pwa-fork-warning")) {
+      throw new Error(`the fork warning rendered for ${install}, which does not fork storage`);
+    }
+  }
 });
 
 Deno.test("PwaActions renders truthful generic manual-install guidance", () => {

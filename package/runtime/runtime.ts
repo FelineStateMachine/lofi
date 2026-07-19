@@ -141,6 +141,24 @@ async function awaitLocalReady(db: Db): Promise<void> {
   await db.all((query.limit?.(1) ?? query) as never, { tier: "local" });
 }
 
+/**
+ * Whether any declared table holds at least one locally persisted row.
+ * Bounded at one row per table, for package modules that need an
+ * existence answer without materializing data.
+ */
+export async function hasAnyLocalRows(): Promise<boolean> {
+  const { db } = await getRuntime();
+  for (const table of runtimeTables()) {
+    const query = table.where({}) as { limit?: (n: number) => unknown };
+    const rows = await db.all(
+      (query.limit?.(1) ?? query) as never,
+      { tier: "local" },
+    ) as unknown[];
+    if (rows.length > 0) return true;
+  }
+  return false;
+}
+
 async function migrateLocalRows(
   state: RuntimeSlot,
   db: Db,

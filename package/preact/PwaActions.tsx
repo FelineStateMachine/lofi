@@ -6,6 +6,7 @@ import {
   pwaFailureMessage,
   type PwaState,
 } from "../runtime/pwa.ts";
+import { type StorageForkSurface, useStorageFork } from "./use-storage-fork.ts";
 
 export { pwaFailureMessage } from "../runtime/pwa.ts";
 export type { PwaController, PwaFailureCode, PwaState, PwaUpdateState } from "../runtime/pwa.ts";
@@ -30,10 +31,12 @@ export function usePwaState(controller: PwaController = pwaController): PwaState
   return state;
 }
 
-/** Optional controller and heading text for {@link PwaActions}. */
+/** Optional controller, fork guard, and heading text for {@link PwaActions}. */
 export interface PwaActionsProps {
   /** Controller to observe; defaults to the package-wide PWA controller. */
   readonly controller?: PwaController;
+  /** Fork guard to observe; defaults to the package-wide guard. */
+  readonly fork?: StorageForkSurface;
   /** Heading rendered above install or update actions. */
   readonly title?: string;
 }
@@ -53,9 +56,11 @@ export interface PwaActionsProps {
  */
 export function PwaActions({
   controller = pwaController,
+  fork,
   title = "Install & updates",
 }: PwaActionsProps): VNode | null {
   const state = usePwaState(controller);
+  const forkState = useStorageFork(fork);
   const visible = state.install === "available" || state.install === "manual-ios" ||
     state.install === "manual-browser" || state.install === "unsupported" ||
     state.install === "accepted" || state.install === "dismissed" ||
@@ -81,6 +86,13 @@ export function PwaActions({
       )}
       {state.install === "manual-ios" && (
         <div class="pwa-ios-guidance">
+          {forkState.state === "browser-data-at-risk" && (
+            <p class="pwa-fork-warning" role="alert">
+              Installing opens a fresh, empty copy of this app — the data you created here stays in
+              Safari and is not carried over. Turn on sync or back up your account first, then
+              restore it in the installed app.
+            </p>
+          )}
           <p>Install this app on your iPhone or iPad:</p>
           <ol>
             <li>Open the Share menu.</li>

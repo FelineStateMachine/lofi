@@ -137,6 +137,27 @@ display it. `no_schema` means the store has never been provisioned for this app 
 never provisions or repairs a store on its own, and for non-ticket sinks the row stays
 `not checked`.
 
+## The installed app opened empty after Add to Home Screen
+
+WebKit gives an installed web app its own storage container: cookies are copied at install time, but
+OPFS, IndexedDB, and localStorage are not. Data created in a Safari tab before installing stays in
+Safari's container — it is not lost, and the installed app cannot see it. When the runtime detects
+this fork it renders a notice (`.lofi-storage-fork-banner`), and the `DeviceStatus` panel's
+**Storage container** row reads `fresh install — previous data is in the browser`.
+
+To move the data:
+
+1. Open the site in Safari (the browser, not the installed icon). The original data is there.
+2. In the account panel, turn on sync, or back up the account (reveal the recovery phrase or create
+   a passkey backup) where a sync location exists.
+3. Return to the installed app and restore the account there; enrolled sync replays the data.
+4. Once the data appears, dismiss the notice.
+
+Dismissing without restoring starts the installed app fresh; the Safari copy remains until Safari's
+site data for the origin is cleared. If no notice appeared (the flag cookie expires after seven days
+without a browser visit), the same steps apply. Background on the container fork and its limits is
+in [Deployment](deployment.md#installed-apps-get-their-own-storage-container).
+
 ## Recovery does not restore a recent item
 
 The phrase restores account authority, not unsynced device storage. Data returns only if it reached

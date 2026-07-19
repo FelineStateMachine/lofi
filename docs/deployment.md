@@ -227,6 +227,40 @@ A runtime-cache write error is best-effort and leaves the active worker ready. R
 required precache, and activation failures remain worker failures; update-check failures leave the
 current worker running and retry on a later foreground signal.
 
+### Installed apps get their own storage container
+
+On iOS, iPadOS, and macOS, **Add to Home Screen** and **Add to Dock** create the installed web app
+in a separate storage container. WebKit copies cookies at install time; OPFS, IndexedDB, and
+localStorage stay behind in the browser. Local data created in a Safari tab before installing is
+therefore not visible in the installed app — the data is safe in Safari's container, but the
+installed app starts empty. Desktop installs isolate differently: a Chromium installed app shares
+the storage of the browser profile that installed it (installing does not fork data), but each
+browser keeps its own copy, so a site used in Chrome and installed from Edge holds two independent
+local instances.
+
+The framework covers the WebKit fork on both sides of the boundary:
+
+- **Before installing.** While a browser context holds local-only data (writes that do not replicate
+  because sync has not been elected), the iOS install guidance in `PwaActions` leads with a warning:
+  installing opens a fresh copy, so back up or turn on sync first and restore in the installed app.
+- **After installing.** While data is at risk, the runtime maintains a per-app flag cookie, the one
+  signal WebKit copies at install. A standalone launch whose local storage has never been touched
+  but which inherited that flag detects the fork and renders a fixed notice
+  (`.lofi-storage-fork-banner`) naming where the data lives and the recovery path. Dismissing the
+  notice clears the flag in the installed container and starts fresh.
+
+Apps can restyle the notice via its class, or replace both surfaces entirely: suppress the default
+notice with `pwa: { forkNotice: "none" }` in `defineLofiApp` and render a custom surface from the
+`useStorageFork` hook in `@nzip/lofi/preact` (states: `unarmed`, `idle`, `browser-data-at-risk`,
+`fork-detected`). The `DeviceStatus` panel reports the same verdict in its PWA section.
+
+Two limits are inherent to the mechanism. The cookie copy is one-time at install, so nothing the
+browser does afterwards reaches an already-installed container. And Safari caps script-set cookies
+at seven days; the runtime refreshes the flag on every boot while data is at risk, but a user who
+last visited the browser tab more than a week before installing gets no post-install notice. The
+pre-install warning does not depend on the cookie and always applies. The recovery steps live in
+[Troubleshooting](troubleshooting.md#the-installed-app-opened-empty-after-add-to-home-screen).
+
 ### Schema compatibility and read-only mode
 
 The app shell and the local data version independently: a browser can hold an old cached shell next

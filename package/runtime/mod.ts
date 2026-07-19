@@ -95,6 +95,17 @@ export {
   subscribeSchemaCompat,
 } from "./schema-compat.ts";
 export {
+  createStorageForkGuard,
+  describeStorageFork,
+  dismissStorageFork,
+  getStorageForkState,
+  type StorageForkGuard,
+  storageForkGuard,
+  type StorageForkGuardDependencies,
+  type StorageForkState,
+  subscribeStorageFork,
+} from "./storage-fork.ts";
+export {
   acquireLiveQuery,
   type LiveQueryLease,
   type LiveQuerySnapshot,

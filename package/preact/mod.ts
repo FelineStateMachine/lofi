@@ -1,8 +1,12 @@
 /**
- * Optional Preact bindings for lofi device capabilities and PWA controls.
- *
- * These components are package-owned examples that application layouts may
- * compose or replace with UI built on the same public runtime APIs.
+ * Optional Preact bindings for the lofi runtime: live typed queries
+ * ({@link useLiveQuery}), table mutations ({@link useTableMutations}), the
+ * per-write sync lifecycle ({@link useWrite}, {@link usePendingWrites},
+ * {@link useSyncStatus}), and the schema-compatibility gate
+ * ({@link useSchemaCompat}), plus package-owned example components
+ * ({@link DeviceStatus}, {@link PwaActions}, {@link RuntimeRecovery},
+ * {@link TicketEnrollForm}) that application layouts may compose or replace
+ * with UI built on the same public runtime APIs.
  *
  * @module
  */

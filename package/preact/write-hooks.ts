@@ -24,9 +24,12 @@ export type WriteState = {
 };
 
 /**
- * Observes one write's lifecycle. Pass the handle returned by a verb or a
- * table mutation; the component re-renders on each stage change and a
- * late-mounted component sees the current stage immediately.
+ * Observes one write's lifecycle. Pass the {@link WriteHandle} returned by a
+ * verb or a table mutation; the component re-renders on each
+ * {@link WriteStage} change, and because handles are level-triggered a
+ * component that mounts after a transition sees the current stage
+ * immediately — no missed events. `reason` carries the {@link WriteRejection}
+ * once a write settles as `rejected`.
  *
  * @example
  * ```tsx
@@ -60,6 +63,9 @@ export function useWrite<T>(write: WriteHandle<T> | null | undefined): WriteStat
  * const pending = usePendingWrites();
  * return pending.count > 0 ? <p>{pending.count} change(s) waiting to sync</p> : null;
  * ```
+ *
+ * @returns The current {@link PendingWritesSnapshot}: the count and the
+ * journaled writes still awaiting their sync fate, oldest first.
  */
 export function usePendingWrites(): PendingWritesSnapshot {
   const [snapshot, setSnapshot] = useState<PendingWritesSnapshot>({ count: 0, writes: [] });
@@ -75,7 +81,11 @@ export function usePendingWrites(): PendingWritesSnapshot {
 /**
  * The sync status of one row for per-row badges: `waiting` while a journaled
  * write touching the row has not settled, `rejected` when the row's latest
- * settled write was denied, and `synced` otherwise.
+ * settled write was denied, and `synced` otherwise. `waiting` is
+ * reload-safe — it derives from the durable journal. `rejected` outlives the
+ * pruned journal entry only for the current session: after a reload the
+ * badge is gone. For a durable rejection response, declare an `onRejected`
+ * effect on the verb instead of relying on the badge.
  *
  * @example
  * ```tsx

@@ -8,8 +8,16 @@ import { getWriteLedger, type WriteLedger } from "./write-ledger.ts";
 
 /** Observable state shared by every mutation consumer for one table. */
 export type TableMutationSnapshot = {
+  /** Writes on this table still awaiting their sync fate. */
   pending: number;
+  /**
+   * How far the latest write has travelled: `none` before any write settles,
+   * `local` once saved on this device (the resting state when sync is not
+   * configured), `global` once the store confirms it, `failed` when it was
+   * denied.
+   */
   durability: "none" | "local" | "global" | "failed";
+  /** The latest table-scoped rejection message, or `null`. */
   error: string | null;
 };
 

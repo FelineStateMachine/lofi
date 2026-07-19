@@ -1,5 +1,12 @@
+/**
+ * Preact binding for the schema-compatibility gate: the live compatibility
+ * state, for apps that render their own surface in place of the framework's
+ * default read-only banner.
+ *
+ * @module
+ */
+
 import { useEffect, useState } from "preact/hooks";
-// Package-owned optional Preact binding for the schema-compatibility gate.
 import {
   getSchemaCompatState,
   type SchemaCompatState,

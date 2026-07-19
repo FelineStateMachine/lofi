@@ -9,6 +9,15 @@
  * {@link LofiRuntime.store} to bind declared Jazz tables to application UI, and
  * add account backup only after managed sync is configured.
  *
+ * Every mutation returns a {@link WriteHandle}: `await` it for local
+ * durability (`saved`), observe `synced`/`rejected` for the store's verdict,
+ * and read the reload-safe pending set through {@link getWriteLedger} or the
+ * `usePendingWrites` hook. Status UI reads {@link RuntimeDiagnostics} (via
+ * {@link getRuntimeDiagnostics}), the schema gate through
+ * {@link getSchemaCompatState} — `data-ahead` means this device is read-only
+ * until {@link applyPwaUpdate} lands a newer bundle — and install/update
+ * state through {@link getPwaState}.
+ *
  * @module
  */
 

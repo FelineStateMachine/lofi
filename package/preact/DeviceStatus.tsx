@@ -15,13 +15,6 @@ import { readSession, type Session } from "../runtime/session.ts";
 import { describeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
 
-/**
- * The Device gate: every subsystem's live status, grouped by the system it
- * belongs to. It doubles as a map of where to hook in — each category names the
- * module that owns it, so a reading of the deployment is also a reading of the
- * framework's seams.
- */
-
 // One label/value row inside a category's definition list.
 function Row({ label, value }: { label: string; value: string }): JSX.Element {
   return (
@@ -35,7 +28,12 @@ function Row({ label, value }: { label: string; value: string }): JSX.Element {
 const available = (present: boolean) => (present ? "available" : "missing");
 
 /**
- * Renders live storage, sync, auth, and PWA capability diagnostics.
+ * Renders the Device gate: every subsystem's live status — storage, sync,
+ * auth, and PWA — grouped by the module that owns it, so the panel doubles
+ * as a map of where to hook in. Optional: it is built entirely on public
+ * runtime APIs (device capabilities, PWA state, runtime diagnostics, the
+ * session), so an application can replace it with its own status UI over the
+ * same sources.
  *
  * @example
  * ```tsx

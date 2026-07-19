@@ -88,8 +88,13 @@ export type SchemaDsl =
 /**
  * The lofi schema surface. Use in `src/schema.ts` and `src/permissions.ts` in
  * place of a raw `jazz-tools` import; Jazz member names and behavior are
- * identical to the pinned Jazz 2 DSL, and the nested-namespace members are
- * the lofi naming layer documented on {@link defineNestedApp}.
+ * identical to the pinned Jazz 2 DSL. The lofi-owned members: nested
+ * namespaces ({@link defineNestedApp}), sealed columns ({@link encryptedText},
+ * {@link encryptedJson}), and the verb grammar — {@link mutation} declares
+ * callable verbs over {@link insert}, {@link update}, and {@link remove},
+ * carrying {@link effect} units and {@link log} entries. Verb calls return a
+ * `WriteHandle`, observed in UI through `useWrite` and `usePendingWrites`
+ * from `@nzip/lofi/preact`.
  */
 export const s: SchemaDsl = {
   ...schema,

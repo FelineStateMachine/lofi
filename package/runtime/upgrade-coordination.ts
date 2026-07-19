@@ -14,6 +14,9 @@
  * Locks the coordinator degrades to local-only pausing, and the swap still
  * proceeds after a bounded quiescence timeout.
  *
+ * Internal module: not part of the package export map. Applications reach
+ * this behavior through `applyUpdate()` and the `pwa` application config.
+ *
  * @module
  */
 

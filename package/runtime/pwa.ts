@@ -1,6 +1,30 @@
 /// <reference path="./env.d.ts" />
-// Package-owned PWA lifecycle.
-/** Service-worker lifecycle states exposed to application UI. */
+/**
+ * Package-owned PWA lifecycle: the browser install flow, production
+ * service-worker registration, staged updates discovered by bounded
+ * foreground checks, and the coordinated swap that activates a waiting
+ * worker and moves controlled tabs onto the new revision.
+ *
+ * Most applications consume the shared controller through the wrapper
+ * functions — {@link getPwaState}, {@link subscribePwaState},
+ * {@link requestPwaInstall}, {@link checkPwaUpdate}, {@link applyPwaUpdate} —
+ * or the Preact bindings in `@nzip/lofi/preact`; boot wiring registers the
+ * worker once through {@link registerProductionServiceWorker}.
+ *
+ * @module
+ */
+
+/**
+ * Service-worker lifecycle states exposed to application UI.
+ *
+ * - `development-disabled` — registration is skipped outside production
+ *   builds.
+ * - `unsupported` — the environment offers no service-worker container.
+ * - `registering` — registration and first activation are in progress.
+ * - `ready` — an active worker controls the app and serves the offline shell.
+ * - `failed` — registration, installation, or precaching failed;
+ *   {@link PwaState.failure} carries the cause.
+ */
 export type PwaWorkerState =
   | "development-disabled"
   | "unsupported"
@@ -8,7 +32,20 @@ export type PwaWorkerState =
   | "ready"
   | "failed";
 
-/** Browser installation states exposed to application UI. */
+/**
+ * Browser installation states exposed to application UI.
+ *
+ * - `installed` — running standalone or the browser reports the app
+ *   installed.
+ * - `available` — the browser offered an install prompt;
+ *   {@link requestPwaInstall} opens it.
+ * - `prompting` — the deferred prompt is open.
+ * - `accepted` / `dismissed` — the prompt's outcome.
+ * - `manual-ios` — install via Share → Add to Home Screen; iOS exposes no
+ *   prompt API.
+ * - `manual-browser` — install is available only through the browser menu.
+ * - `unsupported` — no secure context or no service-worker support.
+ */
 export type PwaInstallState =
   | "installed"
   | "available"
@@ -19,7 +56,19 @@ export type PwaInstallState =
   | "manual-browser"
   | "unsupported";
 
-/** Foreground update-check and waiting-worker states exposed to application UI. */
+/**
+ * Foreground update-check and waiting-worker states exposed to application
+ * UI.
+ *
+ * - `idle` — no check running and nothing staged.
+ * - `checking` — a bounded update check is in flight.
+ * - `installing` — a newly discovered worker is downloading and installing.
+ * - `ready` — a new worker is staged and waiting: show the update affordance
+ *   and call {@link applyPwaUpdate}.
+ * - `applying` — covers the swap until controlled tabs reload.
+ * - `failed` — the check or installation failed; the cause is in
+ *   {@link PwaState.failure}.
+ */
 export type PwaUpdateState =
   | "idle"
   | "checking"
@@ -123,13 +172,37 @@ export type PwaControllerDependencies = {
   readonly onStaleTab?: () => void;
 };
 
-/** Stateful controller for browser installation and service-worker updates. */
+/**
+ * Stateful controller for browser installation and service-worker updates.
+ * Most apps use the shared {@link pwaController} through the wrapper
+ * functions ({@link getPwaState}, {@link applyPwaUpdate}) or the Preact
+ * bindings.
+ */
 export type PwaController = {
+  /** The current install, worker, and update state snapshot. */
   getState(): PwaState;
+  /** Subscribes to state changes; the subscriber runs immediately with the current state. */
   subscribe(subscriber: (state: PwaState) => void): () => void;
+  /**
+   * Opens the deferred browser install prompt and resolves with the outcome.
+   * When no prompt is available (already installed, iOS, unsupported) it
+   * resolves with the current install state unchanged.
+   */
   requestInstall(): Promise<PwaInstallState>;
+  /**
+   * Runs a bounded update check. Resolves `true` when a check ran or was
+   * already in flight, `false` when checking is not possible right now (not
+   * registered, an update already staged, or rate-limited). The outcome
+   * lands in {@link PwaState.update}, not the return value.
+   */
   checkForUpdate(): Promise<boolean>;
+  /**
+   * Activates the waiting worker when {@link PwaState.update} is `ready`;
+   * returns `false` when no update is staged. Controlled tabs then reload
+   * onto the new revision (see `staleTabBehavior` for the alternative).
+   */
   applyUpdate(): boolean;
+  /** Registers the worker and starts watching; called once by boot wiring. */
   initialize(): void;
 };
 

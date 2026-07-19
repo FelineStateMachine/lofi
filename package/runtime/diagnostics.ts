@@ -30,27 +30,52 @@ export function recordEffectLogEntry(
 }
 
 /**
-// Package-owned runtime diagnostics.
  * Runtime-owned observability counters. These describe the framework's storage,
  * subscription, and write machinery and never reference any application schema.
+ *
+ * For a device-status widget the load-bearing fields are
+ * {@link RuntimeDiagnostics.storeStatus}, {@link RuntimeDiagnostics.schemaCompat},
+ * `journaledPendingWrites` (the "N changes waiting to sync" count), and
+ * `lastWriteDurability`; the remaining counters exist for the development
+ * inspector and bug reports.
  */
 export type RuntimeDiagnostics = {
+  /** Persistent-storage posture: requested, granted with the driver open, or failed. */
   storageState: "persistent-requested" | "persistent-driver-open" | "failed";
+  /** The boot failure the runtime is stuck on, or `null` when boot succeeded. */
   startupFailure: RuntimeStartupFailure | null;
+  /** Whether the configured store answered; feeds connected/unreachable UI. */
   storeStatus: RuntimeStoreStatus;
+  /** The schema gate's verdict; `data-ahead` means this device is read-only. */
   schemaCompat: SchemaCompatState;
+  /** Storage clients opened since page load, runtime recreations included. */
   clientsCreated: number;
+  /** Storage clients currently open; one for a healthy runtime. */
   activeClients: number;
+  /** Mounted subscribers across live-query and table stores. */
   activeConsumers: number;
+  /** Engine subscriptions currently open to feed those consumers. */
   activeVendorSubscriptions: number;
+  /** Engine subscriptions opened since page load. */
   totalVendorSubscriptions: number;
+  /** Engine mutation-error listeners currently attached. */
   activeMutationListeners: number;
+  /** Engine mutation-error listeners attached since page load. */
   totalMutationListeners: number;
+  /** Engine subscription teardowns performed since page load. */
   unsubscribeCalls: number;
+  /** Writes whose local-durability wait completed. */
   localWaitCalls: number;
+  /** Writes currently awaiting local durability. */
   pendingLocalWrites: number;
+  /** Writes currently awaiting the store's confirmation. */
   pendingGlobalWrites: number;
+  /**
+   * The most recent write's deepest durability: `local` is saved on this
+   * device, `global` is confirmed by the store.
+   */
   lastWriteDurability: "none" | "local" | "global" | "failed";
+  /** Writes refused or rejected since boot, including guard refusals. */
   mutationErrors: number;
   /** Journaled writes that have not yet settled as synced or rejected. */
   journaledPendingWrites: number;

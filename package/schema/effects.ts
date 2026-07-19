@@ -23,9 +23,14 @@ import type { TableProxy } from "jazz-tools";
 import type { WriteHandle } from "../runtime/write-handle.ts";
 
 /**
- * The row snapshot an effect handler receives: always the row id, plus the
- * journaled columns — the full row for inserts, the changed columns for
- * updates, and only the id for removes.
+ * The row an effect handler receives. In the session that performed the write
+ * it is the write's snapshot: the full row for inserts, the changed columns
+ * for updates, only the id for removes. After a reload the journal holds no
+ * column values: a `synced` handler receives the row fetched live from the
+ * store — the final merged state — and a `rejected` handler receives the id
+ * alone, because the engine rolled the row back and identity plus
+ * {@link EffectContext.cause} is all that remains. Treat every column except
+ * `id` as optional.
  */
 export type EffectRow<Row> = Partial<Row> & { id: string };
 
@@ -49,8 +54,11 @@ export type EffectContext = {
   /** Which fate settled the write. */
   fate: "synced" | "rejected";
   /**
-   * Why a `rejected` write settled: `denied` for a store verdict, `expired`
-   * for an intent retired past its lifespan; `null` on the `synced` fate.
+   * Why a `rejected` write settled: `denied` for a store verdict; `null` on
+   * the `synced` fate. `expired` is reserved for store-side expiry
+   * enforcement — at the pinned runtime an overdue intent is surfaced, never
+   * retired ({@link MutationOptions.expires}), so rejections today carry
+   * `denied`.
    */
   cause: "denied" | "expired" | null;
   /** The adjudicated rejection code, on the `rejected` fate. */
@@ -65,8 +73,11 @@ export type EffectHandlers<Row> = {
   onSynced?: (row: EffectRow<Row>, context: EffectContext) => void | Promise<void>;
   /**
    * Runs on the originating device when the store adjudicates the write and
-   * denies it permanently. Compensates optimistic state that was shown to the
-   * user; a synchronous local refusal never fires it.
+   * denies it permanently. The engine has already rolled the row out of local
+   * query results, so compensate what the user was told — notices, external
+   * calls, follow-up writes — not the row data. After a reload the payload is
+   * identity-only ({@link EffectRow}). A synchronous local refusal throws
+   * from the verb call instead and never fires this handler.
    */
   onRejected?: (row: EffectRow<Row>, context: EffectContext) => void | Promise<void>;
 };
@@ -84,7 +95,14 @@ export type EffectUnitOptions = {
    * whose receivers keep finite idempotency windows should set this.
    */
   expiresAfter?: number;
-  /** Failing attempts before quarantine retires the obligation. Default 5. */
+  /**
+   * Failing handler attempts before quarantine: past this count the
+   * obligation retires as failed-permanent instead of re-arming at every
+   * boot. The retirement is counted in runtime diagnostics and the journal
+   * entry becomes prunable.
+   *
+   * @default 5
+   */
   maxAttempts?: number;
 };
 
@@ -115,17 +133,29 @@ export type MutationOp<T, Init, Kind extends MutationOpKind = MutationOpKind> = 
   readonly table: TableProxy<T, Init>;
 };
 
-/** Declares that a verb inserts rows into `table`. */
+/**
+ * Declares that a verb inserts rows into `table`. A {@link mutation} declared
+ * over this op is called as `(values) => WriteHandle<Row>`; `await` resolves
+ * at `saved` with the created row.
+ */
 export function insert<T, Init>(table: TableProxy<T, Init>): MutationOp<T, Init, "insert"> {
   return { kind: "insert", table };
 }
 
-/** Declares that a verb updates rows of `table`. */
+/**
+ * Declares that a verb updates rows of `table`. A {@link mutation} declared
+ * over this op is called as `(id, patch) => WriteHandle<void>`; `await`
+ * resolves at `saved`.
+ */
 export function update<T, Init>(table: TableProxy<T, Init>): MutationOp<T, Init, "update"> {
   return { kind: "update", table };
 }
 
-/** Declares that a verb removes rows from `table`. */
+/**
+ * Declares that a verb removes rows from `table`. A {@link mutation} declared
+ * over this op is called as `(id) => WriteHandle<void>`; `await` resolves at
+ * `saved`.
+ */
 export function remove<T, Init>(table: TableProxy<T, Init>): MutationOp<T, Init, "remove"> {
   return { kind: "remove", table };
 }
@@ -250,6 +280,11 @@ function registerUnit(unit: EffectUnit<{ id: string }>): void {
  * a reload, so renaming a unit orphans obligations journaled under the old
  * name. Names must be unique per app; a duplicate declaration throws.
  *
+ * Handlers run once, on the originating device, with at-least-once delivery:
+ * a crash between handler start and journal completion re-runs the handler at
+ * the next boot, so handlers that call external services should pass
+ * {@link EffectContext.journalId} as the idempotency key.
+ *
  * @example
  * ```ts
  * const chargeCard = s.effect("chargeCard", app.schema.orders, {
@@ -261,6 +296,10 @@ function registerUnit(unit: EffectUnit<{ id: string }>): void {
  *   },
  * });
  * ```
+ *
+ * @throws Error when `name` is empty or already declared by a different unit;
+ * in dev hot replacement the newest declaration replaces its predecessor
+ * instead of throwing.
  */
 export function effect<T extends { id: string }, Init>(
   name: string,
@@ -284,6 +323,15 @@ export function effect<T extends { id: string }, Init>(
  * A built-in effect unit that records a structured entry in runtime
  * diagnostics on either fate. Repeated calls with one label return the same
  * unit, so a label can be shared by several verbs.
+ *
+ * @example
+ * ```ts
+ * export const addTask = s.mutation("addTask", s.insert(app.schema.tasks), {
+ *   effects: [s.log("task-writes")],
+ * });
+ * // Each addTask write records a "task-writes" diagnostics entry when it
+ * // syncs or is rejected.
+ * ```
  */
 export function log(label: string): EffectUnit<{ id: string }> {
   if (!label.trim()) throw new Error("log label must not be empty");
@@ -315,7 +363,7 @@ function requireRuntime(): MutationRuntime {
 /**
  * Declares a typed, callable verb: a named mutation over one table operation,
  * carrying its effect units. Call sites invoke the verb like a function and
- * receive a `WriteHandle`; `await` resolves at `saved`.
+ * receive a {@link WriteHandle}; `await` resolves at `saved`.
  *
  * Verb names are app-unique and durable — the journal attributes re-armed
  * obligations through them — and read as imperative verb phrases
@@ -332,6 +380,16 @@ function requireRuntime(): MutationRuntime {
  * await write;                             // saved: durable on this device
  * await write.synced;                      // confirmed by the store
  * ```
+ *
+ * @throws Error at declaration when `name` is empty, already declared
+ * (outside dev hot replacement, where the newest declaration replaces its
+ * predecessor under the same name), or when `options` list one effect unit
+ * twice.
+ * @throws Error from a call to the returned verb when the local policy
+ * refuses the write: the refusal is synchronous, creates no stage and no
+ * journal entry, and fires no effect — see {@link EffectHandlers.onRejected}
+ * for the adjudicated case. Calls also throw when the lofi runtime is not
+ * installed.
  */
 export function mutation<T extends { id: string }, Init, Kind extends MutationOpKind>(
   name: string,

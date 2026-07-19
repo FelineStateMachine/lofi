@@ -46,6 +46,12 @@ replace the task example with your own schema, permissions, hook, and UI.
   24-word phrase.
 - **Narrow collaboration templates** — private, direct-share, and fixed-role group access behind a
   small [`@nzip/lofi/access`](https://lofi.host/api/access) API.
+- **Verbs with sync-boundary effects** — `s.mutation` declares named verbs whose writes return a
+  `WriteHandle`; `onSynced`/`onRejected` consequences run on the originating device from a durable
+  journal that survives reloads, with pending-write and per-row sync status hooks for the UI.
+- **A schema compatibility gate** — each build stamps the schema range it understands, so a stale
+  offline shell that meets newer data pauses editing (reads continue), shows the update path, and
+  coordinates the worker swap across tabs.
 - **Local-first test helpers** — Playwright-backed two-client fixtures for offline writes and
   convergence.
 - **An explicit authoring boundary**: product code owns schema, permissions, config, islands,

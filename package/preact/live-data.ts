@@ -87,18 +87,28 @@ export type TableMutations<T extends TableRow, Init> = TableMutationSnapshot & {
  * `durability`, and `error` state.
  *
  * @example
- * ```ts
+ * ```tsx
+ * import { settleUiMutation } from "@nzip/lofi";
  * import { useTableMutations } from "@nzip/lofi/preact";
  * import { app } from "../app.ts";
  *
- * const records = useTableMutations(app.schema.records);
- * const created = await records.insert({ title: "Release notes", archived: false });
- * await records.update(created.id, { archived: true });
- * await records.remove(created.id);
+ * function ArchiveButton({ id }: { id: string }) {
+ *   const records = useTableMutations(app.schema.records);
+ *   // The handle is thenable: settled at saved, while the sync fate and the
+ *   // shared pending/durability state continue in the background.
+ *   return (
+ *     <button onClick={() => void settleUiMutation(records.update(id, { archived: true }))}>
+ *       Archive {records.pending > 0 && "…"}
+ *     </button>
+ *   );
+ * }
  * ```
  *
  * @param table The typed schema table to mutate, e.g. `app.schema.records`.
  * @returns Stable `insert`, `update`, and `remove` methods plus the shared mutation state.
+ * To attach declared effects to a write, wrap the same table in a verb
+ * (`s.mutation(name, s.insert(table), { … })`) and observe its
+ * {@link WriteHandle} with `useWrite`.
  */
 export function useTableMutations<T extends TableRow, Init>(
   table: TableProxy<T, Init>,

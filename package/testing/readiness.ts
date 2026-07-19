@@ -6,7 +6,11 @@ export interface ReadinessOptions {
   description?: string;
   /** Defaults to 10 seconds. */
   timeoutMs?: number;
-  /** Uses Playwright's event-loop polling; no fixed sleep is introduced. */
+  /**
+   * `"raf"` re-checks on every animation frame; a number re-checks at that
+   * fixed interval in milliseconds.
+   * @default "raf"
+   */
   polling?: "raf" | number;
 }
 

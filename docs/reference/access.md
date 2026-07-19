@@ -23,15 +23,31 @@ phrase-reveal guard. That credential cannot restore an account.
 
 Import from `@nzip/lofi/access`:
 
-- Schema helpers: `sharedGrantTable`, `groupMembershipTable`.
-- Policy templates: `privateAccess`, `sharedAccess`, `groupAccess`, `defineAccessPolicies`.
+- Schema helpers: `sharedGrantTable`, `groupMembershipTable`, `sharedFieldDirectoryTable`,
+  `sharedFieldKeyTable`.
+- Policy templates: `privateAccess`, `sharedAccess`, `groupAccess`, `sharedFieldAccess`,
+  `defineAccessPolicies`.
 - Identities: `sharingIdentity`, `encodeSharingIdentity`, `decodeSharingIdentity`.
 - Operations: `createSharingOperations`, `createGroupOperations`.
-- Fixed roles: `reader`, `contributor`, `writer`, `admin`.
+- Shared-field key lifecycle: `bootstrapGroupFieldKey`, `rotateGroupFieldKey`,
+  `wrapHeldKeysForMember`, `reconcileSharedFieldKeys`.
+- Fixed roles: `reader`, `contributor`, `writer`, `admin` (exposed as `groupRoles`, with the
+  role-to-capability mapping in `groupRoleCapabilities`).
 
 Sharing operations provide `share`, `revoke`, `listShares`, and `sharedWithMe`. Group operations
-provide `createGroup`, `addMember`, `changeRole`, `removeMember`, `leaveGroup`, and `listMembers`.
-Collaboration operations reject local-only use with `AccessError.code === "sync-required"`.
+provide `createGroup`, `addMember`, `changeRole`, `removeMember`, `leaveGroup`, `listMembers`, and
+`reconcileSharedFieldKeys`. Collaboration operations reject local-only use with
+`AccessError.code === "sync-required"`.
+
+## Shared encrypted fields
+
+Columns declared with `s.sharedEncryptedText` and `s.sharedEncryptedJson` (from `@nzip/lofi/schema`)
+hold ciphertext readable by every current group member. The access side hosts the key material:
+`sharedFieldDirectoryTable` and `sharedFieldKeyTable` store the directory and per-member wrapped
+keys, `sharedFieldAccess` (or the `fieldKeys` option of `groupAccess`) compiles their policies, and
+the lifecycle helpers create, wrap, and rotate group field keys. Rotation is lazy: removing a member
+re-keys future writes, while content encrypted under generations the member already holds remains
+readable to them. See [Permission templates](../permissions.md) for the hosting walkthrough.
 
 In pinned Jazz alpha.53, the permission authority does not expose a group inserted earlier in the
 same transaction to the first membership's `allowedTo.update("groupId")` check. `createGroup`

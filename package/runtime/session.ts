@@ -277,6 +277,11 @@ export async function revealRecoveryPhrase(): Promise<string> {
  * turns on and the existing local data pushes up under the same identity. Pair
  * it with {@link revealRecoveryPhrase} so the user has a way back in. No-op when
  * no Jazz app is configured.
+ *
+ * In browsers with `SharedWorker` support, first-time election reloads the page
+ * to reopen the runtime on the elected namespace; the returned promise never
+ * settles there, and the app resumes after reload. Do not put follow-up UI
+ * behind the `await` — read the post-reload session state instead.
  */
 export async function enableSyncBackup(): Promise<Session> {
   // The documented no-op: without a sync location there is nothing to sync
@@ -321,6 +326,10 @@ export type EnrollSyncTicketOptions = {
  * requires the proof-of-possession exchange — the enrolled credential stops
  * being a pure bearer string. Against a node without the exchange, the ticket
  * enrolls as pasted, exactly as before.
+ *
+ * Enrollment ends by electing sync, so the {@link enableSyncBackup} reload
+ * caveat applies: on `SharedWorker`-capable browsers the page reloads and the
+ * returned promise never settles.
  */
 export async function enrollSyncTicket(
   ticket: string,
@@ -411,7 +420,10 @@ async function replaceAccountSecret(
 /**
  * Reconstructs an account from its recovery phrase, elects sync, and replaces
  * the active runtime. Throws {@link RecoveryError} for malformed phrases and
- * {@link AccountReplacementError} when confirmation is required.
+ * {@link AccountReplacementError} when confirmation is required. On
+ * `SharedWorker`-capable browsers the replacement reloads the page and the
+ * returned promise never settles; the app resumes on the restored account
+ * after reload.
  */
 export async function restoreFromRecoveryPhrase(
   phrase: string,
@@ -420,7 +432,12 @@ export async function restoreFromRecoveryPhrase(
   return await replaceAccountSecret(fromRecoveryPhrase(phrase), options);
 }
 
-/** Restores a passkey-backed secret and recreates Jazz on that stable principal. */
+/**
+ * Restores a passkey-backed secret and recreates Jazz on that stable principal.
+ * The {@link restoreFromRecoveryPhrase} reload caveat applies: on
+ * `SharedWorker`-capable browsers the page reloads and the returned promise
+ * never settles.
+ */
 export async function restoreFromPasskey(
   options: AccountReplacementOptions = {},
 ): Promise<Session> {

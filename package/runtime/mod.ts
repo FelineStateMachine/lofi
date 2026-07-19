@@ -27,6 +27,7 @@ export {
   type AuthDependencies,
   authenticateAndDerivePrfSecret,
   authenticateDeviceCredential,
+  type AuthenticateOptions,
   AuthError,
   classifyCredentialOrigin,
   type CredentialOriginReport,

@@ -4,75 +4,187 @@
     {
       "label": null,
       "items": [
-        { "id": "README", "label": "Overview" },
-        { "id": "getting-started", "label": "Getting started" }
+        {
+          "id": "README",
+          "label": "Overview"
+        },
+        {
+          "id": "getting-started",
+          "label": "Getting started"
+        }
       ]
     },
     {
       "label": "Guides",
       "collapsed": false,
       "items": [
-        { "id": "data-and-ui", "label": "Data and UI" },
-        { "id": "permissions", "label": "Permissions" },
-        { "id": "sync-and-recovery", "label": "Sync and recovery" },
-        { "id": "testing", "label": "Testing" },
-        { "id": "deployment", "label": "Deployment" },
-        { "id": "application-origin-migration", "label": "Origin migration" }
+        {
+          "id": "data-and-ui",
+          "label": "Data and UI"
+        },
+        {
+          "id": "permissions",
+          "label": "Permissions"
+        },
+        {
+          "id": "sync-and-recovery",
+          "label": "Sync and recovery"
+        },
+        {
+          "id": "threat-model",
+          "label": "Threat model"
+        },
+        {
+          "id": "testing",
+          "label": "Testing"
+        },
+        {
+          "id": "deployment",
+          "label": "Deployment"
+        },
+        {
+          "id": "application-origin-migration",
+          "label": "Origin migration"
+        }
       ]
     },
     {
       "label": "Reference",
       "items": [
-        { "id": "reference/commands", "label": "Commands" },
-        { "id": "reference/configuration", "label": "Configuration" },
-        { "id": "reference/project-layout", "label": "Project layout" },
-        { "id": "reference/access", "label": "Account and access API" },
-        { "id": "auth-identity", "label": "Identity and recovery model" },
-        { "id": "auth", "label": "Device-auth primitive" }
+        {
+          "id": "reference/commands",
+          "label": "Commands"
+        },
+        {
+          "id": "reference/configuration",
+          "label": "Configuration"
+        },
+        {
+          "id": "reference/project-layout",
+          "label": "Project layout"
+        },
+        {
+          "id": "reference/access",
+          "label": "Account and access API"
+        },
+        {
+          "id": "auth-identity",
+          "label": "Identity and recovery model"
+        },
+        {
+          "id": "auth",
+          "label": "Device-auth primitive"
+        }
       ],
-      "extraLinks": [{ "label": "API reference", "href": "/api" }]
+      "extraLinks": [
+        {
+          "label": "API reference",
+          "href": "/api"
+        }
+      ]
     },
     {
       "label": "Recipes",
       "indexId": "recipes/README",
       "items": [
-        { "id": "recipes/file-handler", "label": "File handler" },
-        { "id": "recipes/launch-handler", "label": "Launch handler" },
-        { "id": "recipes/protocol-handler", "label": "Protocol handler" },
-        { "id": "recipes/related-app-discovery", "label": "Related-app discovery" },
-        { "id": "recipes/scope-extension", "label": "Scope extension" },
-        { "id": "recipes/web-share", "label": "Web Share" },
-        { "id": "recipes/window-controls-overlay", "label": "Window controls overlay" }
+        {
+          "id": "recipes/file-handler",
+          "label": "File handler"
+        },
+        {
+          "id": "recipes/launch-handler",
+          "label": "Launch handler"
+        },
+        {
+          "id": "recipes/protocol-handler",
+          "label": "Protocol handler"
+        },
+        {
+          "id": "recipes/related-app-discovery",
+          "label": "Related-app discovery"
+        },
+        {
+          "id": "recipes/scope-extension",
+          "label": "Scope extension"
+        },
+        {
+          "id": "recipes/web-share",
+          "label": "Web Share"
+        },
+        {
+          "id": "recipes/window-controls-overlay",
+          "label": "Window controls overlay"
+        }
       ]
     },
     {
       "label": "Examples: access templates",
       "items": [
-        { "id": "examples/shared", "label": "Direct sharing" },
-        { "id": "examples/group", "label": "Fixed-role group" },
-        { "id": "examples/policy-conditions", "label": "Policy conditions" }
+        {
+          "id": "examples/shared",
+          "label": "Direct sharing"
+        },
+        {
+          "id": "examples/group",
+          "label": "Fixed-role group"
+        },
+        {
+          "id": "examples/policy-conditions",
+          "label": "Policy conditions"
+        }
       ]
     },
     {
       "label": "Examples: data modeling",
       "items": [
-        { "id": "examples/collaborative-list", "label": "Collaborative list data model" },
-        { "id": "examples/collaborative-sets", "label": "Collaborative sets" },
-        { "id": "examples/payloads", "label": "Binary and structured payloads" },
-        { "id": "examples/schema-evolution", "label": "Schema evolution" }
+        {
+          "id": "examples/collaborative-list",
+          "label": "Collaborative list data model"
+        },
+        {
+          "id": "examples/collaborative-sets",
+          "label": "Collaborative sets"
+        },
+        {
+          "id": "examples/payloads",
+          "label": "Binary and structured payloads"
+        },
+        {
+          "id": "examples/schema-evolution",
+          "label": "Schema evolution"
+        }
       ]
     },
     {
       "label": "Decisions",
       "indexId": "decisions/README",
       "items": [
-        { "id": "decisions/group-creator-authority-alpha53", "label": "Group creator authority" },
-        { "id": "decisions/passkey-backup-alpha53", "label": "Passkey backup" }
+        {
+          "id": "decisions/group-creator-authority-alpha53",
+          "label": "Group creator authority"
+        },
+        {
+          "id": "decisions/passkey-backup-alpha53",
+          "label": "Passkey backup"
+        },
+        {
+          "id": "decisions/0001-sink-at-rest-envelope",
+          "label": "At-rest envelope"
+        },
+        {
+          "id": "decisions/0002-convergence-verdict",
+          "label": "Convergence verdict"
+        }
       ]
     },
     {
       "label": null,
-      "items": [{ "id": "troubleshooting", "label": "Troubleshooting" }]
+      "items": [
+        {
+          "id": "troubleshooting",
+          "label": "Troubleshooting"
+        }
+      ]
     }
   ]
 }

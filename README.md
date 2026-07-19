@@ -63,9 +63,14 @@ The [documentation](https://lofi.host/docs) covers all of this in depth: guides,
 lofi is designed for mobile web apps where offline operation is a requirement, not a best-effort
 enhancement. Keep these current constraints in mind:
 
-- lofi is an early, pre-1.0 release.
+- lofi is an early, pre-1.0 release; do not yet trust it with data you cannot afford to lose.
 - The data layer is Jazz 2 alpha and deliberately pinned to a reviewed version
-  ([stack and version policy](https://lofi.host/#stack)).
+  ([stack and version policy](https://lofi.host/#stack)). Five known engine defects at the current
+  pin are each documented in a decision record and covered by an automated canary that fails loudly
+  when a version bump changes the behavior.
+- The sync server reads unencrypted columns. The [threat model](https://lofi.host/docs/threat-model)
+  states what the server can and cannot see, what the user holds, and which fields the schema can
+  seal.
 - The supported browser floors are Android Chrome 148+ and iOS Safari 16.4+.
 - Recovery is user-controlled: lofi does not retain recoverable account material on the server, so
   the recovery phrase must be kept safe.

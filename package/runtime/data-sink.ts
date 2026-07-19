@@ -15,8 +15,7 @@
  * it does not defend against same-origin script, which can drive the silent
  * open itself. Boot unseals the record once into module memory
  * ({@link restoreDeclaredSink}), and every synchronous reader answers from
- * that state. The recovery envelope carrying the sink behind the passkey is
- * separate, follow-on work.
+ * that state.
  *
  * @module
  */

@@ -74,6 +74,8 @@ Semantics to rely on:
   re-pointed.
 - **One store, one active sink.** Declaring a different sink over an existing one is refused; clear
   the declaration first. Local data and elections survive clearing.
+- **What the server can see is documented, not implied.** The [threat model](threat-model.md) states
+  the server's view, the user's holdings, and the ticket/XSS custody story in one place.
 - **The ticket URL is a bearer credential.** It is used verbatim as the sync server (its secret path
   is what authorizes transport) and never exposed through the session snapshot — `session.sink`
   carries only the source, host, and label. At rest the declaration persists only as a sealed

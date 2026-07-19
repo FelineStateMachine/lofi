@@ -79,6 +79,9 @@ function testController(options: {
   clearTimeout?: (handle: unknown) => void;
   updateCheckIntervalMs?: number;
   updateCheckTimeoutMs?: number;
+  prepareUpdateSwap?: () => Promise<void>;
+  staleTabBehavior?: () => "reload" | "prompt";
+  onStaleTab?: () => void;
 } = {}): PwaController {
   const environment = options.install === "manual-ios"
     ? { platform: "iPhone", maxTouchPoints: 5 }
@@ -103,6 +106,9 @@ function testController(options: {
     production: () => options.production ?? false,
     deploymentBaseUrl: () => options.deploymentBaseUrl ?? "http://127.0.0.1:4321/",
     reload: options.reload,
+    prepareUpdateSwap: options.prepareUpdateSwap,
+    staleTabBehavior: options.staleTabBehavior,
+    onStaleTab: options.onStaleTab,
   });
 }
 
@@ -291,6 +297,82 @@ test("waiting-worker update activation posts skip-waiting and reloads on control
   reloaded = false;
   container.dispatchEvent(new Event("controllerchange"));
   if (reloaded) throw new Error("one update action caused a reload loop");
+});
+
+test("a coordinated update quiesces sibling writes before requesting activation", async () => {
+  const container = new FakeContainer();
+  const waiting = new FakeServiceWorker("installed");
+  container.controller = asServiceWorker(new FakeServiceWorker("activated"));
+  container.registration.waiting = asServiceWorker(waiting);
+  let releaseQuiescence: () => void = () => undefined;
+  const quiescence = new Promise<void>((resolve) => releaseQuiescence = resolve);
+  const controller = testController({
+    container,
+    production: true,
+    reload: () => undefined,
+    prepareUpdateSwap: () => quiescence,
+  });
+  const available = waitForState(controller, (state) => state.update === "ready");
+  controller.initialize();
+  await available;
+  if (!controller.applyUpdate()) throw new Error("update action was unavailable");
+  if (controller.getState().update !== "applying") {
+    throw new Error("coordinated update application state was not observable");
+  }
+  await Promise.resolve();
+  if (waiting.messages.length !== 0) {
+    throw new Error("activation was requested before sibling writes quiesced");
+  }
+  releaseQuiescence();
+  await quiescence;
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  if (JSON.stringify(waiting.messages) !== JSON.stringify([{ type: "LOFI_SKIP_WAITING" }])) {
+    throw new Error("quiescence did not hand off to the worker swap");
+  }
+});
+
+test("a rejected quiescence still proceeds to the worker swap", async () => {
+  const container = new FakeContainer();
+  const waiting = new FakeServiceWorker("installed");
+  container.controller = asServiceWorker(new FakeServiceWorker("activated"));
+  container.registration.waiting = asServiceWorker(waiting);
+  const controller = testController({
+    container,
+    production: true,
+    reload: () => undefined,
+    prepareUpdateSwap: () => Promise.reject(new Error("locks unavailable")),
+  });
+  const available = waitForState(controller, (state) => state.update === "ready");
+  controller.initialize();
+  await available;
+  if (!controller.applyUpdate()) throw new Error("update action was unavailable");
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  if (JSON.stringify(waiting.messages) !== JSON.stringify([{ type: "LOFI_SKIP_WAITING" }])) {
+    throw new Error("a failed quiescence blocked the swap");
+  }
+});
+
+test("the prompt preference keeps a bystander tab and reports it stale", async () => {
+  const container = new FakeContainer();
+  container.controller = asServiceWorker(new FakeServiceWorker("activated"));
+  container.registration.active = asServiceWorker(new FakeServiceWorker("activated"));
+  let reloaded = 0;
+  let staleReports = 0;
+  const controller = testController({
+    container,
+    production: true,
+    reload: () => reloaded += 1,
+    staleTabBehavior: () => "prompt",
+    onStaleTab: () => staleReports += 1,
+  });
+  controller.initialize();
+  await waitForState(controller, (state) => state.worker === "ready");
+  container.dispatchEvent(new Event("controllerchange"));
+  if (reloaded !== 0) throw new Error("the prompt preference still reloaded the bystander tab");
+  if (staleReports !== 1) throw new Error("the stale tab was not reported");
+  if (controller.getState().update !== "idle") {
+    throw new Error("the stale tab kept a stale update state");
+  }
 });
 
 test("a controlled tab reloads on an update another tab initiated", async () => {

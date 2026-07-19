@@ -1014,6 +1014,29 @@ export async function productionPwaIssues(root: string, deploymentBase = "/") {
     );
   }
 
+  // The revision↔schema manifest ships in the precache and must belong to this
+  // build: the boot compatibility gate trusts it as the shell's own range.
+  let schemaManifest: JsonObject | undefined;
+  try {
+    const value = JSON.parse(await Deno.readTextFile(join(dist, "lofi-schema.json")));
+    if (isObject(value)) schemaManifest = value;
+  } catch {
+    // Report one stable error below.
+  }
+  if (
+    !schemaManifest || schemaManifest.v !== 1 ||
+    (identity && schemaManifest.revision !== identity.sourceHash) ||
+    !nonEmptyString(schemaManifest.head) || !Array.isArray(schemaManifest.lineage) ||
+    !schemaManifest.lineage.includes(schemaManifest.head)
+  ) {
+    issues.push(
+      issue(
+        "dist/lofi-schema.json: schema compatibility manifest is missing or does not match the build",
+        remediation,
+      ),
+    );
+  }
+
   const htmlFiles = files.filter((path) => path.endsWith(".html"));
   if (htmlFiles.length === 0) {
     issues.push(issue("dist/: no prerendered HTML routes were emitted", remediation));

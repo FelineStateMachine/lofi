@@ -414,7 +414,11 @@ async function makeProductionFixture(): Promise<string> {
     join(dist, "sw.js"),
     `const revision = "fixture-hash"; new URL("./lofi-precache.json", self.registration.scope);\n`,
   );
-  files.push("index.html", "settings/index.html", "lofi-build.json", "sw.js");
+  await Deno.writeTextFile(
+    join(dist, "lofi-schema.json"),
+    `${JSON.stringify({ v: 1, revision: "fixture-hash", head: "v1:aa", lineage: ["v1:aa"] })}\n`,
+  );
+  files.push("index.html", "settings/index.html", "lofi-build.json", "lofi-schema.json", "sw.js");
   const manifest = JSON.parse(await Deno.readTextFile(join(dist, "manifest.webmanifest")));
   await Deno.writeTextFile(
     join(dist, "lofi-precache.json"),
@@ -448,6 +452,10 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
       join(dist, "sw.js"),
       `new URL("./lofi-precache.json", self.registration.scope);\n`,
     );
+    await Deno.writeTextFile(
+      join(dist, "lofi-schema.json"),
+      `${JSON.stringify({ v: 1, revision: "other-hash", head: "v1:aa", lineage: ["v1:aa"] })}\n`,
+    );
     const manifest = JSON.parse(await Deno.readTextFile(join(dist, "manifest.webmanifest")));
     manifest.shortcuts[0].url = "./missing/";
     manifest.share_target = {
@@ -469,6 +477,10 @@ Deno.test("production PWA validation catches nested links, precache drift, and w
     assert(hasIssue(issues, "settings/index.html: must link"), "nested manifest link drift passed");
     assert(hasIssue(issues, "entries do not match"), "precache drift passed");
     assert(hasIssue(issues, "build revision does not match"), "worker revision drift passed");
+    assert(
+      hasIssue(issues, "lofi-schema.json: schema compatibility manifest"),
+      "schema manifest revision drift passed",
+    );
     assert(hasIssue(issues, "has no emitted offline route"), "missing shortcut route passed");
     assert(
       hasIssue(issues, "share_target.action has no emitted offline route"),

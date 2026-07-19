@@ -24,10 +24,11 @@ deno task build
 deno task preview
 ```
 
-`build` writes `dist/`, records a source fingerprint in `dist/lofi-build.json`, generates the
-precache list, and scans for server-secret values. Before Astro starts, the shared doctor preflight
-validates the author-owned manifest and referenced assets. After Astro finishes, build verifies the
-emitted HTML links, manifest, icons, nested routes, worker revision/scope, build identity, and exact
+`build` writes `dist/`, records a source fingerprint in `dist/lofi-build.json`, stamps the schema
+compatibility manifest in `dist/lofi-schema.json`, generates the precache list, and scans for
+server-secret values. Before Astro starts, the shared doctor preflight validates the author-owned
+manifest and referenced assets. After Astro finishes, build verifies the emitted HTML links,
+manifest, icons, nested routes, worker revision/scope, build identity, schema manifest, and exact
 precache set together. `preview` refuses to start when the build identity is missing or invalid.
 
 To use another preview port:
@@ -211,6 +212,54 @@ resume replication.
 A runtime-cache write error is best-effort and leaves the active worker ready. Registration,
 required precache, and activation failures remain worker failures; update-check failures leave the
 current worker running and retry on a later foreground signal.
+
+### Schema compatibility and read-only mode
+
+The app shell and the local data version independently: a browser can hold an old cached shell next
+to data another tab or device already migrated to a newer schema. Booting old code read-write onto
+newer data is a defect, so lofi couples the two at build time and gates boot on the comparison.
+
+Every build stamps `dist/lofi-schema.json` with the schema range the bundle understands: a
+fingerprint of the compiled schema (the head) plus fingerprints of every committed migration
+snapshot under `src/migrations/snapshots/` (the lineage). The file ships in the precache, so an
+offline shell always knows its own range. On each read-write boot the runtime records that range in
+`localStorage` beside the store — readable before the runtime opens.
+
+On boot the gate compares the two:
+
+- **Code ahead of data** (the local record is in the bundle's lineage): the normal path. Migrations
+  run as they always have, and the record advances to the new head.
+- **Data ahead of code** (the bundle's head is in the local record's lineage): the shell is older
+  than the data. The gate refuses table writes, surfaces the state through runtime diagnostics and
+  the `DeviceStatus` panel, and prompts an update check. Reads continue — the app stays usable for
+  looking things up, and nothing is lost; boot is never hard-failed by the gate.
+- **Unrelated histories** (neither contains the other, e.g. a schema change shipped without its
+  migration snapshot): treated like data-ahead. Writes stay refused until a bundle that knows the
+  data's schema arrives.
+
+For users, read-only mode means edits are declined with the message "data was saved by a newer
+version of the app"; updating the app (or reloading once the update installs) restores editing. The
+refusal reaches application code as a `SchemaCompatibilityError` on the mutation promise, the same
+surface as any other write failure.
+
+By default the framework renders a minimal fixed banner (`.lofi-schema-compat-banner`) with the
+message and an update/reload action. Apps can restyle it via that class, or replace it entirely:
+suppress it with `pwa: { updateBanner: "none" }` in `defineLofiApp` and render a custom surface from
+the `useSchemaCompat` hook in `@nzip/lofi/preact` (states: `unchecked`, `compatible`, `data-ahead`,
+`updating`).
+
+Applying an update coordinates across tabs on the same registration scope. The initiating tab
+announces the swap on a scope-keyed BroadcastChannel; every tab pauses new local writes for a
+bounded window while in-flight writes settle under a scope-keyed Web Lock, and only then is the
+waiting worker activated. Afterwards, tabs that did not initiate the update reload by default;
+`pwa: { staleTabs: "prompt" }` keeps their documents open instead, read-only, with a reload prompt.
+Channel and lock names carry the scope key exactly like the cache names, so sibling lofi apps on one
+origin never coordinate with each other by accident. Browsers without BroadcastChannel or Web Locks
+fall back to the bounded pause alone.
+
+In development the gate is inert, and a deployment without `lofi-schema.json` (built before the
+manifest existed) leaves writes enabled — the protection begins with the first build that ships the
+manifest.
 
 Do not run a server-side Jazz credential in the static host or expose `JAZZ_ADMIN_SECRET` or
 `BACKEND_SECRET` as public environment variables.

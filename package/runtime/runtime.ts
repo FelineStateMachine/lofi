@@ -4,7 +4,9 @@ import { BrowserAuthSecretStore, createDb, type Db } from "jazz-tools";
 import { getLofiApp } from "./app.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { activeSink, appId, databaseConfig, syncing } from "./config.ts";
+import { assertSchemaWritable, schemaCompatGate, subscribeSchemaCompat } from "./schema-compat.ts";
 import { resolveStoreStatus } from "./store-status.ts";
+import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
 import { setEncryptedColumnKey } from "../schema/encrypted.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
@@ -244,6 +246,9 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     state.diagnostics.startupFailure = null;
     state.diagnostics.clientsCreated += 1;
     state.diagnostics.activeClients += 1;
+    // The runtime is open read-write; the compatibility gate may stamp the
+    // local schema version forward (it never stamps while data is ahead).
+    schemaCompatGate.markRuntimeWritable();
     notifyDiagnostics(state);
     return db;
   }, record);
@@ -275,6 +280,10 @@ function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
         store = createTableStore(db, table, state.diagnostics, {
           syncConfigured: syncing,
           onDiagnosticsChange: () => notifyDiagnostics(state),
+          guardWrite: async () => {
+            await assertSchemaWritable();
+            return await acquireUpgradeWriteLock();
+          },
         }) as TableStore<TableRow, unknown>;
         stores.set(table, store);
       }
@@ -291,6 +300,14 @@ function attachRuntime(state: RuntimeSlot, db: Db): LofiRuntime {
   };
   return runtime;
 }
+
+// The compatibility verdict is part of runtime diagnostics; mirror the shared
+// gate into the slot so DeviceStatus and the inspector observe it live.
+subscribeSchemaCompat((compat) => {
+  const state = slot();
+  state.diagnostics.schemaCompat = compat;
+  notifyDiagnostics(state);
+});
 
 /** Opens or reuses the one package runtime for the current browser document. */
 export function getRuntime(): Promise<LofiRuntime> {

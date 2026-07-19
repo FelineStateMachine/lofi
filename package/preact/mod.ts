@@ -27,6 +27,11 @@ export {
 } from "./PwaActions.tsx";
 export { TicketEnrollForm, type TicketEnrollFormProps } from "./TicketEnrollForm.tsx";
 export {
+  type SchemaCompatReason,
+  type SchemaCompatState,
+  useSchemaCompat,
+} from "./use-schema-compat.ts";
+export {
   type DeviceCapabilitiesHook,
   type DeviceCapabilityReport,
   useDeviceCapabilities,

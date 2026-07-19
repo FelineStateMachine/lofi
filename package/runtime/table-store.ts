@@ -49,6 +49,12 @@ export type TableStoreOptions = {
   syncConfigured?: () => boolean;
   /** Called whenever a diagnostics counter changes. */
   onDiagnosticsChange?: () => void;
+  /**
+   * Runs before each mutation reaches the database: rejects to refuse the
+   * write (the schema-compatibility gate), and may resolve with a release
+   * function invoked once the write settles. Absent means unguarded writes.
+   */
+  guardWrite?: () => Promise<(() => void) | void>;
 };
 
 /**
@@ -62,6 +68,7 @@ export class TableStore<T extends TableRow, Init> {
   readonly #diagnostics: RuntimeDiagnostics;
   readonly #syncConfigured: () => boolean;
   readonly #diagnosticsChanged: () => void;
+  readonly #guardWrite?: () => Promise<(() => void) | void>;
   readonly #listeners = new Set<Listener>();
   readonly #stopMutationErrors: () => void;
   readonly #ownBatches = new Set<unknown>();
@@ -87,6 +94,7 @@ export class TableStore<T extends TableRow, Init> {
     this.#diagnostics = diagnostics;
     this.#syncConfigured = options.syncConfigured ?? (() => false);
     this.#diagnosticsChanged = options.onDiagnosticsChange ?? (() => undefined);
+    this.#guardWrite = options.guardWrite;
     // Asynchronous write rejections that are not tied to an awaited mutation
     // still have to reach diagnostics and the UI, so the store owns this
     // listener. The vendor event is database-wide, so it is filtered to this
@@ -127,17 +135,36 @@ export class TableStore<T extends TableRow, Init> {
 
   /** Inserts a row and waits for local durability before resolving. */
   async insert(values: Init): Promise<void> {
-    await this.#settle(this.#db.insert(this.#table, values));
+    await this.#perform(() => this.#db.insert(this.#table, values));
   }
 
   /** Updates a row and waits for local durability before resolving. */
   async update(id: string, patch: Partial<Init>): Promise<void> {
-    await this.#settle(this.#db.update(this.#table, id, patch));
+    await this.#perform(() => this.#db.update(this.#table, id, patch));
   }
 
   /** Deletes a row and waits for local durability before resolving. */
   async delete(id: string): Promise<void> {
-    await this.#settle(this.#db.delete(this.#table, id));
+    await this.#perform(() => this.#db.delete(this.#table, id));
+  }
+
+  // The guard runs before the mutation reaches the vendor: a refusal (the
+  // schema-compatibility gate) surfaces like any write failure, and the
+  // release ends this write's hold on the cross-tab write lock once the
+  // write settles — the quiescence bar an upgrade swap waits on.
+  async #perform(create: () => MutationHandle): Promise<void> {
+    let releaseGuard: (() => void) | undefined;
+    try {
+      releaseGuard = (await this.#guardWrite?.()) ?? undefined;
+    } catch (error) {
+      this.#fail(error);
+      throw error;
+    }
+    try {
+      await this.#settle(create());
+    } finally {
+      releaseGuard?.();
+    }
   }
 
   /** Projects an asynchronous Jazz mutation rejection into diagnostics and store state. */

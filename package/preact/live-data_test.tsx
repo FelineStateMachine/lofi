@@ -1,4 +1,5 @@
 import { schema as s } from "jazz-tools";
+import type { WriteHandle } from "../runtime/write-handle.ts";
 import { useLiveQuery, useTableMutations } from "./live-data.ts";
 
 const app = s.defineApp({
@@ -9,7 +10,7 @@ function TypedLiveDataContract() {
   const query = useLiveQuery(() => app.records.select("title"), []);
   const mutations = useTableMutations(app.records);
   const title: string | undefined = query.rows[0]?.title;
-  const inserted: Promise<s.RowOf<typeof app.records>> = mutations.insert({
+  const inserted: WriteHandle<s.RowOf<typeof app.records>> = mutations.insert({
     title: "typed",
     archived: false,
   });

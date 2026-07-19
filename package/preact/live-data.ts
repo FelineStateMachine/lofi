@@ -11,6 +11,7 @@ import {
   type TableMutationStore,
 } from "../runtime/table-mutations.ts";
 import type { TableRow } from "../runtime/table-store.ts";
+import type { WriteHandle } from "../runtime/write-handle.ts";
 
 const loading = <T extends TableRow>(): LiveQuerySnapshot<T> => ({
   status: "loading",
@@ -71,17 +72,19 @@ export function useLiveQuery<T extends TableRow>(
 
 /** Typed mutation methods plus their shared table-scoped observable state. */
 export type TableMutations<T extends TableRow, Init> = TableMutationSnapshot & {
-  insert(values: Init): Promise<T>;
-  update(id: string, patch: Partial<Init>): Promise<void>;
-  remove(id: string): Promise<void>;
+  insert(values: Init): WriteHandle<T>;
+  update(id: string, patch: Partial<Init>): WriteHandle<void>;
+  remove(id: string): WriteHandle<void>;
 };
 
 /**
  * Binds one typed Jazz table to stable insert, update, and remove methods.
  *
- * Mutation promises resolve after local durability; when managed sync is active,
- * global confirmation continues in the background and updates the shared
- * table-scoped `pending`, `durability`, and `error` state.
+ * Each method returns a thenable `WriteHandle`: awaiting it resolves after
+ * local durability, and the handle's `saved` and `synced` promises track the
+ * write's sync fate. When managed sync is active, global confirmation
+ * continues in the background and updates the shared table-scoped `pending`,
+ * `durability`, and `error` state.
  *
  * @example
  * ```ts

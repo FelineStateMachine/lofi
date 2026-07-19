@@ -42,7 +42,7 @@ import {
   type RuntimeStartupFailure,
 } from "./startup-recovery.ts";
 import { completeLocalRowMigration, readNamespaceState } from "./namespace-state.ts";
-import { nestedAppTables } from "../schema/nested.ts";
+import { type NestedAppRoot, nestedAppTables } from "../schema/nested.ts";
 
 /** The shared, lazily opened Jazz client and its application-facing adapters. */
 export type LofiRuntime = {
@@ -126,8 +126,10 @@ function runtimeTables(): RuntimeTable[] {
   const appSchema = getLofiApp().schema;
   // A nested app groups its table handles inside namespace objects, which a
   // one-level walk would silently skip; its flattened registry is
-  // authoritative. A flat `defineApp` schema keeps the one-level walk.
-  const values = nestedAppTables(appSchema) ??
+  // authoritative. A flat `defineApp` schema keeps the one-level walk. The
+  // author's schema arrives untyped here, so the brand is asserted and the
+  // null defense classifies flat apps.
+  const values = nestedAppTables(appSchema as NestedAppRoot) ??
     Object.values(appSchema as Record<string, unknown>);
   return values.filter((value) =>
     value && typeof value === "object" && "_table" in value && "where" in value

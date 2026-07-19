@@ -20,6 +20,12 @@
  * });
  * ```
  *
+ * Shared-field columns ({@link sharedEncryptedText}, {@link sharedEncryptedJson})
+ * declare only the sealed data shape here; the policy and key-lifecycle half —
+ * group templates, key bootstrap and rotation, member reconciliation — lives in
+ * `@nzip/lofi/access`, and pin remediation for changed peer keys is surfaced
+ * through the main `@nzip/lofi` entry.
+ *
  * @module
  */
 import { schema } from "jazz-tools";
@@ -150,6 +156,7 @@ export const s: SchemaDsl = {
 };
 
 export {
+  type AnyColumnBuilder,
   plain,
   type PlainColumn,
   privateTable,
@@ -164,34 +171,24 @@ export {
   type SharedFieldValue,
   unwrapSharedField,
 } from "./shared-encrypted.ts";
-export { SharedFieldError } from "./shared-crypto.ts";
 export {
-  clearSharedFieldKeys,
-  getSharedFieldKey,
-  installSharedFieldKey,
-  latestSharedFieldGeneration,
-  sharedKeyScope,
-  subscribeSharedKeyring,
-} from "./shared-keyring.ts";
-export {
-  clearSharedColumnRegistry,
-  type SharedColumnConfig,
-  sharedColumnConfigs,
-} from "./shared-registry.ts";
+  isSharedFieldError,
+  SharedFieldError,
+  type SharedFieldErrorCode,
+} from "./shared-crypto.ts";
+export { type SharedColumnConfig } from "./shared-registry.ts";
 
 export {
-  clearEncryptedColumnKey,
-  clearEncryptedColumnRegistry,
   type EncryptedColumn,
   EncryptedColumnError,
   encryptedColumnsOf,
   encryptedDate,
   encryptedJson,
   encryptedNumber,
+  type EncryptedStoredSql,
   encryptedText,
   isEncryptedColumn,
   matchDecrypted,
-  setEncryptedColumnKey,
 } from "./encrypted.ts";
 export {
   defineNestedApp,
@@ -201,33 +198,34 @@ export {
   NESTED_SEPARATOR,
   type NestedApp,
   nestedAppDeployTarget,
+  type NestedAppRoot,
   nestedAppTables,
   type NestedSchemaDefinition,
 } from "./nested.ts";
 export {
-  clearEffectDeclarations,
   effect,
   type EffectContext,
   type EffectHandlers,
   type EffectRow,
   type EffectUnit,
+  type EffectUnitOptions,
   insert,
   type InsertVerb,
   log,
   mutation,
-  type MutationDescriptor,
   type MutationOp,
   type MutationOpKind,
   type MutationOptions,
-  type MutationRuntime,
   type MutationVerb,
   remove,
   type RemoveVerb,
-  resolveEffectUnit,
-  setMutationRuntime,
   update,
   type UpdateVerb,
 } from "./effects.ts";
+// Type-only, so the authoring-only module graph stays free of runtime code:
+// verb calls settle through the runtime write handle, and these names let
+// schema-graph modules annotate that contract without importing the runtime.
+export type { WriteHandle, WriteRejection, WriteStage } from "../runtime/write-handle.ts";
 
 // Store provisioning (./store.ts) is deliberately NOT re-exported here: the
 // Jazz schema loader bundles the author's schema module graph — this facade
@@ -236,16 +234,23 @@ export {
 
 /**
  * Schema-authoring types re-exported from the pinned Jazz 2 DSL for use in
- * application signatures. Row types for UI code come from `@nzip/lofi`
- * (`RowOf`), not from this module.
+ * application signatures: the app and table shapes, the table handle type
+ * (`TableProxy`, what a declared table is at runtime and what verb
+ * operations accept), and the permission types (`PolicyContext` for
+ * `definePermissions` callbacks, `CompiledPermissions` for the bundles they
+ * compile to and `mergeNestedPermissions` combines). Row types for UI code
+ * come from `@nzip/lofi` (`RowOf`), not from this module.
  */
 export type {
   App,
+  CompiledPermissions,
   DefinedTable,
   InsertOf,
+  PolicyContext,
   Schema,
   SchemaDefinition,
   TableDefinition,
+  TableProxy,
   WhereOf,
 } from "jazz-tools";
 

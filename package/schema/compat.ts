@@ -15,7 +15,7 @@
  * @module
  */
 
-import { nestedAppDeployTarget, nestedAppTables } from "./nested.ts";
+import { nestedAppDeployTarget, type NestedAppRoot, nestedAppTables } from "./nested.ts";
 
 /** The schema range one build understands: its head and every known ancestor. */
 export type SchemaVersionRange = {
@@ -99,8 +99,12 @@ export async function computeSchemaFingerprint(
  */
 export function resolveAppWasmSchema(app: unknown): Record<string, unknown> {
   if (app && typeof app === "object") {
-    if (nestedAppTables(app) !== null) {
-      const target = nestedAppDeployTarget(app) as { wasmSchema?: Record<string, unknown> };
+    // The app value arrives untyped from a loaded module, so the brand is
+    // asserted and the null defense classifies non-nested values.
+    if (nestedAppTables(app as NestedAppRoot) !== null) {
+      const target = nestedAppDeployTarget(app as NestedAppRoot) as {
+        wasmSchema?: Record<string, unknown>;
+      };
       if (target.wasmSchema) return target.wasmSchema;
     }
     const wasmSchema = (app as { wasmSchema?: unknown }).wasmSchema;

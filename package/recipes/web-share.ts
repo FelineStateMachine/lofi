@@ -10,10 +10,10 @@
 
 /** Data accepted by the browser Web Share API. */
 export type WebShareData = {
-  title?: string;
-  text?: string;
-  url?: string;
-  files?: readonly File[];
+  readonly title?: string;
+  readonly text?: string;
+  readonly url?: string;
+  readonly files?: readonly File[];
 };
 
 /** Minimal browser seam used by {@link shareOrFallback}. */
@@ -103,9 +103,9 @@ export type TextShareTargetNames = {
 
 /** Parsed text/link values awaiting explicit user confirmation. */
 export type TextShareTargetDraft = {
-  title?: string;
-  text?: string;
-  url?: string;
+  readonly title?: string;
+  readonly text?: string;
+  readonly url?: string;
 };
 
 /** Stable validation issue that never contains received share values. */
@@ -120,9 +120,16 @@ export type TextShareTargetIssue =
   | "unsupported-url-protocol"
   | "empty-share";
 
-/** Accepted draft or value-free rejection from an inbound share target. */
+/**
+ * Accepted draft or value-free rejection from an inbound share target.
+ *
+ * Unlike the singular-`issue` results of the other recipes, the rejection arm
+ * carries a plural `issues` list: the title, text, and URL fields are validated
+ * independently, and every field that fails is reported together so a receiver
+ * page can explain the whole rejection at once.
+ */
 export type TextShareTargetResult =
-  | { ok: true; draft: TextShareTargetDraft; issues: readonly [] }
+  | { ok: true; draft: TextShareTargetDraft }
   | { ok: false; issues: readonly TextShareTargetIssue[] };
 
 /** Optional manifest-name and input-limit overrides for the inbound parser. */
@@ -152,7 +159,6 @@ export function parseTextShareTarget(
   const names = { ...defaultNames, ...options.names };
   const limits = { ...TEXT_SHARE_LIMITS, ...options.limits };
   const issues: TextShareTargetIssue[] = [];
-  const draft: TextShareTargetDraft = {};
 
   const read = (field: keyof TextShareTargetNames): string | undefined => {
     const values = parameters.getAll(names[field]);
@@ -169,24 +175,25 @@ export function parseTextShareTarget(
     return value;
   };
 
-  draft.title = read("title");
-  draft.text = read("text");
+  const title = read("title");
+  const text = read("text");
   const rawUrl = read("url");
+  let url: string | undefined;
   if (rawUrl) {
     try {
       const parsed = new URL(rawUrl);
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
         issues.push("unsupported-url-protocol");
       } else {
-        draft.url = parsed.href;
+        url = parsed.href;
       }
     } catch {
       issues.push("invalid-url");
     }
   }
-  if (!draft.title && !draft.text && !draft.url && issues.length === 0) {
+  if (!title && !text && !url && issues.length === 0) {
     issues.push("empty-share");
   }
   if (issues.length > 0) return { ok: false, issues };
-  return { ok: true, draft, issues: [] };
+  return { ok: true, draft: { title, text, url } };
 }

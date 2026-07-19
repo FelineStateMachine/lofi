@@ -135,7 +135,7 @@ function unit(
   options: {
     failFirst?: { onSynced?: boolean };
     failAlways?: boolean;
-    expiresAfter?: number;
+    expiresAfterMs?: number;
     maxAttempts?: number;
   } = {},
 ): EffectUnit<{ id: string }> {
@@ -155,7 +155,7 @@ function unit(
         calls.push({ handler: "onRejected", row, context });
       },
     },
-    expiresAfterMs: options.expiresAfter ?? null,
+    expiresAfterMs: options.expiresAfterMs ?? null,
     ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
   };
 }
@@ -699,7 +699,7 @@ Deno.test("an overdue intent surfaces in pending state and diagnostics without c
   await fixture.ledger.arm();
   const handle = fixture.ledger.perform<Row>(
     { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "slow" } },
-    { verb: "placeOrder", units: [units.get("chargeCard")!], expiresMs: 50 },
+    { verb: "placeOrder", units: [units.get("chargeCard")!], expiresAfterMs: 50 },
   );
   await handle;
   assert(
@@ -724,7 +724,7 @@ Deno.test("a closed delivery window retires the obligation: no handler, diagnosa
   const calls: Array<
     { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
   > = [];
-  const units = new Map([["notifyOnce", unit("notifyOnce", calls, { expiresAfter: 30 })]]);
+  const units = new Map([["notifyOnce", unit("notifyOnce", calls, { expiresAfterMs: 30 })]]);
   const fixture = harness({ units });
   await fixture.ledger.arm();
   const handle = fixture.ledger.perform<Row>(

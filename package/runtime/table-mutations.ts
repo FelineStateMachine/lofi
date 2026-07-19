@@ -3,7 +3,7 @@ import type { Db, MutationErrorEvent, TableProxy } from "jazz-tools";
 import { syncing } from "./config.ts";
 import type { RuntimeDiagnostics } from "./diagnostics.ts";
 import { getRuntime, runtimeRecreatedEvent, updateRuntimeDiagnostics } from "./runtime.ts";
-import type { TableRow } from "./table-store.ts";
+import type { TableRow, WriteDurability } from "./table-store.ts";
 import type { WriteHandle } from "./write-handle.ts";
 import { getWriteLedger, type WriteLedger } from "./write-ledger.ts";
 
@@ -11,18 +11,11 @@ import { getWriteLedger, type WriteLedger } from "./write-ledger.ts";
 export type TableMutationSnapshot = {
   /** Writes on this table still awaiting their sync fate. */
   pending: number;
-  /**
-   * How far the latest write has travelled: `none` before any write settles,
-   * `local` once saved on this device (the resting state when sync is not
-   * configured), `global` once the store confirms it, `failed` when it was
-   * denied.
-   */
-  durability: "none" | "local" | "global" | "failed";
+  /** The latest write's deepest tier; see {@link WriteDurability}. */
+  durability: WriteDurability;
   /** The latest table-scoped rejection message, or `null`. */
   error: string | null;
 };
-
-type Listener = () => void;
 
 // Own-batch attribution keeps a bounded window of recent writes; late
 // rejections older than this are diagnostics-only.
@@ -43,7 +36,7 @@ export class TableMutationStore<T extends TableRow, Init> {
   readonly #table: TableProxy<T, Init>;
   readonly #environment: TableMutationEnvironment;
   readonly #onIdle: () => void;
-  readonly #listeners = new Set<Listener>();
+  readonly #listeners = new Set<() => void>();
   readonly #ownBatches = new Set<unknown>();
   #batchTracking = false;
   #snapshot: TableMutationSnapshot = { pending: 0, durability: "none", error: null };
@@ -68,7 +61,7 @@ export class TableMutationStore<T extends TableRow, Init> {
   getSnapshot = (): TableMutationSnapshot => this.#snapshot;
 
   /** Retains the table-scoped error listener for one consumer. */
-  subscribe = (listener: Listener): () => void => {
+  subscribe = (listener: () => void): () => void => {
     if (this.#disposed) throw new Error("table mutation store has been released");
     const subscriber = () => listener();
     this.#listeners.add(subscriber);

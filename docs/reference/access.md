@@ -28,9 +28,12 @@ Import from `@nzip/lofi/access`:
 - Policy templates: `privateAccess`, `sharedAccess`, `groupAccess`, `sharedFieldAccess`,
   `defineAccessPolicies`.
 - Identities: `sharingIdentity`, `encodeSharingIdentity`, `decodeSharingIdentity`.
-- Operations: `createSharingOperations`, `createGroupOperations`.
-- Shared-field key lifecycle: `bootstrapGroupFieldKey`, `rotateGroupFieldKey`,
-  `wrapHeldKeysForMember`, `reconcileSharedFieldKeys`.
+- Operations: `createSharingOperations`, `createGroupOperations` (configured with
+  `SharingOperationsConfig` and `GroupOperationsConfig`).
+- Errors: `AccessError`/`isAccessError` and `SharedFieldError`/`isSharedFieldError`, the two
+  catchable families of group and sharing operations.
+- Pin remediation: `trustPeerKey`, the explicit re-trust that resolves a `peer-key-changed` refusal
+  (also on the root `@nzip/lofi` export, next to `pinnedFingerprint`).
 - Fixed roles: `reader`, `contributor`, `writer`, `admin` (exposed as `groupRoles`, with the
   role-to-capability mapping in `groupRoleCapabilities`).
 
@@ -45,9 +48,12 @@ Columns declared with `s.sharedEncryptedText` and `s.sharedEncryptedJson` (from 
 hold ciphertext readable by every current group member. The access side hosts the key material:
 `sharedFieldDirectoryTable` and `sharedFieldKeyTable` store the directory and per-member wrapped
 keys, `sharedFieldAccess` (or the `fieldKeys` option of `groupAccess`) compiles their policies, and
-the lifecycle helpers create, wrap, and rotate group field keys. Rotation is lazy: removing a member
-re-keys future writes, while content encrypted under generations the member already holds remains
-readable to them. See [Permission templates](../permissions.md) for the hosting walkthrough.
+group operations created with the same `fieldKeys`/`directory` tables mint, wrap, and rotate group
+field keys automatically: `createGroup` bootstraps the first key, `addMember` delivers held
+generations, `removeMember` rotates, and `reconcileSharedFieldKeys` repairs missing wraps. Key
+failures raise `SharedFieldError` (narrow with `isSharedFieldError`). Rotation is lazy: removing a
+member re-keys future writes, while content encrypted under generations the member already holds
+remains readable to them. See [Permission templates](../permissions.md) for the hosting walkthrough.
 
 In pinned Jazz alpha.53, the permission authority does not expose a group inserted earlier in the
 same transaction to the first membership's `allowedTo.update("groupId")` check. `createGroup`

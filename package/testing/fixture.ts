@@ -7,7 +7,7 @@ import {
   type Locator,
   type Page,
   type Request,
-} from "npm:playwright@1.61.1";
+} from "playwright";
 import { BrowserUnavailableError, rethrowBrowserLaunchError } from "./browser_error.ts";
 import {
   artifactName,
@@ -17,7 +17,12 @@ import {
 } from "./safety.ts";
 import { sanitizeTraceArchive } from "./trace.ts";
 
-type MemoryStorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
+/**
+ * Playwright storage state held only in memory — cookies plus per-origin
+ * `localStorage` and IndexedDB — used to clone a prepared identity into a
+ * fresh browser context without an on-disk state file.
+ */
+export type MemoryStorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
 /**
  * Playwright context options with `storageState` forbidden, so identity never
  * leaves memory via an on-disk state file.

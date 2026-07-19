@@ -10,13 +10,12 @@ import { createPolicyTestApp } from "jazz-tools/testing";
 import { assert } from "../runtime/test-assert.ts";
 import {
   type ArrayColumn,
-  clearEncryptedColumnKey,
   EncryptedColumnError,
   type IntColumn,
   s,
-  setEncryptedColumnKey,
   type StringColumn,
 } from "./mod.ts";
+import { clearEncryptedColumnKey, setEncryptedColumnKey } from "./encrypted.ts";
 
 const app = s.defineApp({
   parents: s.table({ name: s.string() }),

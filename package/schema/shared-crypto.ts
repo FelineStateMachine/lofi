@@ -27,35 +27,43 @@ import { padPayload, unpadPayload } from "./padding.ts";
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
+/**
+ * Stable categories for shared-field failures. `identity-missing` — a shared
+ * column was touched before the runtime installed the account's x25519
+ * identity. `key-pending` — no field key is installed for the value's scope
+ * and generation yet; a normal state for a freshly added member.
+ * `unscoped-write` — a write reached the column transform without the
+ * mutation layer sealing it first. `corrupt` — a sealed value failed
+ * authentication. `peer-key-changed` — a peer's published public key no
+ * longer matches its pinned fingerprint. `wrap-invalid` — a wrapped key
+ * failed authentication or shape checks. `no-directory-entry` — a wrap was
+ * requested for an account that has not published a public key.
+ */
+export type SharedFieldErrorCode =
+  | "identity-missing"
+  | "key-pending"
+  | "unscoped-write"
+  | "corrupt"
+  | "peer-key-changed"
+  | "wrap-invalid"
+  | "no-directory-entry";
+
 /** Raised when shared-field material cannot be derived, wrapped, or opened. */
 export class SharedFieldError extends Error {
   /** Stable error class name for diagnostics and error boundaries. */
   override readonly name = "SharedFieldError";
-  /**
-   * `identity-missing` — a shared column was touched before the runtime
-   * installed the account's x25519 identity. `key-pending` — no field key is
-   * installed for the value's scope and generation yet; a normal state for a
-   * freshly added member. `unscoped-write` — a write reached the column
-   * transform without the mutation layer sealing it first. `corrupt` — a
-   * sealed value failed authentication. `peer-key-changed` — a peer's
-   * published public key no longer matches its pinned fingerprint.
-   * `wrap-invalid` — a wrapped key failed authentication or shape checks.
-   * `no-directory-entry` — a wrap was requested for an account that has not
-   * published a public key.
-   */
-  readonly code:
-    | "identity-missing"
-    | "key-pending"
-    | "unscoped-write"
-    | "corrupt"
-    | "peer-key-changed"
-    | "wrap-invalid"
-    | "no-directory-entry";
+  /** The failure's stable category; see {@link SharedFieldErrorCode}. */
+  readonly code: SharedFieldErrorCode;
   /** Creates a shared-field failure with a stable category. */
-  constructor(code: SharedFieldError["code"], message: string) {
+  constructor(code: SharedFieldErrorCode, message: string) {
     super(message);
     this.code = code;
   }
+}
+
+/** True when an error came from the lofi shared-field surface. */
+export function isSharedFieldError(error: unknown): error is SharedFieldError {
+  return error instanceof SharedFieldError;
 }
 
 function toBase64Url(bytes: Uint8Array): string {

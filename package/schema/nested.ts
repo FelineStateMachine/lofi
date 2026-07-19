@@ -40,6 +40,19 @@ export type NestedApp<TDef extends NestedSchemaDefinition> = {
   [NS in keyof TDef & string]: App<Schema<TDef[NS]>>;
 };
 
+declare const nestedAppRootBrand: unique symbol;
+
+/**
+ * The opaque marker of a nested-app root. Only {@link defineNestedApp}
+ * produces values of this type, so APIs that require a root — store
+ * provisioning and the nested-table introspection helpers — state that
+ * precondition in their signatures instead of failing at runtime. The marker
+ * is type-level only; no property is added to the returned object.
+ */
+export type NestedAppRoot = {
+  readonly [nestedAppRootBrand]: true;
+};
+
 const nestedAppMetaKey = Symbol.for("@nzip/lofi/nested-app");
 const namespaceMetaKey = Symbol.for("@nzip/lofi/nested-namespace");
 
@@ -234,7 +247,7 @@ export function flattenNestedSchema(definition: NestedSchemaDefinition): SchemaD
  */
 export function defineNestedApp<const TDef extends NestedSchemaDefinition>(
   definition: TDef,
-): NestedApp<TDef> {
+): NestedApp<TDef> & NestedAppRoot {
   const flat = flattenNestedSchema(definition);
   registerEncryptedColumns(flat);
   const sliceable = schema.defineSliceableApp(flat as never);
@@ -271,7 +284,7 @@ export function defineNestedApp<const TDef extends NestedSchemaDefinition>(
       ),
     } satisfies NestedAppMeta,
   });
-  return root as NestedApp<TDef>;
+  return root as NestedApp<TDef> & NestedAppRoot;
 }
 
 /**
@@ -337,24 +350,28 @@ export function mergeNestedPermissions(
 }
 
 /**
- * The flattened table-handle registry of a nested app, or `null` when the
- * value is not a nested app root. The runtime consumes this so nested tables
+ * The flattened table-handle registry of a nested app root from
+ * {@link defineNestedApp}. The runtime consumes this so nested tables
  * participate in boot readiness and local-to-managed row migration; the
  * handles are the same objects the namespaces expose, so store identity is
- * preserved.
+ * preserved. As runtime defense for callers that cast past the
+ * {@link NestedAppRoot} requirement, a value without the root marker returns
+ * `null`.
  */
-export function nestedAppTables(app: unknown): readonly object[] | null {
+export function nestedAppTables(app: NestedAppRoot): readonly object[] | null {
   if (!app || typeof app !== "object") return null;
   const meta = (app as { [nestedAppMetaKey]?: NestedAppMeta })[nestedAppMetaKey];
   return meta?.tables ?? null;
 }
 
 /**
- * An app-like value over every table of a nested app, keyed by the mangled
- * global table names — the shape schema deploy tooling and the policy test
- * harness expect. Throws when the value is not a nested app root.
+ * An app-like value over every table of a nested app root from
+ * {@link defineNestedApp}, keyed by the mangled global table names — the
+ * shape schema deploy tooling and the policy test harness expect. As runtime
+ * defense for callers that cast past the {@link NestedAppRoot} requirement,
+ * a value without the root marker throws.
  */
-export function nestedAppDeployTarget(app: unknown): object {
+export function nestedAppDeployTarget(app: NestedAppRoot): object {
   const meta = app && typeof app === "object"
     ? (app as { [nestedAppMetaKey]?: NestedAppMeta })[nestedAppMetaKey]
     : undefined;

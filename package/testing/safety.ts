@@ -1,4 +1,13 @@
 /**
+ * Value-free failure-artifact safety: the {@link ValueFreeState} shape rule for
+ * state snapshots, its {@link assertValueFreeState} validator, and the
+ * {@link redactDiagnosticText} credential redaction applied to retained
+ * diagnostics.
+ *
+ * @module
+ */
+
+/**
  * A JSON-like value restricted to booleans, finite numbers, arrays, and plain
  * objects. Strings are excluded so state snapshots record shape and counts but
  * never user values or credentials.
@@ -30,7 +39,16 @@ function safeUrl(value: string): string {
   }
 }
 
-/** Redacts common credential forms before diagnostics are retained in memory. */
+/**
+ * Redact common credential forms from diagnostic text: URL userinfo, query,
+ * and fragment components; JSON and `key=value` secret assignments; bearer
+ * tokens; and every literal in `secretValues`. The fixtures apply this to all
+ * retained diagnostics; apply it likewise to any custom capture path.
+ *
+ * @param value The diagnostic text to redact.
+ * @param secretValues Literal credential values to remove wherever they appear.
+ * @returns The text with credential forms replaced by `[redacted]` markers.
+ */
 export function redactDiagnosticText(
   value: string,
   secretValues: readonly string[] = [],
@@ -47,8 +65,15 @@ export function redactDiagnosticText(
 }
 
 /**
- * State artifacts intentionally reject strings and non-finite numbers. Callers
- * can record shape, counts and booleans, but not user values or credentials.
+ * Assert that `value` satisfies the value-free rule: strings and non-finite
+ * numbers are rejected, so state artifacts record shape, counts, and booleans
+ * but never user values or credentials. Snapshot callbacks passed to the
+ * fixtures are validated with this at capture time; call it directly to
+ * pre-validate a `snapshot` callback's output in a fast test.
+ *
+ * @param value The candidate snapshot value.
+ * @param path The label used for the offending location in error messages.
+ * @throws {TypeError} When `value` contains a string or an unsupported value.
  */
 export function assertValueFreeState(
   value: unknown,

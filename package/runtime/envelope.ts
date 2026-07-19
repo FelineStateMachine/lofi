@@ -100,6 +100,14 @@ export class EnvelopeError extends Error {
   }
 }
 
+/**
+ * True when an error is an envelope failure: `locked` (no available protector
+ * opens the record) or `corrupt` (the record failed authentication).
+ */
+export function isEnvelopeError(error: unknown): error is EnvelopeError {
+  return error instanceof EnvelopeError;
+}
+
 /** Encodes bytes as unpadded base64url, the envelope's storage encoding. */
 export function toBase64Url(bytes: Uint8Array): string {
   let binary = "";

@@ -16,15 +16,15 @@ import {
   sharedFieldKeyTable,
 } from "./mod.ts";
 import { s } from "../schema/mod.ts";
-import {
-  clearSharedColumnRegistry,
-  clearSharedFieldKeys,
-  sharedFieldReady,
-  type SharedFieldValue,
-} from "../schema/mod.ts";
+import { sharedFieldReady, type SharedFieldValue } from "../schema/mod.ts";
+import { clearSharedColumnRegistry } from "../schema/shared-registry.ts";
 import { generateFieldKey, sealSharedValue, wrapFieldKey } from "../schema/shared-crypto.ts";
 import { clearEncryptedColumnRegistry } from "../schema/encrypted.ts";
-import { clearSharedFieldIdentity, installSharedFieldIdentity } from "../schema/shared-keyring.ts";
+import {
+  clearSharedFieldIdentity,
+  clearSharedFieldKeys,
+  installSharedFieldIdentity,
+} from "../schema/shared-keyring.ts";
 import {
   clearFingerprintPins,
   deriveSharedFieldIdentity,

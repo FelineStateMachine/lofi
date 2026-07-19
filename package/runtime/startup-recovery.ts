@@ -47,6 +47,11 @@ export class RuntimeStartupError extends Error {
   }
 }
 
+/** True when an error is a classified persistent-runtime startup failure. */
+export function isRuntimeStartupError(error: unknown): error is RuntimeStartupError {
+  return error instanceof RuntimeStartupError;
+}
+
 /** Maps vendor, capability, configuration, and fallback failures onto stable Lofi categories. */
 export function classifyRuntimeStartupFailure(
   error: unknown,

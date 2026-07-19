@@ -29,7 +29,7 @@ export type GroupAccessTemplate = {
 };
 /** Shared-field key-directory policy template. */
 export type SharedFieldAccessTemplate = {
-  readonly kind: "shared-field-directory";
+  readonly kind: "shared-field";
   readonly directory: AccessTable;
 };
 /** Any built-in access policy template accepted by {@link defineAccessPolicies}. */
@@ -147,7 +147,7 @@ export function groupAccess(config: {
  * @returns A template for {@link defineAccessPolicies}.
  */
 export function sharedFieldAccess(config: { directory: AccessTable }): SharedFieldAccessTemplate {
-  return { kind: "shared-field-directory", ...config };
+  return { kind: "shared-field", ...config };
 }
 
 type Column = {
@@ -191,7 +191,7 @@ function validateTemplate(template: AccessTemplate): void {
     requireColumn(template.grants, "user_id", "Text");
     requireColumn(template.grants, "can_edit", "Boolean");
   }
-  if (template.kind === "shared-field-directory") {
+  if (template.kind === "shared-field") {
     requireColumn(template.directory, "user_id", "Text");
     requireColumn(template.directory, "algo", "Text");
     requireColumn(template.directory, "public_key", "Text");
@@ -310,7 +310,7 @@ function guardPolicies(policy: Record<string, TablePolicy>): Record<string, Tabl
 }
 
 /**
- * Compiles the three narrow templates through Jazz's own policy builder. The
+ * Compiles the four narrow templates through Jazz's own policy builder. The
  * optional callback is the raw Jazz-policy escape hatch for app-specific rules.
  *
  * @example
@@ -330,8 +330,13 @@ function guardPolicies(policy: Record<string, TablePolicy>): Record<string, Tabl
  * ```
  *
  * @param app The raw Jazz app returned by `s.defineApp`.
- * @param templates At least one {@link privateAccess}, {@link sharedAccess}, or
- * {@link groupAccess} template; every table needs a policy.
+ * @param templates At least one {@link privateAccess}, {@link sharedAccess},
+ * {@link groupAccess}, or {@link sharedFieldAccess} template; every table needs
+ * a policy. `sharedFieldAccess` compiles the key directory behind shared
+ * encrypted columns; pair it with the `fieldKeys` option of
+ * {@link groupAccess}, and group operations created with the same tables run
+ * the key lifecycle (bootstrap on creation, wrap delivery, lazy rotation, and
+ * `reconcileSharedFieldKeys` repair).
  * @param raw Optional raw-policy callback for app-specific rules beyond the templates.
  * @returns Compiled permissions suitable as the app's default policy export.
  */
@@ -361,7 +366,7 @@ export function defineAccessPolicies<TApp extends object>(
         resource.allowDelete.where({ $createdBy: session.user_id });
         continue;
       }
-      if (template.kind === "shared-field-directory") {
+      if (template.kind === "shared-field") {
         const directory = policy[template.directory._table];
         directory.allowRead.always();
         directory.allowInsert.where({ user_id: session.user_id });

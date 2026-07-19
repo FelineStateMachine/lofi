@@ -42,7 +42,14 @@ export type PlainColumn<T> = T & { readonly [plainColumnBrand]: true };
 
 const PLAIN_COLUMN = Symbol("lofi.plainColumn");
 
-type AnyBuilder = TypedColumnBuilder<SqlType, boolean, string | undefined, boolean, unknown>;
+/** Any pinned-Jazz column builder accepted as a {@link privateTable} column. */
+export type AnyColumnBuilder = TypedColumnBuilder<
+  SqlType,
+  boolean,
+  string | undefined,
+  boolean,
+  unknown
+>;
 
 /**
  * Marks a column of a {@link privateTable} as deliberately plaintext —
@@ -135,7 +142,7 @@ function sealColumn(labelPrefix: string, name: string, builder: unknown): unknow
  * or wrapped in {@link plain}; optionals, defaults, non-lww merge
  * strategies, and transforms on sealed columns are configuration errors.
  */
-export function privateTable<const TCols extends Record<string, AnyBuilder>>(
+export function privateTable<const TCols extends Record<string, AnyColumnBuilder>>(
   labelPrefix: string,
   columns: TCols,
 ): DefinedTable<

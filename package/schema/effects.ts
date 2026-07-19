@@ -57,7 +57,8 @@ export type EffectContext = {
    * Why a `rejected` write settled: `denied` for a store verdict; `null` on
    * the `synced` fate. `expired` is reserved for store-side expiry
    * enforcement — at the pinned runtime an overdue intent is surfaced, never
-   * retired ({@link MutationOptions.expires}), so rejections today carry
+   * retired ({@link MutationOptions.expiresAfterMs}), so rejections today
+   * carry
    * `denied`.
    */
   cause: "denied" | "expired" | null;
@@ -94,7 +95,7 @@ export type EffectUnitOptions = {
    * write happened, so compensation would be wrong. External-tier handlers
    * whose receivers keep finite idempotency windows should set this.
    */
-  expiresAfter?: number;
+  expiresAfterMs?: number;
   /**
    * Failing handler attempts before quarantine: past this count the
    * obligation retires as failed-permanent instead of re-arming at every
@@ -190,7 +191,7 @@ export type MutationOptions<Row> = {
    * retiring it as rejected could fire compensation for a write that later
    * syncs anyway.
    */
-  expires?: number;
+  expiresAfterMs?: number;
 };
 
 /** The registered declaration the runtime dispatches for one verb. */
@@ -202,7 +203,7 @@ export type MutationDescriptor = {
   /** The verb's effect units, implicit unit included. */
   readonly units: readonly EffectUnit<{ id: string }>[];
   /** The intent's lifespan in milliseconds, or `null` for none. */
-  readonly expiresMs: number | null;
+  readonly expiresAfterMs: number | null;
 };
 
 /** The runtime half installed by the package runtime before verbs are called. */
@@ -235,7 +236,11 @@ function slot(): EffectsSlot {
   return effectsGlobal[slotName];
 }
 
-/** Installed by the package runtime; author code never calls this. */
+/**
+ * Installs the runtime half verbs dispatch through. The package runtime
+ * installs it at boot; application code never calls this. Tests install a
+ * deterministic fake to unit-test verbs without a booted runtime.
+ */
 export function setMutationRuntime(runtime: MutationRuntime): void {
   slot().runtime = runtime;
 }
@@ -312,7 +317,7 @@ export function effect<T extends { id: string }, Init>(
   const unit: EffectUnit<T> = {
     effectName: name,
     handlers,
-    expiresAfterMs: options.expiresAfter ?? null,
+    expiresAfterMs: options.expiresAfterMs ?? null,
     ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
   };
   registerUnit(unit as EffectUnit<{ id: string }>);
@@ -428,7 +433,7 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
     verbName: name,
     op: op as MutationOp<unknown, unknown>,
     units,
-    expiresMs: options.expires ?? null,
+    expiresAfterMs: options.expiresAfterMs ?? null,
   };
   state.verbs.set(name, descriptor);
   const verb = (...args: readonly unknown[]) => requireRuntime().dispatch(descriptor, args);

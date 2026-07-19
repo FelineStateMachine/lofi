@@ -84,6 +84,11 @@ export class LofiConfigurationError extends Error {
   readonly code = "configuration-error";
 }
 
+/** True when an error is invalid or missing author-owned app configuration. */
+export function isLofiConfigurationError(error: unknown): error is LofiConfigurationError {
+  return error instanceof LofiConfigurationError;
+}
+
 /**
  * Defines the application-facing values the versioned runtime needs.
  *

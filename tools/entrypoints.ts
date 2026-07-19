@@ -17,6 +17,13 @@ export type Entrypoint = {
 
 export const entrypoints: readonly Entrypoint[] = [
   { jsrName: ".", file: "package/runtime/mod.ts", page: "runtime", title: "Runtime" },
+  { jsrName: "./schema", file: "package/schema/mod.ts", page: "schema", title: "Schema" },
+  {
+    jsrName: "./schema/store",
+    file: "package/schema/store.ts",
+    page: "schema-store",
+    title: "Store provisioning",
+  },
   { jsrName: "./astro", file: "package/astro/mod.ts", page: "astro", title: "Astro integration" },
   { jsrName: "./access", file: "package/access/mod.ts", page: "access", title: "Access" },
   { jsrName: "./preact", file: "package/preact/mod.ts", page: "preact", title: "Preact" },

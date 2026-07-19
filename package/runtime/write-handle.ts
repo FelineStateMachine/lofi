@@ -66,6 +66,11 @@ export class WriteRejectedError extends Error {
   }
 }
 
+/** True when an error is a write the store adjudicated and denied permanently. */
+export function isWriteRejectedError(error: unknown): error is WriteRejectedError {
+  return error instanceof WriteRejectedError;
+}
+
 const stageOrder: Record<WriteStage, number> = {
   saving: 0,
   saved: 1,
@@ -89,6 +94,47 @@ function exposedPromise<T>(): { promise: Promise<T>; resolver: Resolver<T> } {
 }
 
 /**
+ * The runtime-only mutator half of a write handle. Only the write ledger
+ * holds a handle's controller — the handle itself exposes no way to advance
+ * or settle, so application code can observe a write's fate but never forge
+ * it.
+ */
+export type WriteHandleController<T> = {
+  /** Records the vendor batch id once the write is accepted. */
+  setBatchId(batchId: string | null): void;
+  /**
+   * Advances the monotonic stage machine; later stages never regress. The
+   * value supplied at (or before) `saved` is the one both stage promises
+   * resolve with.
+   */
+  advance(stage: Exclude<WriteStage, "rejected">, value?: T): void;
+  /** Settles the write as `rejected` with the adjudicated reason. */
+  reject(rejection: WriteRejection): void;
+  /** Fails every stage promise without entering the `rejected` stage. */
+  fail(error: unknown): void;
+};
+
+// Controllers are handed out exactly once, at construction, through
+// createWriteHandle. The map is module-private, so no code outside this
+// module can reach a handle's mutators through its public surface.
+const controllers = new WeakMap<WriteHandle<unknown>, WriteHandleController<unknown>>();
+
+/**
+ * Creates a handle in `saving` together with its controller — the only path
+ * to a handle's lifecycle mutators. The ledger keeps the controller and hands
+ * the observe-only handle to application code.
+ */
+export function createWriteHandle<T>(
+  writeId: string,
+): { handle: WriteHandle<T>; controller: WriteHandleController<T> } {
+  const handle = new WriteHandle<T>(writeId);
+  return {
+    handle,
+    controller: controllers.get(handle as WriteHandle<unknown>)! as WriteHandleController<T>,
+  };
+}
+
+/**
  * A single write observed through the author-facing lifecycle.
  *
  * `await write` (the thenable) resolves at `saved` with the write's value —
@@ -101,6 +147,10 @@ function exposedPromise<T>(): { promise: Promise<T>; resolver: Resolver<T> } {
  * local durability is settlement, and the handle reaches `synced` as soon as
  * it is `saved`. In Preact components, render a handle with `useWrite` and
  * the app-wide pending set with `usePendingWrites`.
+ *
+ * Handles are issued by the runtime and are observe-only: the lifecycle
+ * mutators live on a controller the ledger keeps at construction, so no
+ * consumer of a handle can advance or settle it.
  *
  * @example
  * ```ts
@@ -124,7 +174,11 @@ export class WriteHandle<T> implements PromiseLike<T> {
   #valueSet = false;
   #batchId: string | null = null;
 
-  /** Creates a handle in `saving`; the runtime advances it via its controller. */
+  /**
+   * Creates a handle in `saving`. The lifecycle mutators are handed to the
+   * module-internal factory at construction; a directly constructed handle
+   * has no reachable controller and therefore never advances.
+   */
   constructor(writeId: string) {
     this.#writeId = writeId;
     const saved = exposedPromise<T>();
@@ -133,6 +187,14 @@ export class WriteHandle<T> implements PromiseLike<T> {
     this.#savedResolver = saved.resolver;
     this.#synced = synced.promise;
     this.#syncedResolver = synced.resolver;
+    controllers.set(this as WriteHandle<unknown>, {
+      setBatchId: (batchId) => {
+        this.#batchId = batchId;
+      },
+      advance: (stage, value) => this.#advance(stage, value as T | undefined),
+      reject: (rejection) => this.#reject(rejection),
+      fail: (error) => this.#fail(error),
+    });
   }
 
   /** The stable journal id of this write. */
@@ -143,11 +205,6 @@ export class WriteHandle<T> implements PromiseLike<T> {
   /** The vendor batch id attributing adjudicated verdicts, once known. */
   get batchId(): string | null {
     return this.#batchId;
-  }
-
-  /** @internal Records the vendor batch id once the write is accepted. */
-  setBatchId(batchId: string | null): void {
-    this.#batchId = batchId;
   }
 
   /** The current lifecycle stage. Monotonic; never moves backwards. */
@@ -200,12 +257,10 @@ export class WriteHandle<T> implements PromiseLike<T> {
     };
   }
 
-  /**
-   * @internal Advances the monotonic stage machine; later stages never
-   * regress. The value supplied at (or before) `saved` is the one both stage
-   * promises resolve with.
-   */
-  advance(stage: Exclude<WriteStage, "rejected">, value?: T): void {
+  // Advances the monotonic stage machine; later stages never regress. The
+  // value supplied at (or before) `saved` is the one both stage promises
+  // resolve with. Reachable only through the construction-time controller.
+  #advance(stage: Exclude<WriteStage, "rejected">, value?: T): void {
     if (this.#stage === "synced" || this.#stage === "rejected") return;
     if (!this.#valueSet && value !== undefined) {
       this.#value = value;
@@ -218,8 +273,8 @@ export class WriteHandle<T> implements PromiseLike<T> {
     this.#emit();
   }
 
-  /** @internal Settles the write as `rejected` with the adjudicated reason. */
-  reject(rejection: WriteRejection): void {
+  // Settles the write as `rejected` with the adjudicated reason.
+  #reject(rejection: WriteRejection): void {
     if (this.#stage === "synced" || this.#stage === "rejected") return;
     this.#stage = "rejected";
     this.#reason = rejection;
@@ -231,8 +286,8 @@ export class WriteHandle<T> implements PromiseLike<T> {
     this.#emit();
   }
 
-  /** @internal Fails every stage promise without entering the `rejected` stage. */
-  fail(error: unknown): void {
+  // Fails every stage promise without entering the `rejected` stage.
+  #fail(error: unknown): void {
     if (this.#stage === "synced" || this.#stage === "rejected") return;
     this.#savedResolver.reject(error);
     this.#syncedResolver.reject(error);

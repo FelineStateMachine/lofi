@@ -1,9 +1,11 @@
 import { schema as s } from "jazz-tools";
 import type { BooleanColumn, DefinedTable, IntColumn, RefColumn, StringColumn } from "jazz-tools";
+import { AccessError } from "./errors.ts";
 
 function requireTableName(name: string, helper: string): void {
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
-    throw new TypeError(
+    throw new AccessError(
+      "configuration",
       `${helper} requires a declared Jazz table name, received ${JSON.stringify(name)}`,
     );
   }

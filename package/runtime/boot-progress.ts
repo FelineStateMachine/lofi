@@ -76,7 +76,13 @@ function declaredEngineAsset(): EngineAssetReference | null {
   return { url: link.href, bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : null };
 }
 
-/** Creates an isolated tracker, primarily for tests; the runtime shares one. */
+/**
+ * Creates an isolated progress tracker over injectable surfaces. The
+ * package-wide wrappers ({@link getBootProgress},
+ * {@link subscribeBootProgress}) read the shared tracker the runtime drives;
+ * this factory exists for isolated instances — deterministic tests and custom
+ * hosts that manage their own tracker.
+ */
 export function createBootProgressTracker(
   dependencies: BootProgressTrackerDependencies = {},
 ): BootProgressTracker {

@@ -1,3 +1,14 @@
+/**
+ * Browser-availability failure handling: {@link BrowserUnavailableError} with
+ * actionable install guidance, and the launch-error classifier that raises it.
+ *
+ * @module
+ */
+
+// The one place the testing helpers spell the Chromium install command; the
+// version matches the `playwright` alias in the workspace import map.
+const PLAYWRIGHT_INSTALL_COMMAND = "deno run -A npm:playwright@1.61.1 install chromium";
+
 /** Thrown when Playwright's Chromium browser is not installed, with install guidance. */
 export class BrowserUnavailableError extends Error {
   /** Always `"BrowserUnavailableError"`. */
@@ -9,7 +20,7 @@ export class BrowserUnavailableError extends Error {
    */
   constructor(options?: ErrorOptions) {
     super(
-      "Playwright Chromium is not installed. Run `deno run -A npm:playwright@1.61.1 install chromium` and retry.",
+      `Playwright Chromium is not installed. Run \`${PLAYWRIGHT_INSTALL_COMMAND}\` and retry.`,
       options,
     );
   }

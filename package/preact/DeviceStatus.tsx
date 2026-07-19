@@ -1,4 +1,4 @@
-import type { JSX, VNode } from "preact";
+import type { VNode } from "preact";
 import { useEffect, useState } from "preact/hooks";
 // Package-owned optional diagnostics UI.
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
@@ -19,7 +19,7 @@ import { describeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
 
 // One label/value row inside a category's definition list.
-function Row({ label, value }: { label: string; value: string }): JSX.Element {
+function Row({ label, value }: { label: string; value: string }): VNode {
   return (
     <div>
       <dt>{label}</dt>
@@ -49,7 +49,7 @@ const available = (present: boolean) => (present ? "available" : "missing");
  *
  * @returns The device diagnostics panel, grouped by owning subsystem.
  */
-export default function DeviceStatus(): VNode {
+export function DeviceStatus(): VNode {
   const { report, requestPersistence } = useDeviceCapabilities();
   const fork = useStorageFork();
   const [pwa, setPwa] = useState<PwaState>(getPwaState());

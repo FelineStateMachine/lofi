@@ -40,7 +40,7 @@ import {
 } from "./runtime.ts";
 import { assertSchemaWritable } from "./schema-compat.ts";
 import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
-import { WriteHandle } from "./write-handle.ts";
+import { createWriteHandle, type WriteHandle, type WriteHandleController } from "./write-handle.ts";
 import {
   createDefaultJournalStorage,
   hashJournalValue,
@@ -102,7 +102,7 @@ export type LedgerWriteOptions = {
   /** The effect units journaled with this write. */
   units?: readonly EffectUnit<{ id: string }>[];
   /** The intent's lifespan in milliseconds, or `null` for none. */
-  expiresMs?: number | null;
+  expiresAfterMs?: number | null;
 };
 
 type VendorWrite = {
@@ -118,7 +118,8 @@ type LedgerDb = Pick<Db, "onMutationError"> & {
   all(query: never, options?: { tier: "local" | "global" }): Promise<unknown[]>;
 };
 
-type ProbeTable = { where(input: Record<string, unknown>): unknown };
+/** The narrow table surface boot-reconciliation probes query by row id. */
+export type ProbeTable = { where(input: Record<string, unknown>): unknown };
 
 /** Runtime seams used by the ledger; tests inject deterministic values. */
 export type WriteLedgerEnvironment = {
@@ -204,7 +205,9 @@ export class WriteLedger {
   readonly #probing = new Set<string>();
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #sessionFates = new Map<string, { stage: "synced" | "rejected"; at: number }>();
-  #handles = new Map<string, WriteHandle<unknown>>();
+  // Controllers are the mutator half of issued handles; the ledger is the
+  // only holder, which is what keeps handle settlement unforgeable.
+  #controllers = new Map<string, WriteHandleController<unknown>>();
   readonly #liveRows = new Map<string, Record<string, unknown>>();
   #sweepTimer: ReturnType<typeof setInterval> | null = null;
   #db: LedgerDb | null = null;
@@ -269,11 +272,17 @@ export class WriteLedger {
    */
   perform<T>(request: LedgerWriteRequest, options: LedgerWriteOptions = {}): WriteHandle<T> {
     if (this.#disposed) throw new Error("write ledger has been disposed");
-    const handle = new WriteHandle<T>(crypto.randomUUID());
+    const { handle, controller } = createWriteHandle<T>(crypto.randomUUID());
     const db = this.#db;
     const guard = this.#environment.guardWrite;
     if (db && !guard) {
-      this.#execute(db, request, options, handle as WriteHandle<unknown>);
+      this.#execute(
+        db,
+        request,
+        options,
+        handle as WriteHandle<unknown>,
+        controller as WriteHandleController<unknown>,
+      );
       return handle;
     }
     void (async () => {
@@ -284,14 +293,20 @@ export class WriteLedger {
         // A guard refusal is not a verdict: nothing is journaled and no
         // effect fires; the failure surfaces like any refused mutation.
         this.#environment.updateDiagnostics((diagnostics) => diagnostics.mutationErrors += 1);
-        handle.fail(error);
+        controller.fail(error);
         return;
       }
       try {
         const openDb = await this.#withDb();
-        this.#execute(openDb, request, options, handle as WriteHandle<unknown>);
+        this.#execute(
+          openDb,
+          request,
+          options,
+          handle as WriteHandle<unknown>,
+          controller as WriteHandleController<unknown>,
+        );
       } catch (error) {
-        handle.fail(error);
+        controller.fail(error);
       } finally {
         if (release) {
           // The lock covers the local-durability window: it releases when
@@ -311,7 +326,7 @@ export class WriteLedger {
     const options: LedgerWriteOptions = {
       verb: descriptor.verbName,
       units: descriptor.units,
-      expiresMs: descriptor.expiresMs,
+      expiresAfterMs: descriptor.expiresAfterMs,
     };
     if (descriptor.op.kind === "insert") {
       return this.perform({ kind: "insert", table, values: args[0] }, options);
@@ -504,6 +519,7 @@ export class WriteLedger {
     request: LedgerWriteRequest,
     options: LedgerWriteOptions,
     handle: WriteHandle<unknown>,
+    controller: WriteHandleController<unknown>,
   ): void {
     let vendor: VendorWrite;
     let rowId: string;
@@ -552,7 +568,7 @@ export class WriteLedger {
       code: null,
       reason: null,
       createdAt,
-      expiresAt: options.expiresMs != null ? createdAt + options.expiresMs : null,
+      expiresAt: options.expiresAfterMs != null ? createdAt + options.expiresAfterMs : null,
       effects: Object.fromEntries(
         (options.units ?? []).map((unit) => [
           unit.effectName,
@@ -569,19 +585,19 @@ export class WriteLedger {
       document.writes[entry.writeId] = entry;
     });
     this.#liveRows.set(entry.writeId, rowSnapshot);
-    this.#handles.set(entry.writeId, handle);
-    handle.setBatchId(entry.batchId);
+    this.#controllers.set(entry.writeId, controller);
+    controller.setBatchId(entry.batchId);
     // Pre-stage the insert's row value so a fast global confirmation can
     // never resolve the stage promises before the value is known.
-    if (request.kind === "insert") handle.advance("saving", vendor.value);
+    if (request.kind === "insert") controller.advance("saving", vendor.value);
     this.#afterChange();
-    void this.#settle(vendor, entry, handle);
+    void this.#settle(vendor, entry, controller);
   }
 
   async #settle(
     vendor: VendorWrite,
     entry: JournalWriteRecord,
-    handle: WriteHandle<unknown>,
+    controller: WriteHandleController<unknown>,
   ): Promise<void> {
     const syncConfigured = this.#environment.syncConfigured();
     let value: unknown;
@@ -608,12 +624,12 @@ export class WriteLedger {
       this.#journal.update((document) => {
         delete document.writes[entry.writeId];
       });
-      this.#handles.delete(entry.writeId);
-      handle.fail(error);
+      this.#controllers.delete(entry.writeId);
+      controller.fail(error);
       this.#afterChange();
       return;
     }
-    handle.advance("saved", value);
+    controller.advance("saved", value);
     // Without a sync location there is no store to adjudicate: local
     // durability is settlement, and effects run now.
     if (!syncConfigured) this.#settleSynced(entry);
@@ -659,8 +675,7 @@ export class WriteLedger {
     this.#journal.update(() => {
       current.stage = "synced";
     });
-    const handle = this.#handles.get(current.writeId);
-    handle?.advance("synced");
+    this.#controllers.get(current.writeId)?.advance("synced");
     this.#fireUnits(current);
     this.#afterChange();
   }
@@ -675,8 +690,7 @@ export class WriteLedger {
       current.code = code;
       current.reason = reason;
     });
-    const handle = this.#handles.get(current.writeId);
-    handle?.reject({ cause: "denied", code, reason });
+    this.#controllers.get(current.writeId)?.reject({ cause: "denied", code, reason });
     this.#fireUnits(current);
     this.#afterChange();
   }
@@ -810,7 +824,7 @@ export class WriteLedger {
         this.#journal.update(() => {
           delete document.writes[entry.writeId];
         });
-        this.#handles.delete(entry.writeId);
+        this.#controllers.delete(entry.writeId);
         this.#liveRows.delete(entry.writeId);
       }
     }

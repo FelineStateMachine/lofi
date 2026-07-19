@@ -18,11 +18,13 @@ import {
   resolveAppWasmSchema,
   type SchemaCompatManifest,
 } from "../schema/compat.ts";
-import { nestedAppTables } from "../schema/nested.ts";
+import { type NestedAppRoot, nestedAppTables } from "../schema/nested.ts";
 
 function isAppValue(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
-  if (nestedAppTables(value) !== null) return true;
+  // The probe inspects arbitrary module exports; nestedAppTables answers null
+  // for values that lack the nested-app root marker.
+  if (nestedAppTables(value as NestedAppRoot) !== null) return true;
   const wasmSchema = (value as { wasmSchema?: unknown }).wasmSchema;
   return Boolean(wasmSchema && typeof wasmSchema === "object");
 }

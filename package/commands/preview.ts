@@ -9,16 +9,21 @@
 
 import { join, normalize } from "node:path";
 import { normalizeDeploymentBase, pathWithinDeploymentBase } from "../tooling/base-path.ts";
+import type { LofiBuildInfo } from "../tooling/build-info.ts";
 import { productionContentType } from "../tooling/pwa-validation.ts";
+
+// Preview serves the already-built static dist/ and reads no environment, so
+// the command environment preflight does not apply here.
 
 const portFlag = Deno.args.findIndex((argument) => argument === "--port");
 const port = portFlag >= 0 ? Number(Deno.args[portFlag + 1]) : 4321;
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   console.error("error: preview --port must be an integer from 1 to 65535");
+  console.error("usage: deno task preview [--port <1-65535>]");
   Deno.exit(2);
 }
 
-let identity: { lofiVersion?: string; sourceHash?: string; basePath?: string; csp?: string };
+let identity: Partial<LofiBuildInfo>;
 try {
   identity = JSON.parse(await Deno.readTextFile("dist/lofi-build.json"));
 } catch {

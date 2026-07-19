@@ -1,6 +1,5 @@
 import { schema } from "jazz-tools";
 import {
-  clearEncryptedColumnRegistry,
   defineNestedApp,
   defineNestedPermissions,
   flattenNestedSchema,
@@ -8,6 +7,7 @@ import {
   mergeNestedPermissions,
   s,
 } from "./mod.ts";
+import { clearEncryptedColumnRegistry } from "./encrypted.ts";
 
 // The facade re-exports, never reimplements: every curated member must be the
 // pinned Jazz 2 original by identity, so semantics cannot drift. The define

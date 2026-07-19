@@ -1,6 +1,7 @@
 import type { SchemaCompatState } from "./schema-compat.ts";
 import type { RuntimeStartupFailure } from "./startup-recovery.ts";
 import type { RuntimeStoreStatus } from "./store-status.ts";
+import type { WriteDurability } from "./table-store.ts";
 
 /** One structured entry recorded by the built-in `s.log` effect unit. */
 export type EffectLogEntry = {
@@ -72,9 +73,9 @@ export type RuntimeDiagnostics = {
   pendingGlobalWrites: number;
   /**
    * The most recent write's deepest durability: `local` is saved on this
-   * device, `global` is confirmed by the store.
+   * device, `global` is confirmed by the store. See {@link WriteDurability}.
    */
-  lastWriteDurability: "none" | "local" | "global" | "failed";
+  lastWriteDurability: WriteDurability;
   /** Writes refused or rejected since boot, including guard refusals. */
   mutationErrors: number;
   /** Journaled writes that have not yet settled as synced or rejected. */
@@ -97,10 +98,19 @@ export type RuntimeDiagnostics = {
 
 /** One detected shared-field key anomaly. */
 export type SharedFieldAlert = {
+  /**
+   * The anomaly kind: `peer-key-changed` — a sender's published key no longer
+   * matches its pin, so its wraps are refused until the user re-trusts the
+   * key; `self-key-conflict` — the directory holds a different key for this
+   * account than the one derived locally; `wrap-invalid` — a wrapped key
+   * failed authentication or validation and was not installed.
+   */
   code: "peer-key-changed" | "self-key-conflict" | "wrap-invalid";
   /** The account the anomaly concerns (the sender or self). */
   userId: string;
+  /** Human-readable description for the alert surface. */
   detail: string;
+  /** ISO-8601 timestamp of when the anomaly was detected. */
   at: string;
 };
 

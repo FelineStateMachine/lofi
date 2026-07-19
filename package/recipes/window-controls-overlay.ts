@@ -4,15 +4,22 @@
  * @module
  */
 
+/** Value-only titlebar area rectangle in CSS pixels, clamped to finite non-negative numbers. */
+export type TitlebarAreaRect = {
+  /** Left edge of the usable titlebar area, relative to the viewport. */
+  readonly x: number;
+  /** Top edge of the usable titlebar area, relative to the viewport. */
+  readonly y: number;
+  /** Width available to application content between window controls. */
+  readonly width: number;
+  /** Height of the titlebar area. */
+  readonly height: number;
+};
+
 /** A value-only copy of the titlebar area available to application content. */
 export type WindowControlsOverlayGeometry = {
   readonly visible: boolean;
-  readonly titlebarArea: {
-    readonly x: number;
-    readonly y: number;
-    readonly width: number;
-    readonly height: number;
-  };
+  readonly titlebarArea: TitlebarAreaRect;
 };
 
 /** Minimal browser surface consumed by this recipe. */

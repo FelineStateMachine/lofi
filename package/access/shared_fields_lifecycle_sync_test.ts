@@ -8,27 +8,30 @@
 import { createDb, schema as jazz } from "jazz-tools";
 import { deploy, startLocalJazzServer } from "jazz-tools/testing";
 import {
-  bootstrapGroupFieldKey,
   defineAccessPolicies,
   groupAccess,
   groupMembershipTable,
   groupRoleCapabilities,
-  reconcileSharedFieldKeys,
-  rotateGroupFieldKey,
   sharedFieldAccess,
   sharedFieldDirectoryTable,
   sharedFieldKeyTable,
+} from "./mod.ts";
+import {
+  bootstrapGroupFieldKey,
+  reconcileSharedFieldKeys,
+  rotateGroupFieldKey,
   type SharedFieldLifecycleContext,
   wrapHeldKeysForMember,
-} from "./mod.ts";
+} from "./shared-field-lifecycle.ts";
 import { s } from "../schema/mod.ts";
-import {
-  clearSharedColumnRegistry,
-  clearSharedFieldKeys,
-  type SharedFieldValue,
-} from "../schema/mod.ts";
+import { type SharedFieldValue } from "../schema/mod.ts";
+import { clearSharedColumnRegistry } from "../schema/shared-registry.ts";
 import { clearEncryptedColumnRegistry } from "../schema/encrypted.ts";
-import { clearSharedFieldIdentity, installSharedFieldIdentity } from "../schema/shared-keyring.ts";
+import {
+  clearSharedFieldIdentity,
+  clearSharedFieldKeys,
+  installSharedFieldIdentity,
+} from "../schema/shared-keyring.ts";
 import { sealSharedColumnValuesSync } from "../runtime/shared-field-write.ts";
 import {
   clearFingerprintPins,

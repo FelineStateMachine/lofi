@@ -18,6 +18,7 @@ import {
   generateFieldKey,
   publicKeyFingerprint,
   SharedFieldError,
+  type SharedFieldErrorCode,
   wrapFieldKey,
 } from "../schema/shared-crypto.ts";
 import {
@@ -66,7 +67,7 @@ type MemberRow = { user_id: string };
 type DirectoryEntry = { user_id: string; algo: string; public_key: string };
 
 /** Why a member could not receive a wrap; the pending state persists. */
-export type WrapSkip = "no-directory-entry" | "peer-key-changed";
+export type WrapSkip = Extract<SharedFieldErrorCode, "no-directory-entry" | "peer-key-changed">;
 
 async function wrapTo(
   context: SharedFieldLifecycleContext,
@@ -144,10 +145,7 @@ export async function bootstrapGroupFieldKey(
   installSharedFieldKey(sharedKeyScope(context.groupTable, groupId), 1, fieldKey);
   const skip = await wrapTo(context, groupId, 1, fieldKey, context.userId);
   if (skip !== null) {
-    throw new SharedFieldError(
-      skip === "no-directory-entry" ? "no-directory-entry" : "peer-key-changed",
-      "the group key could not be wrapped to its creator",
-    );
+    throw new SharedFieldError(skip, "the group key could not be wrapped to its creator");
   }
 }
 

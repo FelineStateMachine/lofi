@@ -112,6 +112,16 @@ export function clearProvisionCapability(): void {
   }
 }
 
+/** What a completed sealing ceremony reports about the sealed record. */
+export type SealOutcome = {
+  /**
+   * Whether the sealing passkey roams across the user's devices (a
+   * password-manager or platform-synced credential) rather than being bound
+   * to this one device — and with it, where the sealed record can unlock.
+   */
+  portable: boolean;
+};
+
 /**
  * Seals the held provision capability under a passkey-PRF slot in one
  * user-verifying ceremony. The PRF evaluation is attempted, never
@@ -122,7 +132,7 @@ export function clearProvisionCapability(): void {
  */
 export async function sealProvisionCapability(
   options: AuthenticateOptions = {},
-): Promise<{ portable: boolean }> {
+): Promise<SealOutcome> {
   if (heldUrl === null) {
     throw new EnvelopeError("locked", "no provision capability is held to seal");
   }

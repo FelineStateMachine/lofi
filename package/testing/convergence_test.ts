@@ -109,6 +109,38 @@ Deno.test("offline convergence captures the failing stage and restores connectiv
   );
 });
 
+Deno.test("offline convergence surfaces a failed artifact capture on the scenario error", async () => {
+  class CaptureFailingFixture extends FakeFixture {
+    override captureFailure(): Promise<void> {
+      return Promise.reject(new TypeError("state contains a string value"));
+    }
+  }
+  const fixture = new CaptureFailingFixture();
+  const editFailure = new Error("edit failed");
+  try {
+    await runConcurrentOfflineConvergence(fixture, {
+      edits: [1, 2],
+      ready: () => Promise.resolve(),
+      apply: () => Promise.reject(editFailure),
+      locallyApplied: () => Promise.resolve(),
+      converged: () => Promise.resolve(),
+    });
+    throw new Error("expected scenario failure");
+  } catch (error) {
+    assert(error instanceof ConvergenceScenarioError, `unexpected error: ${error}`);
+    assert(error.cause === editFailure, "scenario failure was displaced from the cause");
+    assert(
+      error.captureError instanceof TypeError &&
+        error.captureError.message.includes("string value"),
+      `capture failure was not surfaced: ${error.captureError}`,
+    );
+    assert(
+      error.message.includes("failure-artifact capture also failed"),
+      `message hides the capture failure: ${error.message}`,
+    );
+  }
+});
+
 Deno.test("offline convergence bounds a never-settling app predicate", async () => {
   const fixture = new FakeFixture();
   try {

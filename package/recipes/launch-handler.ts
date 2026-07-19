@@ -17,7 +17,7 @@ export type InstalledAppLaunchQueue = {
 
 /** A parsed launch URL proven to stay inside the configured application scope. */
 export type InstalledAppLaunchTarget = {
-  url: string;
+  readonly url: string;
 };
 
 /** Stable rejection that never contains the received launch URL. */
@@ -34,7 +34,7 @@ export type InstalledAppLaunchResult =
   | { ok: false; issue: InstalledAppLaunchIssue };
 
 /** Options for registering one launch-queue consumer. */
-export type InstallLaunchConsumerOptions = {
+export type InstalledAppLaunchConsumerOptions = {
   /** Absolute application scope URL, normally derived from `import.meta.env.BASE_URL`. */
   scope: string | URL;
   /** Override the browser queue for tests. */
@@ -46,13 +46,13 @@ export type InstallLaunchConsumerOptions = {
 };
 
 /** Result of feature-detecting and registering the launch consumer. */
-export type InstalledLaunchConsumer = {
-  supported: boolean;
+export type InstalledAppLaunchConsumer = {
+  readonly supported: boolean;
   dispose(): void;
 };
 
 /** Options for registering one raw browser launch-queue consumer. */
-export type InstallLaunchQueueConsumerOptions = {
+export type InstalledAppLaunchQueueConsumerOptions = {
   /** Override the browser queue for tests. */
   queue?: InstalledAppLaunchQueue;
   /** Receives browser launch parameters without trusting or interpreting them. */
@@ -108,8 +108,8 @@ export function parseInstalledAppLaunchTarget(
  * launches.
  */
 export function installInstalledAppLaunchConsumer(
-  options: InstallLaunchConsumerOptions,
-): InstalledLaunchConsumer {
+  options: InstalledAppLaunchConsumerOptions,
+): InstalledAppLaunchConsumer {
   const scope = configuredScope(options.scope);
   return installInstalledAppLaunchQueueConsumer({
     queue: options.queue,
@@ -129,8 +129,8 @@ export function installInstalledAppLaunchConsumer(
  * launch recipes. Treat every delivered parameter as untrusted input.
  */
 export function installInstalledAppLaunchQueueConsumer(
-  options: InstallLaunchQueueConsumerOptions,
-): InstalledLaunchConsumer {
+  options: InstalledAppLaunchQueueConsumerOptions,
+): InstalledAppLaunchConsumer {
   const queue = options.queue ?? browserLaunchQueue();
   if (!queue) return { supported: false, dispose() {} };
   const owner = Symbol("lofi-launch-consumer");

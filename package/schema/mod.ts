@@ -24,7 +24,7 @@
  */
 import { schema } from "jazz-tools";
 import { effect, insert, log, mutation, remove, update } from "./effects.ts";
-import { encryptedJson, encryptedText } from "./encrypted.ts";
+import { encryptedDate, encryptedJson, encryptedNumber, encryptedText } from "./encrypted.ts";
 import {
   defineNestedApp,
   defineNestedPermissions,
@@ -77,6 +77,8 @@ export type SchemaDsl =
     flattenNestedSchema: typeof flattenNestedSchema;
     encryptedText: typeof encryptedText;
     encryptedJson: typeof encryptedJson;
+    encryptedNumber: typeof encryptedNumber;
+    encryptedDate: typeof encryptedDate;
     mutation: typeof mutation;
     effect: typeof effect;
     log: typeof log;
@@ -90,7 +92,8 @@ export type SchemaDsl =
  * place of a raw `jazz-tools` import; Jazz member names and behavior are
  * identical to the pinned Jazz 2 DSL. The lofi-owned members: nested
  * namespaces ({@link defineNestedApp}), sealed columns ({@link encryptedText},
- * {@link encryptedJson}), and the verb grammar — {@link mutation} declares
+ * {@link encryptedJson}, {@link encryptedNumber}, {@link encryptedDate}), and
+ * the verb grammar — {@link mutation} declares
  * callable verbs over {@link insert}, {@link update}, and {@link remove},
  * carrying {@link effect} units and {@link log} entries. Verb calls return a
  * `WriteHandle`, observed in UI through `useWrite` and `usePendingWrites`
@@ -104,6 +107,8 @@ export const s: SchemaDsl = {
   flattenNestedSchema,
   encryptedText,
   encryptedJson,
+  encryptedNumber,
+  encryptedDate,
   mutation,
   effect,
   log,
@@ -115,7 +120,9 @@ export const s: SchemaDsl = {
 export {
   clearEncryptedColumnKey,
   EncryptedColumnError,
+  encryptedDate,
   encryptedJson,
+  encryptedNumber,
   encryptedText,
   setEncryptedColumnKey,
 } from "./encrypted.ts";

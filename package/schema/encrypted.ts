@@ -9,9 +9,15 @@
  * Mechanics: an encrypted column is a stored `string` column whose
  * TypeScript-boundary transform seals on insert/update and opens on read
  * (XChaCha20-Poly1305; per-column subkeys via HKDF over the column label,
- * with the label bound as associated data so ciphertext cannot be replayed
- * across columns). Transforms are synchronous in the pinned engine, so the
- * cipher is the audited `@noble` implementation rather than WebCrypto.
+ * with the label and format version bound as associated data so ciphertext
+ * cannot be replayed across columns or format versions). Transforms are
+ * synchronous in the pinned engine, so the cipher is the audited `@noble`
+ * implementation rather than WebCrypto.
+ *
+ * Plaintext is padded to bucket sizes before sealing ({@link ../padding.ts}),
+ * so the store sees a size class, not an exact content length. New values are
+ * written in the padded `enc2.` format; legacy unpadded `enc1.` values remain
+ * readable and re-seal as `enc2.` on their next write.
  *
  * Constraints that fall out of the design, enforced or documented:
  * - The runtime installs the key at boot ({@link setEncryptedColumnKey});
@@ -33,6 +39,7 @@ import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha2";
 import { schema, type StringColumn } from "jazz-tools";
+import { padPayload, unpadPayload } from "./padding.ts";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -108,17 +115,25 @@ function fromBase64Url(text: string): Uint8Array {
   return bytes;
 }
 
-const STORED_PREFIX = "enc1.";
+const LEGACY_PREFIX = "enc1.";
+const STORED_PREFIX = "enc2.";
 const NONCE_LENGTH = 24;
+
+// The format version is bound as associated data because the prefix sits
+// outside the AEAD: without it, rewriting one prefix into the other would
+// hand the wrong unpacking to an authenticated plaintext.
+function associatedData(label: string, prefix: string): Uint8Array {
+  return textEncoder.encode(
+    prefix === LEGACY_PREFIX
+      ? `lofi:encrypted-column:${label}`
+      : `lofi:encrypted-column:enc2:${label}`,
+  );
+}
 
 function seal(label: string, plaintext: string): string {
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_LENGTH));
-  const cipher = xchacha20poly1305(
-    labelKey(label),
-    nonce,
-    textEncoder.encode(`lofi:encrypted-column:${label}`),
-  );
-  const ciphertext = cipher.encrypt(textEncoder.encode(plaintext));
+  const cipher = xchacha20poly1305(labelKey(label), nonce, associatedData(label, STORED_PREFIX));
+  const ciphertext = cipher.encrypt(padPayload(textEncoder.encode(plaintext)));
   const stored = new Uint8Array(NONCE_LENGTH + ciphertext.length);
   stored.set(nonce);
   stored.set(ciphertext, NONCE_LENGTH);
@@ -126,13 +141,18 @@ function seal(label: string, plaintext: string): string {
 }
 
 function open(label: string, stored: string): string {
-  if (typeof stored !== "string" || !stored.startsWith(STORED_PREFIX)) {
+  const prefix = typeof stored === "string" && stored.startsWith(STORED_PREFIX)
+    ? STORED_PREFIX
+    : typeof stored === "string" && stored.startsWith(LEGACY_PREFIX)
+    ? LEGACY_PREFIX
+    : null;
+  if (prefix === null) {
     throw new EncryptedColumnError(
       "corrupt",
       `encrypted column "${label}" holds a value without the sealed-format prefix`,
     );
   }
-  const bytes = fromBase64Url(stored.slice(STORED_PREFIX.length));
+  const bytes = fromBase64Url(stored.slice(prefix.length));
   if (bytes.length <= NONCE_LENGTH) {
     throw new EncryptedColumnError(
       "corrupt",
@@ -142,10 +162,11 @@ function open(label: string, stored: string): string {
   const cipher = xchacha20poly1305(
     labelKey(label),
     bytes.slice(0, NONCE_LENGTH),
-    textEncoder.encode(`lofi:encrypted-column:${label}`),
+    associatedData(label, prefix),
   );
   try {
-    return textDecoder.decode(cipher.decrypt(bytes.slice(NONCE_LENGTH)));
+    const plaintext = cipher.decrypt(bytes.slice(NONCE_LENGTH));
+    return textDecoder.decode(prefix === STORED_PREFIX ? unpadPayload(plaintext) : plaintext);
   } catch {
     throw new EncryptedColumnError(
       "corrupt",
@@ -184,4 +205,58 @@ export function encryptedJson<T = unknown>(label: string): StringColumn<false, f
     to: (value: T) => seal(label, JSON.stringify(value)),
     from: (value: string) => JSON.parse(open(label, value)) as T,
   }) as unknown as StringColumn<false, false, T>;
+}
+
+/**
+ * A number column sealed on the client before it enters Jazz; the view type
+ * is `number`. Same label semantics as {@link encryptedText}. The stored
+ * representation is text, so values beyond the plain integer column's 32-bit
+ * range round-trip exactly up to double precision. Non-finite values are
+ * rejected at write time.
+ */
+export function encryptedNumber(label: string): StringColumn<false, false, number> {
+  return schema.string().transform({
+    to: (value: number) => {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new TypeError(`encrypted column "${label}" only stores finite numbers`);
+      }
+      return seal(label, String(value));
+    },
+    from: (value: string) => {
+      const parsed = Number(open(label, value));
+      if (!Number.isFinite(parsed)) {
+        throw new EncryptedColumnError(
+          "corrupt",
+          `encrypted column "${label}" opened to a non-numeric payload`,
+        );
+      }
+      return parsed;
+    },
+  }) as unknown as StringColumn<false, false, number>;
+}
+
+/**
+ * A date column sealed on the client before it enters Jazz; the view type is
+ * `Date`, matching the plain timestamp column. Same label semantics as
+ * {@link encryptedText}. Invalid dates are rejected at write time.
+ */
+export function encryptedDate(label: string): StringColumn<false, false, Date> {
+  return schema.string().transform({
+    to: (value: Date) => {
+      if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+        throw new TypeError(`encrypted column "${label}" only stores valid dates`);
+      }
+      return seal(label, String(value.getTime()));
+    },
+    from: (value: string) => {
+      const epochMs = Number(open(label, value));
+      if (!Number.isInteger(epochMs)) {
+        throw new EncryptedColumnError(
+          "corrupt",
+          `encrypted column "${label}" opened to a non-date payload`,
+        );
+      }
+      return new Date(epochMs);
+    },
+  }) as unknown as StringColumn<false, false, Date>;
 }

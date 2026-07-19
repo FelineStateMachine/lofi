@@ -56,6 +56,8 @@ const app = s.defineApp({
   sealed: s.table({
     body: s.encryptedText("sealed.body"),
     meta: s.encryptedJson<{ note: string }>("sealed.meta"),
+    amount: s.encryptedNumber("sealed.amount"),
+    at: s.encryptedDate("sealed.at"),
     label: s.string(),
   }),
 });
@@ -556,9 +558,15 @@ Deno.test("encrypted columns round-trip through the engine and store only cipher
   try {
     const db = testApp.as(session("author"));
     const body = "the sealed plaintext body";
+    // The number exceeds the pinned i32 int-column limit on purpose: sealed
+    // numbers ride TEXT and must not inherit it.
+    const amount = 2 ** 40 + 0.5;
+    const at = new Date("2026-07-19T12:34:56.789Z");
     const row = await db.insert(app.sealed, {
       body,
       meta: { note: "sealed json" },
+      amount,
+      at,
       label: "first",
     }).wait({ tier: "global" });
     assert(row.body === body, `sealed: insert returned ${describeValue(row.body)}`);
@@ -569,6 +577,14 @@ Deno.test("encrypted columns round-trip through the engine and store only cipher
       sameValue(readBack.meta, { note: "sealed json" }),
       `sealed: json view was ${describeValue(readBack.meta)}`,
     );
+    assert(
+      readBack.amount === amount,
+      `sealed: number view was ${describeValue(readBack.amount)}`,
+    );
+    assert(
+      readBack.at instanceof Date && readBack.at.getTime() === at.getTime(),
+      `sealed: date view was ${describeValue(readBack.at)}`,
+    );
 
     // Filters address the stored representation: the plaintext must match
     // nothing, because the engine never held it.
@@ -578,6 +594,21 @@ Deno.test("encrypted columns round-trip through the engine and store only cipher
     assert(
       byPlaintext.length === 0,
       `sealed: a where on the plaintext matched ${byPlaintext.length} rows — the store saw plaintext`,
+    );
+    // CONFORMANCE FINDING (alpha.53): a where on a sealed number column with
+    // the plaintext number throws in the query adapter (a number value
+    // against a TEXT-stored column is a type mismatch), rather than matching
+    // zero rows like the string case above. Pinned: loud is acceptable;
+    // plaintext must never match.
+    let plainNumberRefused = false;
+    try {
+      await db.all(app.sealed.where({ amount } as never));
+    } catch {
+      plainNumberRefused = true;
+    }
+    assert(
+      plainNumberRefused,
+      "sealed: pinned engine behavior changed — a plaintext-number where no longer throws",
     );
 
     await db.update(app.sealed, row.id, { body: "rewritten sealed body" }).wait({

@@ -32,10 +32,12 @@ state, evaluates permission policies, and serves queries. Three consequences fol
 
 ## Encrypted columns: content the server cannot read
 
-Fields declared with `s.encryptedText` / `s.encryptedJson` are sealed on the client before they
-enter Jazz. The key derives from the account secret, so every device holding the account decrypts
-and nobody else can, including the store operator. For those fields the server's view degrades to
-"rows of a certain size and cadence exist."
+Fields declared with `s.encryptedText`, `s.encryptedJson`, `s.encryptedNumber`, or `s.encryptedDate`
+are sealed on the client before they enter Jazz. The key derives from the account secret, so every
+device holding the account decrypts and nobody else can, including the store operator. Plaintext is
+padded to bucketed sizes before sealing, so for those fields the server's view degrades to "rows of
+a certain size class and cadence exist" — all short values share one class, and larger values reveal
+only a coarse bucket.
 
 The constraints are mechanical, not policy: an encrypted column cannot be a filter or permission
 target, because the server cannot evaluate what it cannot read; and it is account-private — a row

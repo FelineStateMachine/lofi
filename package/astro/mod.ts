@@ -80,6 +80,7 @@ export const schemaFiles = [
   "encrypted.ts",
   "mod.ts",
   "nested.ts",
+  "padding.ts",
   "store.ts",
 ] as const;
 

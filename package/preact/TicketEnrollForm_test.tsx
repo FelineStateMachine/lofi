@@ -1,5 +1,7 @@
 import { render } from "npm:preact-render-to-string@6.7.0";
-import { TicketEnrollForm } from "./TicketEnrollForm.tsx";
+import { describeEnrollmentProblem, TicketEnrollForm } from "./TicketEnrollForm.tsx";
+import { SyncEnrollmentError } from "../runtime/session.ts";
+import { SyncOwnerError } from "../runtime/sync-owner.ts";
 
 // The form's manager-facing semantics are the contract: password managers key
 // on a real form with a current-password field, a username companion, and a
@@ -27,5 +29,22 @@ Deno.test("TicketEnrollForm states the custody story without overclaiming", () =
   }
   if (!html.includes("password manager")) {
     throw new Error("the manager custody guidance was omitted");
+  }
+});
+
+// The typed refusals carry their own remediation text; the form must relay it
+// verbatim rather than flattening every failure into the generic retry line.
+Deno.test("enrollment problems relay typed refusals and stay generic otherwise", () => {
+  const refused = describeEnrollmentProblem(new SyncEnrollmentError("no_schema", "sync"));
+  if (!refused.includes("no schema deployed")) {
+    throw new Error("the store refusal's own message was not relayed");
+  }
+  const owned = describeEnrollmentProblem(new SyncOwnerError("user-1"));
+  if (!owned.includes("different account")) {
+    throw new Error("the owner refusal's own message was not relayed");
+  }
+  const generic = describeEnrollmentProblem(new Error("socket hang up"));
+  if (generic.includes("socket hang up") || !generic.includes("paste it again")) {
+    throw new Error("an unclassified failure must map to the generic retry instruction");
   }
 });

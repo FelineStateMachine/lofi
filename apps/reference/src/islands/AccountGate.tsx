@@ -4,16 +4,22 @@ import {
   createBackupPasskey,
   createRecoverablePasskeyBackup,
   enableSyncBackup,
+  getRuntimeDiagnostics,
   isAccountReplacementError,
   isAuthError,
   isRecoverablePasskeyError,
   isRecoveryError,
+  isSyncEnrollmentError,
+  isSyncOwnerError,
   readAccountSession,
   restoreFromPasskey,
   restoreFromRecoveryPhrase,
   revealRecoveryPhrase,
+  runtimeRecreatedEvent,
+  type RuntimeStoreStatus,
   type Session,
   stopSyncBackup,
+  subscribeRuntimeDiagnostics,
 } from "@nzip/lofi";
 import { encodeSharingIdentity } from "@nzip/lofi/access";
 import { TicketEnrollForm } from "@nzip/lofi/preact";
@@ -54,6 +60,9 @@ function describe(error: unknown): string {
   }
   if (isRecoveryError(error)) return error.message;
   if (isRecoverablePasskeyError(error) || isAccountReplacementError(error)) return error.message;
+  // The sync refusals carry their own remediation text (a store that cannot
+  // serve the app; sync owned by a different account) — relay it verbatim.
+  if (isSyncEnrollmentError(error) || isSyncOwnerError(error)) return error.message;
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -75,8 +84,34 @@ export default function AccountGate() {
   const [unguarded, setUnguarded] = useState(false);
 
   useEffect(() => {
-    void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
+    const refresh = () => {
+      void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
+    };
+    refresh();
+    // The session changes outside this island's own actions — another tab
+    // electing or stopping sync, a runtime recreation after restore — so the
+    // snapshot re-reads on those signals instead of holding the mount value.
+    // The storage handler only reads; writing here would echo across tabs.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key.startsWith("lofi:")) refresh();
+    };
+    globalThis.addEventListener(runtimeRecreatedEvent, refresh);
+    globalThis.addEventListener("storage", onStorage);
+    return () => {
+      globalThis.removeEventListener(runtimeRecreatedEvent, refresh);
+      globalThis.removeEventListener("storage", onStorage);
+    };
   }, []);
+
+  // The store's boot preflight (deployed / no schema / unreachable) belongs
+  // next to the sync controls, not only in the device report.
+  const [storeStatus, setStoreStatus] = useState<RuntimeStoreStatus>(
+    () => getRuntimeDiagnostics().storeStatus,
+  );
+  useEffect(
+    () => subscribeRuntimeDiagnostics(() => setStoreStatus(getRuntimeDiagnostics().storeStatus)),
+    [],
+  );
 
   // Every account action funnels through here: one busy flag, one error line,
   // and any returned Session becomes the new snapshot.
@@ -209,6 +244,56 @@ export default function AccountGate() {
     );
   }
 
+  // The store preflight's answer, rendered next to the sync controls: a store
+  // that cannot serve the app explains why writes will not sync, without the
+  // user opening the device report.
+  const storeNotice = storeStatus.state === "no_schema"
+    ? <p class="account-note" role="status">{storeStatus.message}</p>
+    : storeStatus.state === "store_unavailable"
+    ? (
+      <p class="account-note" role="status">
+        The store did not answer just now — writes stay safe on this device and sync when it
+        returns.
+      </p>
+    )
+    : storeStatus.state === "ticket_rejected"
+    ? (
+      <p class="account-note" role="status">
+        The node no longer accepts this device's credential. Clear the sync location and enroll a
+        fresh ticket; local data is intact and pushes up on re-enrollment.
+      </p>
+    )
+    : null;
+
+  // Sync on this device belongs to a different account: nothing replicates
+  // until the user explicitly releases the election or restores the owner.
+  if (session.syncOwnerMismatch) {
+    return (
+      <section class="account account-out" aria-labelledby="account-title">
+        <header>
+          <p class="eyebrow">Account</p>
+          <h2 id="account-title">Sync belongs to another account</h2>
+        </header>
+        <p>
+          Sync on this device was set up by a different account, so nothing replicates right now —
+          this account's writes stay on this device. Stop syncing to release the connection and
+          continue with this account, or restore the owning account below.
+        </p>
+        <div class="account-actions">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => run("stop", stopSyncBackup)}
+          >
+            {busy === "stop" ? "Stopping…" : "Stop syncing"}
+          </button>
+        </div>
+        {restoreBlock}
+        {error && <p class="account-error" role="alert">{error}</p>}
+      </section>
+    );
+  }
+
   const phraseBlock = phrase && (
     <div class="account-phrase">
       <p class="account-note">
@@ -302,6 +387,7 @@ export default function AccountGate() {
             {busy === "stop" ? "Stopping…" : "Stop syncing"}
           </button>
         </div>
+        {storeNotice}
         {phraseBlock}
         {error && <p class="account-error" role="alert">{error}</p>}
       </section>
@@ -345,6 +431,7 @@ export default function AccountGate() {
         )}
       </div>
       {restoreBlock}
+      {storeNotice}
       {phraseBlock}
       {pendingEnable && (
         <div class="account-actions">

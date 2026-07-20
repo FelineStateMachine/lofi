@@ -7,7 +7,9 @@ import {
   type SealOutcome,
   sealProvisionCapability,
 } from "../runtime/provision.ts";
-import { enrollSyncTicket, type Session } from "../runtime/session.ts";
+import { enrollSyncTicket, isSyncEnrollmentError, type Session } from "../runtime/session.ts";
+import { isSyncOwnerError } from "../runtime/sync-owner.ts";
+import { getRuntimeDiagnostics } from "../runtime/runtime.ts";
 
 /** Dependencies {@link TicketEnrollForm} accepts for testing and composition. */
 export interface TicketEnrollFormProps {
@@ -24,10 +26,24 @@ export interface TicketEnrollFormProps {
 type Phase =
   | { name: "edit"; problem?: string }
   | { name: "enrolling" }
-  | { name: "enrolled"; sealOffer: boolean }
+  | { name: "enrolled"; sealOffer: boolean; warning?: string }
   | { name: "sealing" }
   | { name: "sealed"; portable: boolean }
   | { name: "custody"; reason: "prf-unavailable" | "cancelled" };
+
+// The store answered but could not be reached just now; enrollment was kept,
+// and the same status keeps showing in the device report until it clears.
+const unreachableWarning =
+  "Connected, but the store did not answer just now — if syncing does not start, check the node.";
+
+// The typed refusals carry user-presentable messages naming their remediation;
+// everything else gets the generic retry instruction. Exported for tests; the
+// entry does not re-export it.
+export function describeEnrollmentProblem(error: unknown): string {
+  return isDataSinkError(error) || isSyncEnrollmentError(error) || isSyncOwnerError(error)
+    ? error.message
+    : "Enrollment failed; check the ticket and the node, then paste it again.";
+}
 
 // Asks the browser's password manager to save the ticket against this origin
 // explicitly (Chromium honors the Credential Management call; other engines
@@ -98,13 +114,15 @@ export function TicketEnrollForm({
       const session = await enroll(ticket);
       await offerTicketToPasswordManager(label || "sync ticket", ticket);
       const provision = provisionCapabilityStatus();
-      setPhase({ name: "enrolled", sealOffer: provision.held && !provision.sealed });
+      const unreachable = getRuntimeDiagnostics().storeStatus.state === "store_unavailable";
+      setPhase({
+        name: "enrolled",
+        sealOffer: provision.held && !provision.sealed,
+        ...(unreachable ? { warning: unreachableWarning } : {}),
+      });
       onEnrolled?.(session);
     } catch (error) {
-      const problem = isDataSinkError(error)
-        ? error.message
-        : "Enrollment failed; check the ticket and the node, then paste it again.";
-      setPhase({ name: "edit", problem });
+      setPhase({ name: "edit", problem: describeEnrollmentProblem(error) });
     }
   }
 
@@ -127,6 +145,7 @@ export function TicketEnrollForm({
       <section>
         <h2>{title}</h2>
         <p>Connected. This ticket also carries admin access to the store.</p>
+        {phase.warning ? <p role="status">{phase.warning}</p> : null}
         <button type="button" onClick={() => void onSeal()}>
           Protect admin access with your passkey
         </button>
@@ -178,6 +197,7 @@ export function TicketEnrollForm({
       <section>
         <h2>{title}</h2>
         <p>{phase.name === "sealing" ? "Waiting for your passkey…" : "Connected and syncing."}</p>
+        {phase.name === "enrolled" && phase.warning ? <p role="status">{phase.warning}</p> : null}
       </section>
     );
   }

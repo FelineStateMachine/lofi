@@ -80,7 +80,10 @@ export function DeviceStatus(): VNode {
     : sinkUnopenable
     ? "declared — record unopenable on this device"
     : "not configured";
-  const syncState = session?.syncing
+  const ownerMismatch = Boolean(session?.syncOwnerMismatch);
+  const syncState = ownerMismatch
+    ? "paused — set up by another account"
+    : session?.syncing
     ? "syncing to your account"
     : session?.syncAvailable
     ? "available — not yet backed up"
@@ -158,10 +161,21 @@ export function DeviceStatus(): VNode {
             data is intact and pushes up.
           </p>
         )}
-        {!synced && (
+        {ownerMismatch && (
           <p>
-            Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in <code>.env</code>{" "}
-            and rebuild, or enroll a sync ticket at runtime, to replicate writes to your account.
+            Sync on this device was set up by a different account
+            {runtimeDiagnostics.syncOwner.state === "mismatch" &&
+                runtimeDiagnostics.syncOwner.owner_user_id
+              ? ` (${runtimeDiagnostics.syncOwner.owner_user_id.slice(0, 12)}…)`
+              : ""}, so nothing replicates — the runtime will not write this account into another
+            account's store. Stop syncing to release it, or restore the owning account, then enable
+            sync again.
+          </p>
+        )}
+        {!synced && !sinkUnopenable && (
+          <p>
+            Enroll a sync ticket from your node to replicate writes to your account. A deployment
+            with a managed Jazz app configures its sync location at build time instead.
           </p>
         )}
       </div>

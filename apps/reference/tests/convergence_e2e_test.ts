@@ -1,12 +1,7 @@
-import type {
-  BrowserTestClient,
-  ConcurrentOfflineScenario,
-  TwoClientFixture,
-} from "@nzip/lofi/testing";
-
 /**
- * A real, worked example of the `@nzip/lofi/testing` toolkit: two browser
- * clients each add a task while offline, then reconnect and converge on both.
+ * A real, worked example of the `@nzip/lofi/testing` browser scenario: two
+ * browser clients each add a task while offline, then reconnect and converge
+ * on both.
  *
  * This is an opt-in browser gate, not part of `deno task test`:
  *   1. Configure managed sync (JAZZ_APP_ID + JAZZ_SERVER_URL in .env) with the
@@ -26,6 +21,8 @@ import type {
  * default suite stays fast and never launches a browser.
  */
 
+import type { BrowserScenarioPeer } from "@nzip/lofi/testing";
+
 function e2eBaseURL(): string | undefined {
   // The default suite runs without --allow-env; treat a denied read as "skip".
   try {
@@ -42,98 +39,75 @@ const taskListReady = () => {
   return status !== null && /item\(s\)/.test(status.textContent ?? "");
 };
 
-Deno.test("two clients converge on concurrent offline task edits", async () => {
-  const baseURL = e2eBaseURL();
-  if (!baseURL) {
+const baseURL = e2eBaseURL();
+if (baseURL === undefined) {
+  Deno.test("two clients converge on concurrent offline task edits", () => {
     console.log(
       "skipping convergence example; set LOFI_E2E_BASE_URL to a synced deployment to run it",
     );
-    return;
-  }
-
+  });
+} else {
   // Imported lazily so the default suite never loads Playwright.
-  const {
-    BrowserUnavailableError,
-    createTwoClientFixture,
-    runConcurrentOfflineConvergence,
-    waitForReady,
-    withVirtualAuthenticator,
-  } = await import("@nzip/lofi/testing");
+  const { scenario, waitForReady, withVirtualAuthenticator } = await import("@nzip/lofi/testing");
 
-  const ready = (client: BrowserTestClient) =>
-    waitForReady(client.page, taskListReady, undefined, { description: `${client.name} ready` });
-  // The backup-and-sync election, driven through the real account UI. Cloning
-  // afterwards carries the elected, synced account into the second client.
-  const electSync = async (client: BrowserTestClient) => {
-    await withVirtualAuthenticator(client.page);
-    await client.page.getByRole("button", { name: "Back up & enable sync" }).click();
-    await client.page.locator('[aria-label="Recovery phrase"] li').first().waitFor({
-      state: "visible",
-      timeout: 30_000,
-    });
-    await client.page.getByRole("button", { name: "I saved my phrase — enable sync" }).click();
-    await client.page.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
-      state: "visible",
-      timeout: 30_000,
-    });
-    await ready(client);
+  const ready = (peer: BrowserScenarioPeer) =>
+    waitForReady(peer.page, taskListReady, undefined, { description: `${peer.name} ready` });
+  const addTask = async (peer: BrowserScenarioPeer, text: string) => {
+    await peer.page.fill("#new-task", text);
+    await peer.page.press("#new-task", "Enter");
   };
-  const addTask = async (client: BrowserTestClient, text: string) => {
-    await client.page.fill("#new-task", text);
-    await client.page.press("#new-task", "Enter");
-  };
-  const seeTask = (client: BrowserTestClient, text: string) =>
-    client.page.locator(".task", { hasText: text }).first().waitFor({
+  const seeTask = (peer: BrowserScenarioPeer, text: string) =>
+    peer.page.locator(".task", { hasText: text }).first().waitFor({
       state: "visible",
       timeout: 15_000,
     });
 
-  let fixture: TwoClientFixture | undefined;
-  try {
-    fixture = await createTwoClientFixture({
-      baseURL,
-      // Shared identity clones the first client's state in memory after the
-      // election, so both browser contexts act as the same synced account.
-      identity: {
-        mode: "shared",
-        preparePrimary: async (client) => {
-          await ready(client);
-          await electSync(client);
-        },
+  scenario.browser("two clients converge on concurrent offline task edits", {
+    baseURL,
+    // Shared identity clones the first client's state in memory after the
+    // election, so both browser contexts act as the same synced account. The
+    // election runs through the real account UI.
+    identity: {
+      mode: "shared",
+      preparePrimary: async (client) => {
+        const readyPage = () =>
+          waitForReady(client.page, taskListReady, undefined, { description: "primary ready" });
+        await readyPage();
+        await withVirtualAuthenticator(client.page);
+        await client.page.getByRole("button", { name: "Back up & enable sync" }).click();
+        await client.page.locator('[aria-label="Recovery phrase"] li').first().waitFor({
+          state: "visible",
+          timeout: 30_000,
+        });
+        await client.page.getByRole("button", { name: "I saved my phrase — enable sync" }).click();
+        await client.page.getByRole("heading", { name: "Backed up & syncing" }).waitFor({
+          state: "visible",
+          timeout: 30_000,
+        });
+        await readyPage();
       },
-      artifacts: { directory: "test-results" },
-    });
-  } catch (error) {
-    if (error instanceof BrowserUnavailableError) {
-      console.log(error.message);
-      return;
-    }
-    throw error;
-  }
+    },
+    ready,
+    // Failure artifacts stay value-free: counts and booleans only, no task text.
+    snapshot: async (peer) => ({
+      online: !peer.isOffline,
+      items: await peer.page.locator(".task").count(),
+    }),
+    artifacts: { directory: "test-results" },
+  }, async ({ alice, bob }) => {
+    await alice.offline();
+    await bob.offline();
+    await addTask(alice, "first client task");
+    await addTask(bob, "second client task");
+    await seeTask(alice, "first client task");
+    await seeTask(bob, "second client task");
+    await alice.online();
+    await bob.online();
 
-  try {
-    const scenario: ConcurrentOfflineScenario<string> = {
-      edits: ["first client task", "second client task"],
-      ready,
-      apply: addTask,
-      locallyApplied: seeTask,
-      converged: async ({ clients }) => {
-        await Promise.all(clients.map((client) =>
-          Promise.all([
-            seeTask(client, "first client task"),
-            seeTask(client, "second client task"),
-          ])
-        ));
-      },
-      // Failure artifacts stay value-free: counts and booleans only, no task text.
-      snapshot: async (client) => ({
-        online: !client.offline,
-        items: await client.page.locator(".task").count(),
-      }),
-      failureLabel: "task-convergence",
-    };
-    await runConcurrentOfflineConvergence(fixture, scenario);
-  } finally {
-    await fixture.close();
-  }
-});
+    // App-owned convergence: both tasks visible on both peers.
+    for (const peer of [alice, bob]) {
+      await seeTask(peer, "first client task");
+      await seeTask(peer, "second client task");
+    }
+  });
+}

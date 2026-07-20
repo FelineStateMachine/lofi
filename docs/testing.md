@@ -25,6 +25,83 @@ The default suite covers application tests without launching a browser. Framewor
 run once in the `@nzip/lofi` package suite instead of being copied into every application. Keep
 domain logic and permission-shape checks in this fast path when possible.
 
+## Simulation-test sync with scenarios
+
+The `@nzip/lofi/testing` scenario surface turns sync simulation testing into plain test
+declarations: named peers make concurrent and offline edits through your app's own schema, and the
+test asserts they converge.
+
+```ts
+import { assertNoRow, converge, scenario } from "@nzip/lofi/testing";
+import { app, permissions } from "../src/lofi/schema.ts";
+
+scenario("offline rename versus remote delete", { app, permissions }, async ({ alice, bob }) => {
+  const doc = await alice.db.documents.insert({ title: "Untitled" });
+  await converge(alice, bob);
+
+  await alice.offline();
+  await alice.db.documents.update(doc.id, { title: "Draft" });
+  await bob.db.documents.remove(doc.id);
+  await alice.online();
+  await alice.settle();
+
+  await alice.restart();
+  await converge(alice, bob);
+  await assertNoRow(alice, app.documents, doc.id);
+  await assertNoRow(bob, app.documents, doc.id);
+});
+```
+
+Each `scenario` call registers one test that boots a real local sync server, deploys the app's
+schema and permissions, creates the peers as real synced clients on a memory driver, and tears
+everything down afterwards. What converges in a scenario is what converges under production sync;
+nothing is mocked. The local server needs FFI, so run scenario tests explicitly with `deno test -A`
+rather than inside the default fast suite.
+
+Each peer offers:
+
+- `alice.db.<table>.insert / update / remove / all / get` — the app's own tables, applied to the
+  peer's local view immediately, online or offline;
+- `alice.offline()` and `alice.online()` — an offline window: edits keep applying locally and upload
+  on reconnect;
+- `alice.settle()` — wait until every write the peer issued has been durably accepted or adjudicated
+  by the sync node;
+- `alice.restart()` — close and reboot the peer with the same identity, dropping session-local state
+  and re-syncing from the server;
+- `addPeer("carol")` (on the scenario context) — boot a fresh reader, useful for asserting the
+  canonical state a new device would see.
+
+`converge(alice, bob)` settles the peers, then polls until every peer reads identical rows in every
+table, and fails with a per-table, per-peer diff at its deadline. `assertRow`, `assertNoRow`, and
+`assertRowCount` check one peer's local view. Two merge behaviors are built into the comparison:
+
+- counter-merged columns are compared by row presence, not value, because a live replica that
+  watched a counter's history reads a different total than a fresh boot of the same account;
+- a live replica that edited a row another peer concurrently deleted keeps showing its own write for
+  the rest of its session, even though the delete wins for every other view. Restart that peer to
+  observe the adjudicated outcome, as the example above does.
+
+Scenarios use real sync with scripted offline windows: op sequences are exactly reproducible, but
+network timing is not, so assertions poll within deadlines rather than assuming schedules.
+Transport-level fault injection (latency, dropped or reordered messages) and a virtual clock are not
+part of this surface.
+
+### Fuzz scenarios
+
+`scenario.fuzz` generates a seeded sequence of inserts, updates, removes, and offline windows across
+both peers, executes it, restarts the peers, and asserts that they and a fresh reader converge on
+identical state:
+
+```ts
+scenario.fuzz("fuzzed edits converge", { app, permissions, seed: 7, steps: 40 });
+```
+
+Omit `seed` to explore: each run picks a random seed, and every failure reports the seed and the
+full op trace. Replay a failure exactly by passing the reported seed (or setting `LOFI_FUZZ_SEED`).
+The generator drives tables whose required columns it can fill with scalar values and skips the
+rest; writes that the sync node legitimately rejects, such as updating a row the other peer already
+deleted, count as outcomes rather than failures — the invariant under test is convergence.
+
 ## Test the production build manually
 
 ```sh
@@ -97,12 +174,15 @@ deno run -A npm:playwright@1.61.1 install chromium
 
 ## Adapt the example to your UI
 
-Update these four pieces in `tests/convergence_e2e_test.ts`:
+The example is a `scenario.browser` declaration: the same scenario controls as the headless surface,
+driving two real browser clients against your served app. Update these pieces in
+`tests/convergence_e2e_test.ts`:
 
 - `ready` — a DOM condition proving the local store has hydrated;
-- `apply` — the user action that makes one local mutation;
-- `locallyApplied` — proof that the offline client rendered its own mutation;
-- `converged` — proof that both clients eventually render all expected results.
+- `snapshot` — a value-free view of the peer's state (counts and booleans, never user data),
+  compared when settling and captured in failure artifacts;
+- the body — page-mediated edits inside the offline window, then proof that both peers eventually
+  render all expected results.
 
 Use stable accessible roles, labels, and application-owned `data-*` attributes. Avoid arbitrary
 sleeps; readiness helpers retry observable conditions until their timeout.

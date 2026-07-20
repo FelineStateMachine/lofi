@@ -30,14 +30,22 @@ export type NoticesProps = {
  * @param props Optional region label and a custom per-notice renderer.
  * @returns The live notices region, or `null` when the queue is empty.
  */
-export function Notices({ label = "Notifications", children }: NoticesProps): VNode | null {
+export function Notices({ label = "Notifications", children }: NoticesProps): VNode {
   const { notices, dismiss } = useNotices();
-  if (notices.length === 0) return null;
+  // The live region stays mounted even when empty: a screen reader only
+  // announces mutations to a region already in the DOM, so inserting the
+  // region together with its first notice would drop that first announcement —
+  // exactly the message this surface exists to deliver.
   return (
-    <section class="lofi-notices" aria-label={label} aria-live="polite">
+    <section
+      class="lofi-notices"
+      aria-label={label}
+      aria-live="polite"
+      hidden={notices.length === 0}
+    >
       {notices.map((notice) =>
         children
-          ? children(notice, () => dismiss(notice.id))
+          ? <div key={notice.id}>{children(notice, () => dismiss(notice.id))}</div>
           : (
             <div key={notice.id} class="lofi-notice" data-tone={notice.tone} role="status">
               <p class="lofi-notice-message">{notice.message}</p>

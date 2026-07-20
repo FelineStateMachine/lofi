@@ -6,8 +6,11 @@ import {
   clearEffectDeclarations,
   effect,
   type EffectContext,
+  insert,
+  mutation,
   type MutationRuntime,
   type NoticeInput,
+  resolveEffectUnit,
   setMutationRuntime,
 } from "./effects.ts";
 
@@ -63,6 +66,30 @@ function context(overrides: Partial<EffectContext> = {}): EffectContext {
   };
 }
 
+// The identity guarantee: an anonymous built-in takes its durable name from
+// the verb it is attached to and its position in that verb's effects, NOT from
+// a global declaration counter. This is what makes a journaled notice/mark/
+// chain obligation re-arm against the same logical unit regardless of which
+// module evaluated first on the re-arming boot.
+Deno.test("anonymous units are named <verb>#<index>, stable and verb-scoped", () => {
+  clearEffectDeclarations();
+  install();
+  const orders = schema.defineApp({ orders: schema.table({ item: schema.string() }) }).orders;
+  mutation("placeOrder", insert(orders), {
+    effects: [notice({ synced: "Placed." }), mark(orders, { synced: { item: "x" } })],
+  });
+  mutation("reorder", insert(orders), {
+    effects: [notice({ synced: "Reordered." })],
+  });
+  // Position within the verb, not a global counter: reorder's notice is #0,
+  // not #2, so adding placeOrder above it cannot shift reorder's identity.
+  assert(resolveEffectUnit("placeOrder#0") !== null, "the first unit is <verb>#0");
+  assert(resolveEffectUnit("placeOrder#1") !== null, "the second unit is <verb>#1");
+  assert(resolveEffectUnit("reorder#0") !== null, "a second verb restarts the index at 0");
+  assert(resolveEffectUnit("reorder#1") === null, "reorder declares only one anonymous unit");
+  clearEffectDeclarations();
+});
+
 Deno.test("trace records a span with the saved-to-fate latency on either fate", () => {
   clearEffectDeclarations();
   const recorder = install();
@@ -71,6 +98,22 @@ Deno.test("trace records a span with the saved-to-fate latency on either fate", 
   unit.handlers.onRejected?.({ id: "row-1" }, context({ fate: "rejected" }));
   assertCount(recorder.traces.length, 2, "both fates must record a span");
   assert(recorder.traces[0].label === "checkout", "the span must carry the author label");
+  clearEffectDeclarations();
+});
+
+// The content-named built-ins share one unit per identity instead of throwing
+// a duplicate-name error when reused across verbs.
+Deno.test("trace and webhook share one unit per content across verbs", () => {
+  clearEffectDeclarations();
+  install();
+  assert(trace("checkout") === trace("checkout"), "one label shares one trace unit");
+  assert(trace() === trace(), "the unlabeled trace shares one unit");
+  const url = "https://hooks.example.com/x";
+  assert(webhook(url) === webhook(url), "one url+config shares one webhook unit");
+  assert(
+    webhook(url) !== webhook(url, { maxAttempts: 9 }),
+    "a different config is a distinct unit",
+  );
   clearEffectDeclarations();
 });
 

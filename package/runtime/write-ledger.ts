@@ -910,6 +910,7 @@ export function armWriteLedger(): Promise<void> {
 }
 
 let defaultNotices: NoticeQueue | null = null;
+let noticeSweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * The package-wide durable notice queue behind `s.notice`, created lazily and
@@ -919,7 +920,7 @@ let defaultNotices: NoticeQueue | null = null;
  */
 export function getNoticeQueue(): NoticeQueue {
   if (!defaultNotices) {
-    defaultNotices = new NoticeQueue(
+    const queue = new NoticeQueue(
       createDefaultNoticeStorage(appId),
       Date.now,
       (count) =>
@@ -927,15 +928,17 @@ export function getNoticeQueue(): NoticeQueue {
           diagnostics.activeNotices = count;
         }),
     );
-    // Load persisted entries and publish the initial count; a storage-less or
-    // prerender context simply starts empty.
-    void defaultNotices.load()
-      .then(() =>
-        updateRuntimeDiagnostics((diagnostics) => {
-          diagnostics.activeNotices = defaultNotices?.list().length ?? 0;
-        })
-      )
-      .catch(() => undefined);
+    defaultNotices = queue;
+    // Load persisted entries; the merged initial count publishes through the
+    // queue's own onCountChange. A storage-less or prerender context simply
+    // starts empty.
+    void queue.load().catch(() => undefined);
+    // A TTL-only expiry has no queue mutation to repaint it, so a modest
+    // periodic sweep retires expired entries and republishes the count.
+    if (typeof setInterval === "function") {
+      noticeSweepTimer = setInterval(() => queue.sweep(), 30_000);
+      (noticeSweepTimer as { unref?: () => void })?.unref?.();
+    }
   }
   return defaultNotices;
 }
@@ -1003,7 +1006,14 @@ setMutationRuntime({
       ttlMs: input.ttlMs,
     }),
   applyMark: async (table, rowId, patch) => {
-    await getWriteLedger().perform({ kind: "update", table, id: rowId, patch }).saved;
+    try {
+      await getWriteLedger().perform({ kind: "update", table, id: rowId, patch }).saved;
+    } catch {
+      // A mark is best-effort: the status patch may find no row (a row removed
+      // elsewhere) or be denied by policy. Swallow so the mark obligation does
+      // not re-arm and quarantine over a patch that will never land; the
+      // fate-as-data guarantee for must-survive signals belongs to s.notice.
+    }
   },
   unitRegistered: (name) => defaultLedger?.retryObligationsFor(name),
 });
@@ -1012,4 +1022,8 @@ import.meta.hot?.dispose(() => {
   defaultLedger?.dispose();
   defaultLedger = null;
   defaultNotices = null;
+  if (noticeSweepTimer !== null) {
+    clearInterval(noticeSweepTimer);
+    noticeSweepTimer = null;
+  }
 });

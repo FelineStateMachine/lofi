@@ -162,6 +162,15 @@ export type EffectUnit<Row = { id: string }> = {
   readonly expiresAfterMs?: number | null;
   /** Failing attempts before quarantine retires the obligation. */
   readonly maxAttempts?: number;
+  /**
+   * Set on a built-in unit the author did not name (`s.notice`, `s.mark`,
+   * `s.chain`). Such a unit is registered lazily, when a {@link mutation}
+   * includes it: its durable name becomes `<verb>#<position>` — stable across
+   * reloads because it derives from the author-chosen verb name and the unit's
+   * fixed position in that verb's `effects`, not from module-evaluation order.
+   * Absent on named units, which register at declaration.
+   */
+  readonly anonymousPrefix?: string;
 };
 
 /** Which operation a {@link MutationOp} performs. */
@@ -294,8 +303,8 @@ type EffectsSlot = {
   effects: Map<string, EffectUnit<{ id: string }>>;
   verbs: Map<string, MutationDescriptor>;
   logs: Map<string, EffectUnit<{ id: string }>>;
-  /** Monotonic counter naming anonymous built-in units in declaration order. */
-  anonSequence: number;
+  /** Cache for content-named built-ins (trace, debug, webhook) shared by name. */
+  cache: Map<string, EffectUnit<{ id: string }>>;
 };
 
 const slotName = "__LOFI_EFFECT_DECLARATIONS__";
@@ -307,7 +316,7 @@ function slot(): EffectsSlot {
     effects: new Map(),
     verbs: new Map(),
     logs: new Map(),
-    anonSequence: 0,
+    cache: new Map(),
   };
   return effectsGlobal[slotName];
 }
@@ -332,7 +341,7 @@ export function clearEffectDeclarations(): void {
   state.effects.clear();
   state.verbs.clear();
   state.logs.clear();
-  state.anonSequence = 0;
+  state.cache.clear();
 }
 
 // During dev hot replacement author modules re-evaluate routinely; the newest
@@ -453,17 +462,52 @@ export function requireMutationRuntime(): MutationRuntime {
 }
 
 /**
- * A stable-per-declaration name for an anonymous built-in unit (a notice,
- * mark, or chain the author did not name). The journal re-arms by name, and
- * these carry no author name, so their durable identity is declaration order
- * within one module-evaluation — deterministic across reloads for an unchanged
- * bundle. Reordering the verbs that declare them orphans in-flight obligations
- * the same way renaming a named unit does.
+ * Builds an anonymous built-in unit (a notice, mark, or chain the author did
+ * not name) without registering it. Registration is deferred to
+ * {@link mutation}, which names it `<verb>#<position>` from the verb it is
+ * attached to and its position in that verb's `effects`. That identity is
+ * stable across reloads regardless of which module evaluates first, so a
+ * journaled obligation always re-arms against the same logical unit; the only
+ * way to orphan one is to reorder the effects within its own verb.
  */
-export function anonymousEffectName(prefix: string): string {
+export function anonymousUnit<Row extends { id: string }>(
+  prefix: string,
+  handlers: EffectHandlers<Row>,
+  options: EffectUnitOptions = {},
+): EffectUnit<Row> {
+  return {
+    effectName: "",
+    handlers,
+    anonymousPrefix: prefix,
+    expiresAfterMs: options.expiresAfterMs ?? null,
+    ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
+  };
+}
+
+/**
+ * Returns the shared built-in unit registered under `name`, building and
+ * registering it on first use. For content-named observation and external
+ * units (`s.trace`, `s.debug`, `s.webhook`) whose whole identity is their
+ * name, so reusing one across verbs shares a single unit instead of colliding
+ * — the same discipline {@link log} follows.
+ */
+export function cachedBuiltin<Row extends { id: string }>(
+  name: string,
+  build: () => EffectHandlers<Row>,
+  options: EffectUnitOptions = {},
+): EffectUnit<Row> {
   const state = slot();
-  state.anonSequence = (state.anonSequence ?? 0) + 1;
-  return `${prefix}#${state.anonSequence}`;
+  const existing = state.cache.get(name);
+  if (existing) return existing as unknown as EffectUnit<Row>;
+  const unit: EffectUnit<Row> = {
+    effectName: name,
+    handlers: build(),
+    expiresAfterMs: options.expiresAfterMs ?? null,
+    ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
+  };
+  state.cache.set(name, unit as unknown as EffectUnit<{ id: string }>);
+  registerUnit(unit as unknown as EffectUnit<{ id: string }>);
+  return unit;
 }
 
 /**
@@ -510,12 +554,22 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
   }
   const units: EffectUnit<{ id: string }>[] = [];
   const seen = new Set<string>();
-  for (const unit of options.effects ?? []) {
+  const declared = options.effects ?? [];
+  for (let index = 0; index < declared.length; index += 1) {
+    let unit = declared[index] as EffectUnit<{ id: string }>;
+    if (unit.anonymousPrefix !== undefined) {
+      // An anonymous built-in (s.notice/s.mark/s.chain) is named and
+      // registered here, from the verb it is attached to and its position in
+      // this verb's effects — a durable identity independent of module load
+      // order. Register a finalized copy so the ledger resolves it at re-arm.
+      unit = { ...unit, effectName: `${name}#${index}`, anonymousPrefix: undefined };
+      registerUnit(unit);
+    }
     if (seen.has(unit.effectName)) {
       throw new Error(`mutation "${name}" declares effect "${unit.effectName}" twice`);
     }
     seen.add(unit.effectName);
-    units.push(unit as EffectUnit<{ id: string }>);
+    units.push(unit);
   }
   if (options.onSynced || options.onRejected) {
     if (seen.has(name)) {

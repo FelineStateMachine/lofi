@@ -26,32 +26,16 @@
 import type { TableProxy } from "jazz-tools";
 import type { WriteHandle } from "../runtime/write-handle.ts";
 import {
-  anonymousEffectName,
-  effect,
+  anonymousUnit,
+  cachedBuiltin,
   type EffectContext,
+  type EffectHandlers,
   type EffectRow,
   type EffectUnit,
-  type EffectUnitOptions,
   type NoticeInput,
   PermanentEffectError,
   requireMutationRuntime,
 } from "./effects.ts";
-
-// A tableless built-in binds no columns; the core `effect` uses its table
-// argument only for row typing, so this placeholder documents the intent in
-// one place instead of scattering casts.
-const noTable = undefined as unknown as TableProxy<{ id: string }, unknown>;
-
-function tablelessEffect(
-  name: string,
-  handlers: {
-    onSynced?: (row: EffectRow<{ id: string }>, context: EffectContext) => void | Promise<void>;
-    onRejected?: (row: EffectRow<{ id: string }>, context: EffectContext) => void | Promise<void>;
-  },
-  options?: EffectUnitOptions,
-): EffectUnit<{ id: string }> {
-  return effect(name, noTable, handlers, options);
-}
 
 /**
  * Observation unit: a span from the write's journaling to its settled fate,
@@ -71,10 +55,12 @@ function tablelessEffect(
 export function trace(label?: string): EffectUnit<{ id: string }> {
   if (label !== undefined && !label.trim()) throw new Error("trace label must not be empty");
   const name = label ? `trace:${label}` : "trace";
-  const record = (_row: EffectRow<{ id: string }>, context: EffectContext) => {
-    requireMutationRuntime().recordTrace?.(label ?? null, context);
-  };
-  return tablelessEffect(name, { onSynced: record, onRejected: record });
+  return cachedBuiltin(name, () => {
+    const record = (_row: EffectRow<{ id: string }>, context: EffectContext) => {
+      requireMutationRuntime().recordTrace?.(label ?? null, context);
+    };
+    return { onSynced: record, onRejected: record };
+  });
 }
 
 /**
@@ -91,12 +77,14 @@ export function trace(label?: string): EffectUnit<{ id: string }> {
  * ```
  */
 export function debug(): EffectUnit<{ id: string }> {
-  const production = !import.meta.env.DEV;
-  const record = (_row: EffectRow<{ id: string }>, context: EffectContext) => {
-    if (production) return;
-    requireMutationRuntime().recordDebug?.(context.fate, context);
-  };
-  return tablelessEffect("debug", { onSynced: record, onRejected: record });
+  return cachedBuiltin("debug", () => {
+    const production = !import.meta.env.DEV;
+    const record = (_row: EffectRow<{ id: string }>, context: EffectContext) => {
+      if (production) return;
+      requireMutationRuntime().recordDebug?.(context.fate, context);
+    };
+    return { onSynced: record, onRejected: record };
+  });
 }
 
 /** A notice message resolved from the settled row, or a static string. */
@@ -159,10 +147,10 @@ export function notice<Row extends { id: string } = { id: string }>(
       context,
     );
   };
-  return tablelessEffect(anonymousEffectName("notice"), {
+  return anonymousUnit<{ id: string }>("notice", {
     onSynced: enqueue(config.synced, "success"),
     onRejected: enqueue(config.rejected, "error"),
-  }) as EffectUnit<Row>;
+  }) as unknown as EffectUnit<Row>;
 }
 
 /** Per-fate row patches for {@link mark}. */
@@ -183,6 +171,13 @@ export type MarkConfig<Init> = {
  * A rejected *insert* has no row to mark — the engine rolled it out — so the
  * rejected patch is skipped for inserts; on updates and removes the row
  * survives the rollback and the patch records the failure.
+ *
+ * The mark is best-effort: its patch is an ordinary update that the store may
+ * itself deny (a policy that governs the status column), or that finds no row
+ * (an update whose row was concurrently removed elsewhere). In those cases the
+ * mark simply does not land — it is a convenience over the manual status
+ * column, not a delivery guarantee. For a fate signal that must survive, pair
+ * it with {@link notice} (durable queue) or a `webhook`.
  *
  * @example
  * ```ts
@@ -217,7 +212,7 @@ export function mark<T extends { id: string }, Init>(
       patch as Record<string, unknown>,
     );
   };
-  return effect(anonymousEffectName("mark"), table, {
+  return anonymousUnit<T>("mark", {
     onSynced: (row, context) => apply(config.synced, row, false, context),
     onRejected: (row, context) => apply(config.rejected, row, true, context),
   });
@@ -245,13 +240,13 @@ export function chain<Row extends { id: string }, NextInput>(
   next: (input: NextInput) => WriteHandle<unknown>,
   toInput: (row: EffectRow<Row>) => NextInput,
 ): EffectUnit<Row> {
-  return tablelessEffect(anonymousEffectName("chain"), {
+  return anonymousUnit<{ id: string }>("chain", {
     onSynced: async (row) => {
       // Await local durability of the follow-up: only then is this link safe
       // to mark delivered, so a crash re-issues rather than dropping it.
       await next(toInput(row as EffectRow<Row>)).saved;
     },
-  }) as EffectUnit<Row>;
+  }) as unknown as EffectUnit<Row>;
 }
 
 /** Options for the {@link webhook} unit. */
@@ -298,40 +293,53 @@ const defaultWebhookExpiry = 24 * 60 * 60 * 1000;
 export function webhook(url: string, options: WebhookOptions = {}): EffectUnit<{ id: string }> {
   if (!url.trim()) throw new Error("webhook url must not be empty");
   const fates = new Set(options.on ?? ["synced", "rejected"]);
-  const post = async (row: EffectRow<{ id: string }>, context: EffectContext) => {
-    if (!fates.has(context.fate)) return;
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": context.journalId,
-          ...options.headers,
-        },
-        body: JSON.stringify({
-          journalId: context.journalId,
-          verb: context.verb,
-          table: context.table,
-          op: context.op,
-          fate: context.fate,
-          code: context.code,
-          reason: context.reason,
-          row,
-        }),
-      });
-    } catch (error) {
-      // A network-level failure is transient by nature: rethrow so the ledger
-      // retries with backoff inside the delivery window.
-      throw new Error(`webhook ${url} unreachable: ${(error as Error).message}`);
-    }
-    if (response.ok) return;
-    if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-      throw new PermanentEffectError(`webhook ${url} refused with ${response.status}`);
-    }
-    throw new Error(`webhook ${url} transient failure ${response.status}`);
+  const build = (): EffectHandlers<{ id: string }> => {
+    const post = async (row: EffectRow<{ id: string }>, context: EffectContext) => {
+      if (!fates.has(context.fate)) return;
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": context.journalId,
+            ...options.headers,
+          },
+          body: JSON.stringify({
+            journalId: context.journalId,
+            verb: context.verb,
+            table: context.table,
+            op: context.op,
+            fate: context.fate,
+            code: context.code,
+            reason: context.reason,
+            row,
+          }),
+        });
+      } catch (error) {
+        // A network-level failure is transient by nature: rethrow so the
+        // ledger retries with backoff inside the delivery window.
+        throw new Error(`webhook ${url} unreachable: ${(error as Error).message}`);
+      }
+      if (response.ok) return;
+      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+        throw new PermanentEffectError(`webhook ${url} refused with ${response.status}`);
+      }
+      throw new Error(`webhook ${url} transient failure ${response.status}`);
+    };
+    return { onSynced: post, onRejected: post };
   };
-  return tablelessEffect("webhook:" + url, { onSynced: post, onRejected: post }, {
+  // Keyed by url + options so two verbs posting the same configured webhook
+  // share one unit (no name collision), while a different config is distinct.
+  const name = `webhook:${url}:${
+    JSON.stringify({
+      on: options.on ?? null,
+      expiresAfterMs: options.expiresAfterMs ?? null,
+      maxAttempts: options.maxAttempts ?? null,
+      headers: options.headers ?? null,
+    })
+  }`;
+  return cachedBuiltin(name, build, {
     expiresAfterMs: options.expiresAfterMs === undefined
       ? defaultWebhookExpiry
       : options.expiresAfterMs ?? undefined,

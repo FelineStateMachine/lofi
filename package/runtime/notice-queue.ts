@@ -99,12 +99,28 @@ export class NoticeQueue {
     this.#onCountChange = onCountChange;
   }
 
-  /** Loads the persisted document once, dropping already-expired entries. */
+  /**
+   * Loads the persisted document once, dropping already-expired entries.
+   * Entries enqueued in the async load window — an effect firing at a boot
+   * re-arm before load resolves — are merged in rather than clobbered: the
+   * persisted set is the base, and any in-memory entry (fresher) wins on id.
+   */
   async load(): Promise<void> {
     if (this.#loaded) return;
-    this.#document = parse(await this.#storage.load());
+    const persisted = parse(await this.#storage.load());
+    const pending = this.#document.entries;
+    const byId = new Map<string, NoticeEntry>();
+    for (const entry of persisted.entries) byId.set(entry.id, entry);
+    // In-memory entries were enqueued this session and are authoritative for
+    // their id; they overwrite any stale persisted copy.
+    for (const entry of pending) byId.set(entry.id, entry);
+    this.#document = { version: 1, entries: [...byId.values()] };
     this.#loaded = true;
     this.#sweepExpired();
+    // A load that absorbed in-flight entries must re-persist the merged set
+    // and publish it, so the boot-enqueued notice is not silently deferred.
+    if (pending.length > 0) this.#persist();
+    this.#emit();
   }
 
   /**
@@ -142,10 +158,23 @@ export class NoticeQueue {
     this.#emit();
   }
 
-  /** The live notices: enqueued, not dismissed, not past their TTL. */
+  /**
+   * The live notices: enqueued, not dismissed, not past their TTL. A pure
+   * read — it computes the live view without mutating stored state, so a
+   * render never silently prunes the queue (which would drift the persisted
+   * set and the `activeNotices` count from what a later `sweep()` sees).
+   * Actual retirement of expired entries happens in {@link sweep}, which
+   * persists and notifies. A fresh array each call, so callers may hold it.
+   */
   list(): readonly NoticeEntry[] {
-    this.#sweepExpired();
-    return this.#document.entries;
+    return this.#liveEntries();
+  }
+
+  #liveEntries(): NoticeEntry[] {
+    const now = this.#now();
+    return this.#document.entries.filter((entry) =>
+      entry.expiresAt === null || entry.expiresAt > now
+    );
   }
 
   /** Subscribes to queue changes; returns an unsubscribe function. */
@@ -182,7 +211,9 @@ export class NoticeQueue {
   }
 
   #emit(): void {
-    this.#onCountChange?.(this.#document.entries.length);
+    // The count and every subscriber see the live view, so `activeNotices`
+    // never overcounts entries that have expired but not yet been swept.
+    this.#onCountChange?.(this.#liveEntries().length);
     for (const listener of this.#listeners) listener();
   }
 }

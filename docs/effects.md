@@ -16,9 +16,12 @@ A custom unit is `s.effect(name, table, handlers, options)`. Four rules make it 
 
 - **The name is a durable identity.** The journal re-arms a unit's handlers by name after a reload,
   so names are app-unique (a duplicate throws at declaration) and renaming a unit orphans its
-  in-flight obligations. The anonymous built-ins (`s.notice`, `s.mark`, `s.chain`) take their
-  identity from declaration order instead; reordering the verbs that declare them has the same
-  orphaning effect as a rename.
+  in-flight obligations. The content-named built-ins (`s.log`, `s.trace`, `s.debug`, `s.webhook`)
+  share one unit per identity, so reusing one across verbs aggregates rather than collides. The
+  anonymous built-ins (`s.notice`, `s.mark`, `s.chain`) are named `<verb>#<position>` from the verb
+  they are attached to and their slot in that verb's `effects` — a durable identity independent of
+  which module loads first, so the only way to orphan one is to reorder the effects within its own
+  verb.
 - **Delivery is at-least-once, so handlers must be idempotent.** A crash between handler start and
   journal completion re-runs the handler at the next boot. The `context.journalId` a handler
   receives — the write's `(write id, effect name)` key — is the idempotency key: pass it to any

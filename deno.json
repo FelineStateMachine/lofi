@@ -61,7 +61,7 @@
   },
   "tasks": {
     "build": "deno task --cwd apps/reference build",
-    "check": "deno fmt --check . && deno lint && deno task doc && deno task doc:closure && deno task docs:links && deno task test:unit && deno task test:access && deno task test:effects && deno task test:conformance",
+    "check": "deno fmt --check . && deno lint && deno task doc && deno task doc:closure && deno task docs:links && deno task test:unit && deno task test:access && deno task test:effects && deno task test:conformance && deno task test:scenario",
     "doc": "deno run --allow-run tools/doc_lint.ts",
     "doc:closure": "deno run --allow-run --allow-read tools/type_closure_lint.ts",
     "docs:links": "deno run --allow-read tools/docs_links.ts",
@@ -69,6 +69,7 @@
     "test:access": "deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/access/*_test.ts",
     "test:effects": "deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/effects_sync_test.ts",
     "test:conformance": "deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/schema/merge_sync_test.ts && deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/schema/migration_test.ts && deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/schema/sliceable_test.ts && deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/schema/nested_conformance_test.ts && deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/schema/store_test.ts && deno test --allow-env --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/schema/conformance_test.ts",
+    "test:scenario": "deno test --allow-env --allow-sys --allow-net=127.0.0.1 --allow-read --allow-write --allow-run --allow-ffi package/scenario_sync_test.ts",
     "test:update:create": "LOFI_UPDATE_SNAPSHOT=1 deno test --allow-env=LOFI_UPDATE_SNAPSHOT --allow-read --allow-write=. --allow-run package/create_core_test.ts",
     "test": "deno task test:unit",
     "test:browser:install": "deno run -A npm:playwright@1.61.1 install chromium",

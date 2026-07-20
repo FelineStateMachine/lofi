@@ -25,7 +25,7 @@
   "tests/auth_e2e_test.ts": "87dc3eb441eeaa96fc82b15df90bf4108096506217e5bfae907b483a3e75b4bf",
   "tests/author-boundary_test.ts": "8340fda5d2764ed3c57e72e72d36974efca00c1c0ae126adfbdc4b394963d81f",
   "tests/backup_migration_e2e_test.ts": "7ad87dad687641ba937ab20b0c5d06a34478c7c08527ed6e8c6861ad6c97d622",
-  "tests/convergence_e2e_test.ts": "191bdcda1dc6bffba354c0d53cdeb7b5b892e2c7face3010a29a61d3cb0569a5",
+  "tests/convergence_e2e_test.ts": "217c15456251cf5ed2f44d1ab5a7a1076cad8eeb5f46a33e4dfead9beea770ba",
   "tests/testing-contract_test.ts": "4257306060d42566b879d92b3a6c395805b20f53717bee55d670c0ef7a117eec",
   "tsconfig.json": "c632473513c623f3cc69d7476159fb9421624521220029755695defa265c6cab"
 }

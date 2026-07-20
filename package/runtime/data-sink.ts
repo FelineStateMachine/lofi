@@ -112,10 +112,27 @@ const sinkKey = `lofi:data-sink:${anchorAppId}`;
 const sinkPurpose = `lofi:data-sink:${anchorAppId}`;
 const sinkDeviceKeyId = `data-sink:${anchorAppId}`;
 
-// The declaration in effect for this document, populated by
-// restoreDeclaredSink at boot and by successful declarations afterwards.
-// Synchronous readers answer from here; storage holds only the envelope.
-let cachedSink: DataSinkDeclaration | null = null;
+// Astro islands can bundle this module more than once in the same document.
+// Keep the restored declaration on globalThis so every island observes the
+// boot script's restore and a declaration made by any sibling island. Storage
+// still holds only the sealed envelope.
+type DataSinkSlot = {
+  cachedSink: DataSinkDeclaration | null;
+  lastRestoreOutcome: SinkRestoreOutcome;
+  restorePromise: Promise<SinkRestoreOutcome> | null;
+};
+
+const dataSinkSlotName = "__LOFI_ALPHA53_DATA_SINK__";
+const browserGlobal = globalThis as typeof globalThis & { [dataSinkSlotName]?: DataSinkSlot };
+
+function dataSinkSlot(): DataSinkSlot {
+  browserGlobal[dataSinkSlotName] ??= {
+    cachedSink: null,
+    lastRestoreOutcome: "none",
+    restorePromise: null,
+  };
+  return browserGlobal[dataSinkSlotName];
+}
 
 function validateDeclaration(value: unknown): DataSinkDeclaration | null {
   if (value === null || typeof value !== "object") return null;
@@ -167,8 +184,6 @@ export type SinkRestoreOutcome = "none" | "restored" | "migrated" | "unopenable"
 // The most recent restore's outcome, kept so status surfaces can distinguish
 // "no sync location" from "a sync location exists but this device cannot open
 // it". Cleared when the record is removed or successfully re-declared.
-let lastRestoreOutcome: SinkRestoreOutcome = "none";
-
 /**
  * How the most recent {@link restoreDeclaredSink} resolved. An `unopenable`
  * answer means a declaration is persisted but no available key opens it — the
@@ -176,7 +191,7 @@ let lastRestoreOutcome: SinkRestoreOutcome = "none";
  * status surface should say so rather than showing plain local-only.
  */
 export function readSinkRestoreOutcome(): SinkRestoreOutcome {
-  return lastRestoreOutcome;
+  return dataSinkSlot().lastRestoreOutcome;
 }
 
 /**
@@ -187,12 +202,32 @@ export function readSinkRestoreOutcome(): SinkRestoreOutcome {
 export async function restoreDeclaredSink(
   keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
 ): Promise<SinkRestoreOutcome> {
-  lastRestoreOutcome = await resolveRestore(keyStore);
-  return lastRestoreOutcome;
+  const state = dataSinkSlot();
+  state.lastRestoreOutcome = await resolveRestore(keyStore);
+  return state.lastRestoreOutcome;
+}
+
+/**
+ * Restores the document's sealed sink exactly once before the first runtime
+ * opens. App islands and the boot script can start concurrently; sharing this
+ * promise prevents an eager island from creating a local-only client while
+ * boot is still unsealing a configured sink.
+ */
+export function ensureDeclaredSinkRestored(
+  keyStore: DeviceKeyStore = defaultDeviceKeyStore(),
+): Promise<SinkRestoreOutcome> {
+  const state = dataSinkSlot();
+  state.restorePromise ??= restoreDeclaredSink(keyStore).catch(() => {
+    state.cachedSink = null;
+    state.lastRestoreOutcome = "none";
+    return "none";
+  });
+  return state.restorePromise;
 }
 
 async function resolveRestore(keyStore: DeviceKeyStore): Promise<SinkRestoreOutcome> {
-  cachedSink = null;
+  const state = dataSinkSlot();
+  state.cachedSink = null;
   if (typeof localStorage === "undefined") return "none";
   let raw: string | null = null;
   try {
@@ -213,7 +248,7 @@ async function resolveRestore(keyStore: DeviceKeyStore): Promise<SinkRestoreOutc
     // cleartext bearer URL leaves storage on the first boot that can.
     const sink = validateDeclaration(record.sink);
     if (!sink) return "none";
-    cachedSink = sink;
+    state.cachedSink = sink;
     await persistSealed(sink, keyStore);
     return "migrated";
   }
@@ -224,7 +259,7 @@ async function resolveRestore(keyStore: DeviceKeyStore): Promise<SinkRestoreOutc
       const payload = await openJsonEnvelope(sinkPurpose, sealed, deviceKeyResolver(keyStore));
       const sink = validateDeclaration(payload);
       if (!sink) return "unopenable";
-      cachedSink = sink;
+      state.cachedSink = sink;
       return "restored";
     } catch (error) {
       if (error instanceof EnvelopeError) return "unopenable";
@@ -240,7 +275,7 @@ async function resolveRestore(keyStore: DeviceKeyStore): Promise<SinkRestoreOutc
  * (tests, embedders) await {@link restoreDeclaredSink} first.
  */
 export function readDeclaredSink(): DataSinkDeclaration | null {
-  return cachedSink;
+  return dataSinkSlot().cachedSink;
 }
 
 function assertHttpServerUrl(serverUrl: string): void {
@@ -295,17 +330,19 @@ export async function declareDataSink(
     );
   }
   await persistSealed(declaration, keyStore);
-  cachedSink = declaration;
+  const state = dataSinkSlot();
+  state.cachedSink = declaration;
   // The record now seals under an available key; an earlier unopenable
   // restore no longer describes it.
-  lastRestoreOutcome = "restored";
+  state.lastRestoreOutcome = "restored";
   return declaration;
 }
 
 /** Removes the declared sink. Existing local data and elections are untouched. */
 export function clearDeclaredSink(): void {
-  cachedSink = null;
-  lastRestoreOutcome = "none";
+  const state = dataSinkSlot();
+  state.cachedSink = null;
+  state.lastRestoreOutcome = "none";
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.removeItem(sinkKey);

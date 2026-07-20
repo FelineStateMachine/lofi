@@ -1,7 +1,7 @@
 /// <reference path="./env.d.ts" />
 // Package-owned browser boot orchestration.
 import { getLofiApp } from "./app.ts";
-import { restoreDeclaredSink } from "./data-sink.ts";
+import { ensureDeclaredSinkRestored } from "./data-sink.ts";
 import {
   attachPwaUpdateCoordination,
   registerProductionServiceWorker,
@@ -69,11 +69,7 @@ export async function bootLofi(): Promise<void> {
   // The sink envelope must be open before lifecycle.ts reads the sync
   // location at import time. A restore failure degrades to local-only; it
   // must never brick boot.
-  try {
-    await restoreDeclaredSink();
-  } catch {
-    // Continue local-only; enrollment can re-declare the sink.
-  }
+  await ensureDeclaredSinkRestored();
   startCompatibilityGate();
   await import("./lifecycle.ts");
   // Arm the write ledger so journaled writes reconcile and outstanding effect

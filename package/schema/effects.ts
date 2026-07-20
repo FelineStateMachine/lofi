@@ -276,6 +276,12 @@ export type NoticeInput = {
 export type MutationRuntime = {
   /** Performs one declared verb call and returns its write handle. */
   dispatch(descriptor: MutationDescriptor, args: readonly unknown[]): WriteHandle<unknown>;
+  /** Performs a chain child under a deterministic id retained by its parent. */
+  dispatchChained(
+    descriptor: MutationDescriptor,
+    args: readonly unknown[],
+    parentJournalId: string,
+  ): Promise<void>;
   /** Records one structured {@link log} entry. */
   recordLog(label: string, context: EffectContext): void;
   /** Records one {@link trace} span from the write's journaling to its fate. */
@@ -283,7 +289,7 @@ export type MutationRuntime = {
   /** Records one {@link debug} timeline event; a no-op in production builds. */
   recordDebug?(event: string, context: EffectContext): void;
   /** Enqueues one durable {@link notice} entry. */
-  enqueueNotice?(input: NoticeInput, context: EffectContext): void;
+  enqueueNotice?(input: NoticeInput, context: EffectContext): Promise<void>;
   /**
    * Patches a row on behalf of a {@link mark} unit: a bare update carrying no
    * further units, so write fate becomes replicated row data without
@@ -303,8 +309,13 @@ type EffectsSlot = {
   effects: Map<string, EffectUnit<{ id: string }>>;
   verbs: Map<string, MutationDescriptor>;
   logs: Map<string, EffectUnit<{ id: string }>>;
-  /** Cache for content-named built-ins (trace, debug, webhook) shared by name. */
-  cache: Map<string, EffectUnit<{ id: string }>>;
+  /** Cache for shared built-ins (trace, debug, webhook) keyed by durable name. */
+  cache: Map<string, CachedBuiltinEntry>;
+};
+
+type CachedBuiltinEntry = {
+  unit: EffectUnit<{ id: string }>;
+  signature: string | null;
 };
 
 const slotName = "__LOFI_EFFECT_DECLARATIONS__";
@@ -486,26 +497,40 @@ export function anonymousUnit<Row extends { id: string }>(
 
 /**
  * Returns the shared built-in unit registered under `name`, building and
- * registering it on first use. For content-named observation and external
- * units (`s.trace`, `s.debug`, `s.webhook`) whose whole identity is their
- * name, so reusing one across verbs shares a single unit instead of colliding
- * — the same discipline {@link log} follows.
+ * registering it on first use. For observation and external units (`s.trace`,
+ * `s.debug`, `s.webhook`) whose whole identity is their durable name, so
+ * reusing one across verbs shares a single unit instead of colliding — the
+ * same discipline {@link log} follows. A supplied in-memory signature makes
+ * reuse under different configuration fail without putting that configuration
+ * into the durable name.
  */
 export function cachedBuiltin<Row extends { id: string }>(
   name: string,
   build: () => EffectHandlers<Row>,
-  options: EffectUnitOptions = {},
+  options: Omit<EffectUnitOptions, "expiresAfterMs"> & { expiresAfterMs?: number | null } = {},
+  signature?: string,
 ): EffectUnit<Row> {
   const state = slot();
   const existing = state.cache.get(name);
-  if (existing) return existing as unknown as EffectUnit<Row>;
+  if (existing && "unit" in existing) {
+    if (existing.signature !== (signature ?? null)) {
+      throw new Error(`built-in effect "${name}" is already declared with different options`);
+    }
+    return existing.unit as unknown as EffectUnit<Row>;
+  }
+  // A dev hot-reload may retain the pre-signature cache shape. Rebuild that
+  // entry so future declarations receive the same configuration checks.
+  if (existing) state.cache.delete(name);
   const unit: EffectUnit<Row> = {
     effectName: name,
     handlers: build(),
     expiresAfterMs: options.expiresAfterMs ?? null,
     ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
   };
-  state.cache.set(name, unit as unknown as EffectUnit<{ id: string }>);
+  state.cache.set(name, {
+    unit: unit as unknown as EffectUnit<{ id: string }>,
+    signature: signature ?? null,
+  });
   registerUnit(unit as unknown as EffectUnit<{ id: string }>);
   return unit;
 }
@@ -554,9 +579,15 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
   }
   const units: EffectUnit<{ id: string }>[] = [];
   const seen = new Set<string>();
+  const seenDeclarations = new Set<EffectUnit<T>>();
   const declared = options.effects ?? [];
   for (let index = 0; index < declared.length; index += 1) {
-    let unit = declared[index] as EffectUnit<{ id: string }>;
+    const declaration = declared[index];
+    if (seenDeclarations.has(declaration)) {
+      throw new Error(`mutation "${name}" declares the same effect unit twice`);
+    }
+    seenDeclarations.add(declaration);
+    let unit = declaration as EffectUnit<{ id: string }>;
     if (unit.anonymousPrefix !== undefined) {
       // An anonymous built-in (s.notice/s.mark/s.chain) is named and
       // registered here, from the verb it is attached to and its position in
@@ -592,5 +623,23 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
   };
   state.verbs.set(name, descriptor);
   const verb = (...args: readonly unknown[]) => requireRuntime().dispatch(descriptor, args);
+  Object.defineProperty(verb, mutationDescriptor, { value: descriptor });
   return verb as MutationVerb<MutationOp<T, Init, Kind>>;
+}
+
+const mutationDescriptor = Symbol.for("@nzip/lofi/mutationDescriptor");
+
+/** Dispatches a declared mutation as a deterministic child of an effect. */
+export function dispatchChainedMutation<Input, Result>(
+  verb: (input: Input) => WriteHandle<Result>,
+  args: readonly [Input],
+  parentJournalId: string,
+): Promise<void> {
+  const descriptor = (verb as unknown as { [mutationDescriptor]?: MutationDescriptor })[
+    mutationDescriptor
+  ];
+  if (!descriptor) {
+    throw new Error("chain target must be a mutation declared with s.mutation");
+  }
+  return requireRuntime().dispatchChained(descriptor, args, parentJournalId);
 }

@@ -19,6 +19,9 @@ function installRecorder(): { dispatched: Dispatched[]; logs: string[] } {
       dispatched.push({ descriptor, args });
       return { stage: "saving" } as unknown as WriteHandle<unknown>;
     },
+    dispatchChained() {
+      return Promise.resolve();
+    },
     recordLog(label) {
       logs.push(label);
     },
@@ -96,6 +99,19 @@ Deno.test("verb names are unique per app and collide fast", () => {
     thrown = true;
   }
   assert(thrown, "a duplicate verb name must fail at declaration");
+  clearEffectDeclarations();
+});
+
+Deno.test("one anonymous unit object cannot occupy two mutation positions", () => {
+  clearEffectDeclarations();
+  const unit = s.notice({ synced: "Saved." });
+  let thrown = false;
+  try {
+    s.mutation("duplicateNotice", s.insert(app.orders), { effects: [unit, unit] });
+  } catch {
+    thrown = true;
+  }
+  assert(thrown, "reusing one anonymous declaration must fail before it gains two identities");
   clearEffectDeclarations();
 });
 

@@ -51,6 +51,7 @@ import { createWriteHandle, type WriteHandle, type WriteHandleController } from 
 import {
   createDefaultJournalStorage,
   hashJournalValue,
+  type JournalDocument,
   type JournalEffectState,
   journalIdFor,
   type JournalStorage,
@@ -110,6 +111,10 @@ export type LedgerWriteOptions = {
   units?: readonly EffectUnit<{ id: string }>[];
   /** The intent's lifespan in milliseconds, or `null` for none. */
   expiresAfterMs?: number | null;
+  /** Internal deterministic identity for a chain child. */
+  writeId?: string;
+  /** Parent obligation retaining this chain child until parent completion. */
+  retainedBy?: string | null;
 };
 
 type VendorWrite = {
@@ -279,7 +284,7 @@ export class WriteLedger {
    */
   perform<T>(request: LedgerWriteRequest, options: LedgerWriteOptions = {}): WriteHandle<T> {
     if (this.#disposed) throw new Error("write ledger has been disposed");
-    const { handle, controller } = createWriteHandle<T>(crypto.randomUUID());
+    const { handle, controller } = createWriteHandle<T>(options.writeId ?? crypto.randomUUID());
     const db = this.#db;
     const guard = this.#environment.guardWrite;
     if (db && !guard) {
@@ -328,12 +333,17 @@ export class WriteLedger {
   }
 
   /** Performs one declared verb call; the verb dispatcher's entry point. */
-  performVerb(descriptor: MutationDescriptor, args: readonly unknown[]): WriteHandle<unknown> {
+  performVerb(
+    descriptor: MutationDescriptor,
+    args: readonly unknown[],
+    internal: Pick<LedgerWriteOptions, "writeId" | "retainedBy"> = {},
+  ): WriteHandle<unknown> {
     const table = descriptor.op.table as TableProxy<unknown, unknown>;
     const options: LedgerWriteOptions = {
       verb: descriptor.verbName,
       units: descriptor.units,
       expiresAfterMs: descriptor.expiresAfterMs,
+      ...internal,
     };
     if (descriptor.op.kind === "insert") {
       return this.perform({ kind: "insert", table, values: args[0] }, options);
@@ -347,6 +357,22 @@ export class WriteLedger {
       }, options);
     }
     return this.perform({ kind: "remove", table, id: args[0] as string }, options);
+  }
+
+  /** Performs a chain child once and retains its record through parent commit. */
+  async performChainedVerb(
+    descriptor: MutationDescriptor,
+    args: readonly unknown[],
+    parentJournalId: string,
+  ): Promise<void> {
+    const writeId = `chain:${parentJournalId}`;
+    if (this.#journal.document.writes[writeId]) {
+      await this.#journal.flush();
+      return;
+    }
+    const handle = this.performVerb(descriptor, args, { writeId, retainedBy: parentJournalId });
+    await handle.saved;
+    await this.#journal.flush();
   }
 
   /** Re-attempts outstanding obligations of one effect name after late registration. */
@@ -564,6 +590,7 @@ export class WriteLedger {
     const createdAt = this.#environment.now();
     const entry: JournalWriteRecord = {
       writeId: handle.writeId,
+      retainedBy: options.retainedBy ?? null,
       verb: options.verb ?? null,
       table: (request.table as { _table?: string })._table ?? "",
       op: request.kind,
@@ -730,8 +757,9 @@ export class WriteLedger {
     const fate = entry.stage === "synced" ? "synced" as const : "rejected" as const;
     const handler = fate === "synced" ? unit.handlers.onSynced : unit.handlers.onRejected;
     if (!handler) {
-      this.#journal.update(() => {
+      this.#journal.update((document) => {
         state.status = "done";
+        this.#releaseRetainedChildren(document, journalId);
       });
       this.#afterChange();
       return;
@@ -760,9 +788,10 @@ export class WriteLedger {
       };
       try {
         await handler(row as EffectRow<{ id: string }>, context);
-        this.#journal.update(() => {
+        this.#journal.update((document) => {
           state.status = "done";
           state.lastError = null;
+          this.#releaseRetainedChildren(document, journalId);
         });
       } catch (error) {
         const maxAttempts = unit.maxAttempts ?? defaultMaxAttempts;
@@ -819,6 +848,12 @@ export class WriteLedger {
     return { id: entry.rowId };
   }
 
+  #releaseRetainedChildren(document: JournalDocument, parentJournalId: string): void {
+    for (const child of Object.values(document.writes)) {
+      if (child.retainedBy === parentJournalId) child.retainedBy = null;
+    }
+  }
+
   #afterChange(): void {
     const document = this.#journal.document;
     for (const entry of Object.values(document.writes)) {
@@ -829,7 +864,7 @@ export class WriteLedger {
       }
       const settled = Object.values(entry.effects)
         .every((state) => isRetired(state.status));
-      if (settled) {
+      if (settled && !entry.retainedBy) {
         // Fully settled entries leave the journal; failed-but-not-quarantined
         // obligations keep theirs so the next boot can re-arm the handler.
         this.#journal.update(() => {
@@ -967,6 +1002,8 @@ export function dismissAllNotices(): void {
 // package installs dispatch, so verbs work wherever islands import hooks.
 setMutationRuntime({
   dispatch: (descriptor, args) => getWriteLedger().performVerb(descriptor, args),
+  dispatchChained: (descriptor, args, parentJournalId) =>
+    getWriteLedger().performChainedVerb(descriptor, args, parentJournalId),
   recordLog: (label, context) =>
     updateRuntimeDiagnostics((diagnostics) =>
       recordEffectLogEntry(diagnostics, {

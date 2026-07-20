@@ -1,6 +1,11 @@
 import type { Db, MutationErrorEvent, TableProxy } from "jazz-tools";
 import { createDiagnostics } from "./diagnostics.ts";
-import { type EffectContext, type EffectUnit, PermanentEffectError } from "../schema/effects.ts";
+import {
+  type EffectContext,
+  type EffectUnit,
+  type MutationDescriptor,
+  PermanentEffectError,
+} from "../schema/effects.ts";
 import { assert, assertCount } from "./test-assert.ts";
 import {
   createMemoryJournalStorage,
@@ -817,4 +822,28 @@ Deno.test("quarantine retires a permanently failing handler after its attempt bo
   );
   assertCount(calls.length, 0, "a quarantined handler never reports success");
   second.ledger.dispose();
+});
+
+Deno.test("a chained child uses one retained deterministic write across replay", async () => {
+  const fixture = harness();
+  await fixture.ledger.arm();
+  const descriptor: MutationDescriptor = {
+    verbName: "createChild",
+    op: { kind: "insert", table: table as TableProxy<unknown, unknown> },
+    units: [],
+    expiresAfterMs: null,
+  };
+  const parentJournalId = "parent-write:chain#0";
+  await fixture.ledger.performChainedVerb(descriptor, [{ title: "child" }], parentJournalId);
+  assertCount(fixture.db.nextBatch, 1, "the first delivery must issue one child mutation");
+  const writeId = `chain:${parentJournalId}`;
+  const first = JSON.parse(fixture.storage.text() ?? "{}") as JournalDocument;
+  assert(
+    first.writes[writeId]?.retainedBy === parentJournalId,
+    "the child record must remain retained until its parent obligation commits",
+  );
+
+  await fixture.ledger.performChainedVerb(descriptor, [{ title: "child" }], parentJournalId);
+  assertCount(fixture.db.nextBatch, 1, "replay must observe the retained child, not issue another");
+  fixture.ledger.dispose();
 });

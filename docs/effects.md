@@ -137,12 +137,15 @@ export const reserve = s.mutation("reserve", s.insert(app.schema.holds), {
 
 Where the guardrails earn their keep.
 
-### `s.webhook(url, options?)`
+### `s.webhook(name, url, options?)`
 
 POSTs the settled row and its fate to `url`, with the obligation's journal id auto-injected as
 `Idempotency-Key` so a re-delivery the receiver already saw is dropped receiver-side. The generic
 integration workhorse and the reference for the at-least-once contract.
 
+- **`name` is the durable identity.** Keep it stable across releases. URLs and header values are
+  checked only in memory and never become journal keys, so credentials do not leak into persisted
+  effect identifiers. Reusing a name with different configuration fails fast.
 - **Failure severity follows the response.** A network error, `5xx`, or `429` throws an ordinary
   error, so the ledger's bounded backoff retries it; any other `4xx` throws `PermanentEffectError`,
   retiring the obligation rather than retrying a request the receiver will keep refusing.
@@ -152,7 +155,7 @@ integration workhorse and the reference for the at-least-once contract.
 
 ```ts
 export const order = s.mutation("order", s.insert(app.schema.orders), {
-  effects: [s.webhook("https://hooks.example.com/orders")],
+  effects: [s.webhook("orders", "https://hooks.example.com/orders")],
 });
 ```
 

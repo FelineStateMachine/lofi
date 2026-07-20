@@ -85,6 +85,7 @@ export class NoticeQueue {
   #document: NoticeDocument = { version: 1, entries: [] };
   #chain: Promise<void> = Promise.resolve();
   #loaded = false;
+  #loading: Promise<void> | null = null;
   #listeners = new Set<() => void>();
   #onCountChange?: (count: number) => void;
 
@@ -105,8 +106,16 @@ export class NoticeQueue {
    * re-arm before load resolves — are merged in rather than clobbered: the
    * persisted set is the base, and any in-memory entry (fresher) wins on id.
    */
-  async load(): Promise<void> {
-    if (this.#loaded) return;
+  load(): Promise<void> {
+    if (this.#loaded) return Promise.resolve();
+    this.#loading ??= this.#load().catch((error) => {
+      this.#loading = null;
+      throw error;
+    });
+    return this.#loading;
+  }
+
+  async #load(): Promise<void> {
     const persisted = parse(await this.#storage.load());
     const pending = this.#document.entries;
     const byId = new Map<string, NoticeEntry>();
@@ -116,10 +125,10 @@ export class NoticeQueue {
     for (const entry of pending) byId.set(entry.id, entry);
     this.#document = { version: 1, entries: [...byId.values()] };
     this.#loaded = true;
-    this.#sweepExpired();
+    const swept = this.#sweepExpired();
     // A load that absorbed in-flight entries must re-persist the merged set
     // and publish it, so the boot-enqueued notice is not silently deferred.
-    if (pending.length > 0) this.#persist();
+    if (pending.length > 0 || swept) await this.#persist();
     this.#emit();
   }
 
@@ -127,18 +136,23 @@ export class NoticeQueue {
    * Enqueues one notice, idempotent by id: an entry whose id is already
    * present is left untouched, so an at-least-once re-delivery adds nothing.
    */
-  enqueue(input: NoticeEnqueueInput): void {
-    if (this.#document.entries.some((entry) => entry.id === input.id)) return;
-    const createdAt = this.#now();
-    this.#document.entries.push({
-      id: input.id,
-      message: input.message,
-      tone: input.tone,
-      createdAt,
-      expiresAt: input.ttlMs === null ? null : createdAt + input.ttlMs,
-    });
-    this.#persist();
-    this.#emit();
+  async enqueue(input: NoticeEnqueueInput): Promise<void> {
+    await this.load();
+    const exists = this.#document.entries.some((entry) => entry.id === input.id);
+    if (!exists) {
+      const createdAt = this.#now();
+      this.#document.entries.push({
+        id: input.id,
+        message: input.message,
+        tone: input.tone,
+        createdAt,
+        expiresAt: input.ttlMs === null ? null : createdAt + input.ttlMs,
+      });
+      this.#emit();
+    }
+    // Persist duplicate deliveries too: if the first attempt mutated memory
+    // but its save failed, replay is the retry that makes the entry durable.
+    await this.#persist();
   }
 
   /** Dismisses one entry by id; unknown ids are a no-op. */
@@ -146,7 +160,7 @@ export class NoticeQueue {
     const next = this.#document.entries.filter((entry) => entry.id !== id);
     if (next.length === this.#document.entries.length) return;
     this.#document.entries = next;
-    this.#persist();
+    void this.#persist().catch(() => undefined);
     this.#emit();
   }
 
@@ -154,7 +168,7 @@ export class NoticeQueue {
   dismissAll(): void {
     if (this.#document.entries.length === 0) return;
     this.#document.entries = [];
-    this.#persist();
+    void this.#persist().catch(() => undefined);
     this.#emit();
   }
 
@@ -191,7 +205,7 @@ export class NoticeQueue {
   /** Applies TTL retirement, persisting and notifying if anything changed. */
   sweep(): void {
     if (this.#sweepExpired()) {
-      this.#persist();
+      void this.#persist().catch(() => undefined);
       this.#emit();
     }
   }
@@ -205,9 +219,13 @@ export class NoticeQueue {
     return this.#document.entries.length !== before;
   }
 
-  #persist(): void {
+  #persist(): Promise<void> {
     const snapshot = JSON.stringify(this.#document);
-    this.#chain = this.#chain.then(() => this.#storage.save(snapshot)).catch(() => undefined);
+    const attempt = this.#chain.then(() => this.#storage.save(snapshot));
+    // Keep the serialized queue usable after a failed attempt while returning
+    // that failure to the effect handler that requires durable delivery.
+    this.#chain = attempt.catch(() => undefined);
+    return attempt;
   }
 
   #emit(): void {

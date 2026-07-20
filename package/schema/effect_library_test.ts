@@ -23,7 +23,11 @@ type Recorder = {
   traces: Array<{ label: string | null; context: EffectContext }>;
   notices: Array<{ input: NoticeInput; context: EffectContext }>;
   marks: Array<{ rowId: string; patch: Record<string, unknown> }>;
-  dispatched: Array<{ descriptor: unknown; args: readonly unknown[] }>;
+  dispatched: Array<{
+    descriptor: unknown;
+    args: readonly unknown[];
+    parentJournalId?: string;
+  }>;
 };
 
 function install(): Recorder {
@@ -33,12 +37,17 @@ function install(): Recorder {
       recorder.dispatched.push({ descriptor, args });
       return { saved: Promise.resolve() } as unknown as WriteHandle<unknown>;
     },
+    dispatchChained(descriptor, args, parentJournalId) {
+      recorder.dispatched.push({ descriptor, args, parentJournalId });
+      return Promise.resolve();
+    },
     recordLog() {},
     recordTrace(label, context) {
       recorder.traces.push({ label, context });
     },
     enqueueNotice(input, context) {
       recorder.notices.push({ input, context });
+      return Promise.resolve();
     },
     applyMark(_table, rowId, patch) {
       recorder.marks.push({ rowId, patch });
@@ -103,29 +112,36 @@ Deno.test("trace records a span with the saved-to-fate latency on either fate", 
 
 // The content-named built-ins share one unit per identity instead of throwing
 // a duplicate-name error when reused across verbs.
-Deno.test("trace and webhook share one unit per content across verbs", () => {
+Deno.test("trace and webhook share one unit per durable identity", () => {
   clearEffectDeclarations();
   install();
   assert(trace("checkout") === trace("checkout"), "one label shares one trace unit");
   assert(trace() === trace(), "the unlabeled trace shares one unit");
   const url = "https://hooks.example.com/x";
-  assert(webhook(url) === webhook(url), "one url+config shares one webhook unit");
+  assert(webhook("orders", url) === webhook("orders", url), "one name+config shares one unit");
+  let mismatched = false;
+  try {
+    webhook("orders", url, { maxAttempts: 9 });
+  } catch (error) {
+    mismatched = !(error as Error).message.includes(url);
+  }
+  assert(mismatched, "reusing a name with different config must fail without leaking config");
   assert(
-    webhook(url) !== webhook(url, { maxAttempts: 9 }),
-    "a different config is a distinct unit",
+    webhook("orders-v2", url, { maxAttempts: 9 }) !== webhook("orders", url),
+    "a distinct author name creates a distinct durable unit",
   );
   clearEffectDeclarations();
 });
 
-Deno.test("notice enqueues a message keyed by the obligation journal id", () => {
+Deno.test("notice enqueues a message keyed by the obligation journal id", async () => {
   clearEffectDeclarations();
   const recorder = install();
   const unit = notice<Claim>({
     synced: "Submitted.",
     rejected: (claim) => `Could not submit "${claim.title ?? "claim"}".`,
   });
-  unit.handlers.onSynced?.({ id: "row-1" }, context({ journalId: "w1:notice#1" }));
-  unit.handlers.onRejected?.(
+  await unit.handlers.onSynced?.({ id: "row-1" }, context({ journalId: "w1:notice#1" }));
+  await unit.handlers.onRejected?.(
     { id: "row-1", title: "roof" } as Claim & { id: string },
     context({ fate: "rejected", journalId: "w2:notice#1" }),
   );
@@ -143,13 +159,13 @@ Deno.test("notice enqueues a message keyed by the obligation journal id", () => 
   clearEffectDeclarations();
 });
 
-Deno.test("notice fires only the configured fate", () => {
+Deno.test("notice fires only the configured fate", async () => {
   clearEffectDeclarations();
   const recorder = install();
   const unit = notice({ rejected: "Failed." });
-  unit.handlers.onSynced?.({ id: "row-1" }, context());
+  await unit.handlers.onSynced?.({ id: "row-1" }, context());
   assertCount(recorder.notices.length, 0, "an unconfigured synced fate enqueues nothing");
-  unit.handlers.onRejected?.({ id: "row-1" }, context({ fate: "rejected" }));
+  await unit.handlers.onRejected?.({ id: "row-1" }, context({ fate: "rejected" }));
   assertCount(recorder.notices.length, 1, "the configured rejected fate enqueues");
   clearEffectDeclarations();
 });
@@ -180,18 +196,24 @@ Deno.test("mark skips a rejected insert, which left no row to patch", async () =
 
 Deno.test("chain issues the follow-up verb only on synced", async () => {
   clearEffectDeclarations();
-  install();
-  const calls: Array<{ holdId: string }> = [];
-  const charge = (input: { holdId: string }): WriteHandle<unknown> => {
-    calls.push(input);
-    return { saved: Promise.resolve() } as unknown as WriteHandle<unknown>;
-  };
-  const unit = chain(charge, (row: { id: string }) => ({ holdId: row.id }));
+  const recorder = install();
+  const charge = mutation("chargeClaim", insert(app.claims));
+  const unit = chain(charge, (row: { id: string }) => ({
+    title: row.id,
+    status: "charging",
+  }));
   await unit.handlers.onRejected?.({ id: "row-1" }, context({ fate: "rejected" }));
-  assertCount(calls.length, 0, "a rejected write starts no chain");
+  assertCount(recorder.dispatched.length, 0, "a rejected write starts no chain");
   await unit.handlers.onSynced?.({ id: "row-1" }, context());
-  assertCount(calls.length, 1, "a synced write issues the follow-up verb once");
-  assert(calls[0].holdId === "row-1", "the mapper must receive the settled row");
+  assertCount(recorder.dispatched.length, 1, "a synced write issues the follow-up verb once");
+  assert(
+    (recorder.dispatched[0].args[0] as { title: string }).title === "row-1",
+    "the mapper must receive the settled row",
+  );
+  assert(
+    recorder.dispatched[0].parentJournalId === "w1:unit#1",
+    "the child must be tied to its parent obligation identity",
+  );
   clearEffectDeclarations();
 });
 
@@ -205,7 +227,11 @@ Deno.test("webhook injects the journal id as the idempotency key and posts the f
     return Promise.resolve(new Response(null, { status: 200 }));
   }) as typeof fetch;
   try {
-    const unit = webhook("https://hooks.example.com/claims");
+    const unit = webhook("claims", "https://hooks.example.com/claims", {
+      headers: { authorization: "secret", "idempotency-key": "override" },
+    });
+    assert(unit.effectName === "webhook:claims", "durable identity must contain only the name");
+    assert(!unit.effectName.includes("secret"), "header secrets must not enter durable identity");
     await unit.handlers.onSynced?.({ id: "row-1" }, context({ journalId: "w1:webhook#1" }));
     assertCount(requests.length, 1, "a synced write posts once");
     const key = new Headers(requests[0].init.headers as HeadersInit).get("idempotency-key") ?? "";
@@ -226,7 +252,7 @@ Deno.test("webhook treats a 4xx as permanent and a 5xx as retryable", async () =
     globalThis.fetch = (() => Promise.resolve(new Response(null, { status }))) as typeof fetch;
   };
   try {
-    const unit = webhook("https://hooks.example.com/claims");
+    const unit = webhook("claims", "https://hooks.example.com/claims");
     respond(400);
     let permanent = false;
     try {
@@ -277,12 +303,29 @@ Deno.test("a custom unit on the public contract is idempotent by journal id", as
 Deno.test("webhook defaults to a finite 24-hour delivery window", () => {
   clearEffectDeclarations();
   install();
-  const unit = webhook("https://hooks.example.com/claims");
+  const unit = webhook("claims", "https://hooks.example.com/claims");
   assert(unit.expiresAfterMs === 24 * 60 * 60 * 1000, "external delivery must default to 24h");
-  const forever = webhook("https://hooks.example.com/claims2", { expiresAfterMs: null });
+  const forever = webhook("claims-forever", "https://hooks.example.com/claims2", {
+    expiresAfterMs: null,
+  });
   assert(
     forever.expiresAfterMs === null || forever.expiresAfterMs === undefined,
     "null must opt into no expiry",
   );
+  clearEffectDeclarations();
+});
+
+Deno.test("webhook default expiry and explicit no-expiry do not alias", () => {
+  clearEffectDeclarations();
+  install();
+  const url = "https://hooks.example.com/expiry";
+  webhook("expiry", url);
+  let thrown = false;
+  try {
+    webhook("expiry", url, { expiresAfterMs: null });
+  } catch {
+    thrown = true;
+  }
+  assert(thrown, "explicit null must not reuse the default 24-hour configuration");
   clearEffectDeclarations();
 });

@@ -28,6 +28,7 @@ import type { WriteHandle } from "../runtime/write-handle.ts";
 import {
   anonymousUnit,
   cachedBuiltin,
+  dispatchChainedMutation,
   type EffectContext,
   type EffectHandlers,
   type EffectRow,
@@ -139,10 +140,10 @@ export function notice<Row extends { id: string } = { id: string }>(
     resolver: NoticeResolver<Row> | undefined,
     tone: NoticeInput["tone"],
   ) =>
-  (row: EffectRow<{ id: string }>, context: EffectContext) => {
+  async (row: EffectRow<{ id: string }>, context: EffectContext) => {
     if (resolver === undefined) return;
     const runtime = requireMutationRuntime();
-    runtime.enqueueNotice?.(
+    await runtime.enqueueNotice?.(
       { message: resolveNotice(resolver, row as EffectRow<Row>), tone, ttlMs: ttlMs ?? null },
       context,
     );
@@ -225,9 +226,10 @@ export function mark<T extends { id: string }, Init>(
  * is an ordinary verb, so its own effects and rejection handling apply. Fires
  * only on `synced`; a rejected write starts no chain.
  *
- * The follow-up is itself journaled and idempotent by its own write id. This
- * unit's obligation is marked delivered once the next verb is durably saved,
- * so a crash between links re-issues from the last settled row.
+ * The follow-up is journaled under a deterministic child write id derived
+ * from this obligation. Its record remains retained until the parent commits
+ * delivery, so a crash between those steps reuses the child instead of
+ * issuing the mutation again.
  *
  * @example
  * ```ts
@@ -236,15 +238,17 @@ export function mark<T extends { id: string }, Init>(
  * });
  * ```
  */
-export function chain<Row extends { id: string }, NextInput>(
-  next: (input: NextInput) => WriteHandle<unknown>,
+export function chain<Row extends { id: string }, NextInput, NextResult>(
+  next: (input: NextInput) => WriteHandle<NextResult>,
   toInput: (row: EffectRow<Row>) => NextInput,
 ): EffectUnit<Row> {
   return anonymousUnit<{ id: string }>("chain", {
-    onSynced: async (row) => {
-      // Await local durability of the follow-up: only then is this link safe
-      // to mark delivered, so a crash re-issues rather than dropping it.
-      await next(toInput(row as EffectRow<Row>)).saved;
+    onSynced: async (row, context) => {
+      // The ledger derives the child write id from this obligation and keeps
+      // its record until the parent is committed done. A replay therefore
+      // observes the existing child instead of issuing the mutation twice.
+      const input = toInput(row as EffectRow<Row>);
+      await dispatchChainedMutation(next, [input], context.journalId);
     },
   }) as unknown as EffectUnit<Row>;
 }
@@ -271,7 +275,8 @@ export type WebhookOptions = {
 const defaultWebhookExpiry = 24 * 60 * 60 * 1000;
 
 /**
- * External unit: POSTs the settled row and its fate to `url`, with the
+ * External unit: POSTs the settled row and its fate to `url`, using `name` as
+ * its safe durable identity and with the
  * obligation's journal id auto-injected as `Idempotency-Key` so a re-delivery
  * the receiver already saw is dropped receiver-side. The generic
  * outside-world workhorse and the reference for the at-least-once contract.
@@ -286,25 +291,41 @@ const defaultWebhookExpiry = 24 * 60 * 60 * 1000;
  * @example
  * ```ts
  * export const order = s.mutation("order", s.insert(app.orders), {
- *   effects: [s.webhook("https://hooks.example.com/orders")],
+ *   effects: [s.webhook("orders", "https://hooks.example.com/orders")],
  * });
  * ```
  */
-export function webhook(url: string, options: WebhookOptions = {}): EffectUnit<{ id: string }> {
+export function webhook(
+  name: string,
+  url: string,
+  options: WebhookOptions = {},
+): EffectUnit<{ id: string }> {
+  if (!name.trim()) throw new Error("webhook name must not be empty");
   if (!url.trim()) throw new Error("webhook url must not be empty");
   const fates = new Set(options.on ?? ["synced", "rejected"]);
+  const configuredHeaders = new Headers(options.headers);
+  configuredHeaders.delete("content-type");
+  configuredHeaders.delete("idempotency-key");
+  const signature = JSON.stringify({
+    url,
+    on: [...fates].sort(),
+    expiresAfterMs: options.expiresAfterMs === undefined
+      ? defaultWebhookExpiry
+      : options.expiresAfterMs,
+    maxAttempts: options.maxAttempts ?? null,
+    headers: [...configuredHeaders.entries()].sort(([left], [right]) => left.localeCompare(right)),
+  });
   const build = (): EffectHandlers<{ id: string }> => {
     const post = async (row: EffectRow<{ id: string }>, context: EffectContext) => {
       if (!fates.has(context.fate)) return;
       let response: Response;
       try {
+        const headers = new Headers(configuredHeaders);
+        headers.set("content-type", "application/json");
+        headers.set("idempotency-key", context.journalId);
         response = await fetch(url, {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "idempotency-key": context.journalId,
-            ...options.headers,
-          },
+          headers,
           body: JSON.stringify({
             journalId: context.journalId,
             verb: context.verb,
@@ -316,33 +337,25 @@ export function webhook(url: string, options: WebhookOptions = {}): EffectUnit<{
             row,
           }),
         });
-      } catch (error) {
+      } catch {
         // A network-level failure is transient by nature: rethrow so the
         // ledger retries with backoff inside the delivery window.
-        throw new Error(`webhook ${url} unreachable: ${(error as Error).message}`);
+        throw new Error(`webhook "${name}" unreachable`);
       }
       if (response.ok) return;
       if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw new PermanentEffectError(`webhook ${url} refused with ${response.status}`);
+        throw new PermanentEffectError(`webhook "${name}" refused with ${response.status}`);
       }
-      throw new Error(`webhook ${url} transient failure ${response.status}`);
+      throw new Error(`webhook "${name}" transient failure ${response.status}`);
     };
     return { onSynced: post, onRejected: post };
   };
-  // Keyed by url + options so two verbs posting the same configured webhook
-  // share one unit (no name collision), while a different config is distinct.
-  const name = `webhook:${url}:${
-    JSON.stringify({
-      on: options.on ?? null,
-      expiresAfterMs: options.expiresAfterMs ?? null,
-      maxAttempts: options.maxAttempts ?? null,
-      headers: options.headers ?? null,
-    })
-  }`;
-  return cachedBuiltin(name, build, {
+  // Only the author-chosen name is durable. Configuration (including headers)
+  // is compared in memory so secrets never enter journal identifiers.
+  return cachedBuiltin(`webhook:${name}`, build, {
     expiresAfterMs: options.expiresAfterMs === undefined
       ? defaultWebhookExpiry
-      : options.expiresAfterMs ?? undefined,
+      : options.expiresAfterMs,
     ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
-  });
+  }, signature);
 }

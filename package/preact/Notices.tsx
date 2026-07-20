@@ -1,4 +1,4 @@
-import type { VNode } from "preact";
+import { Fragment, type VNode } from "preact";
 // Package-owned optional notices surface.
 import { type NoticeEntry, useNotices } from "./use-notices.ts";
 
@@ -28,7 +28,7 @@ export type NoticesProps = {
  * ```
  *
  * @param props Optional region label and a custom per-notice renderer.
- * @returns The live notices region, or `null` when the queue is empty.
+ * @returns The always-mounted live notices region.
  */
 export function Notices({ label = "Notifications", children }: NoticesProps): VNode {
   const { notices, dismiss } = useNotices();
@@ -41,11 +41,10 @@ export function Notices({ label = "Notifications", children }: NoticesProps): VN
       class="lofi-notices"
       aria-label={label}
       aria-live="polite"
-      hidden={notices.length === 0}
     >
       {notices.map((notice) =>
         children
-          ? <div key={notice.id}>{children(notice, () => dismiss(notice.id))}</div>
+          ? <Fragment key={notice.id}>{children(notice, () => dismiss(notice.id))}</Fragment>
           : (
             <div key={notice.id} class="lofi-notice" data-tone={notice.tone} role="status">
               <p class="lofi-notice-message">{notice.message}</p>

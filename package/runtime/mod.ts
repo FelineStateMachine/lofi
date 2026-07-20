@@ -208,7 +208,7 @@ export {
   type SinkRestoreOutcome,
   type SyncTicket,
 } from "./data-sink.ts";
-export { RecoveryError } from "./recovery.ts";
+export { RecoveryError, type RecoveryErrorCode } from "./recovery.ts";
 export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";
 export {
   type RowOf,
@@ -230,16 +230,27 @@ export {
 } from "./write-handle.ts";
 export {
   armWriteLedger,
+  dismissAllNotices,
+  dismissNotice,
+  getNoticeQueue,
   getWriteLedger,
   type LedgerWriteOptions,
   type LedgerWriteRequest,
+  listNotices,
   type PendingWritesSnapshot,
   type PendingWriteSummary,
   type ProbeTable,
   type RowSyncStatus,
+  subscribeNotices,
   WriteLedger,
   type WriteLedgerEnvironment,
 } from "./write-ledger.ts";
+export {
+  type NoticeEnqueueInput,
+  type NoticeEntry,
+  NoticeQueue,
+  type NoticeTone,
+} from "./notice-queue.ts";
 export {
   createDefaultJournalStorage,
   createMemoryJournalStorage,
@@ -251,7 +262,7 @@ export {
   type JournalWriteRecord,
   type JournalWriteStage,
 } from "./write-journal.ts";
-export type { EffectLogEntry } from "./diagnostics.ts";
+export type { EffectDebugEvent, EffectLogEntry, EffectTraceEntry } from "./diagnostics.ts";
 export { pinnedFingerprint, trustPeerKey, verifyAndPinFingerprint } from "./shared-field-keys.ts";
 export type {
   EffectContext,

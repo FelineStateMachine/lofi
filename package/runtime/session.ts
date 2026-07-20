@@ -48,7 +48,12 @@ import {
   secretFingerprint,
   SyncOwnerError,
 } from "./sync-owner.ts";
-import { type DevicePublicKey, exportDevicePublicKey, getOrCreatePopKeyPair } from "./pop.ts";
+import {
+  completePopExchange,
+  type DevicePublicKey,
+  exportDevicePublicKey,
+  getOrCreatePopKeyPair,
+} from "./pop.ts";
 import { holdProvisionCapability } from "./provision.ts";
 import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
 import { authenticateDeviceCredential, AuthError, enrollDeviceCredential } from "./auth.ts";
@@ -437,11 +442,13 @@ export async function performTicketEnrollment(
 ): Promise<Session> {
   // Only a provision-scoped ticket reaches the scope-down exchange, so only
   // then is there a binding to offer.
+  let deviceKeyPair: CryptoKeyPair | undefined;
   let devicePublicKey: DevicePublicKey | undefined;
   const parsed = parseSyncTicket(ticket);
   if (parsed?.scope === "provision") {
     try {
-      devicePublicKey = await exportDevicePublicKey(await getOrCreatePopKeyPair(parsed.appId));
+      deviceKeyPair = await getOrCreatePopKeyPair(parsed.appId);
+      devicePublicKey = await exportDevicePublicKey(deviceKeyPair);
     } catch {
       // No usable key custody in this context; the exchange still derives a
       // ticket, held as a bearer credential exactly as before.
@@ -450,6 +457,21 @@ export async function performTicketEnrollment(
   const split = await splitTicketForEnrollment(ticket, deps.fetcher, devicePublicKey);
   const previous = readDeclaredSink();
   const declared = await declareSinkFromTicket(split.sinkTicket, deps.keyStore, split.pop);
+  // A PoP-bound derived ticket rejects every bare request, including the
+  // metadata preflight. Prove possession first and ask store-status through
+  // the short-lived connect URL, just as the managed runtime does for sync.
+  // Without this exchange a healthy store looks unreachable, while a real
+  // no-schema refusal can be lost and enrollment incorrectly kept.
+  let preflightServerUrl = declared.serverUrl;
+  if (split.pop && deviceKeyPair) {
+    preflightServerUrl = await completePopExchange({
+      serverUrl: declared.serverUrl,
+      appId: declared.appId,
+      ticketId: split.pop.ticketId,
+      keyPair: deviceKeyPair,
+      ...(deps.fetcher ? { fetcher: deps.fetcher } : {}),
+    }) ?? declared.serverUrl;
+  }
   // The preflight decides whether enrollment is kept: a store that answers
   // with a definite refusal rolls the declaration back before anything else
   // (election, provision custody) observes it. An unreachable store is not a
@@ -457,7 +479,7 @@ export async function performTicketEnrollment(
   // the warning recorded where status surfaces read it.
   const status = await resolveStoreStatus({
     connect: true,
-    sink: { serverUrl: declared.serverUrl },
+    sink: { serverUrl: preflightServerUrl },
     ...(deps.preflight ? { preflight: deps.preflight } : {}),
     ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
   });

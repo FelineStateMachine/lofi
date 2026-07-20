@@ -50,7 +50,7 @@ function describe(error: unknown): string {
   if (isAuthError(error)) {
     switch (error.code) {
       case "cancelled":
-        return "Passkey prompt dismissed — your recovery phrase was not shown.";
+        return "Passkey verification did not complete — your recovery phrase was not shown.";
       case "unsupported":
         return "This browser does not support passkeys.";
       default:

@@ -21,7 +21,8 @@ export type RecoverablePasskeyErrorCode =
   | "restore-failed";
 
 const messages: Record<RecoverablePasskeyErrorCode, string> = {
-  cancelled: "The passkey prompt was cancelled. Nothing on this device was replaced.",
+  cancelled:
+    "A passkey was not created or opened. Nothing on this device was replaced; try again or use the recovery phrase.",
   unsupported:
     "This browser cannot create or restore a recoverable passkey. Use the recovery phrase instead.",
   "credential-missing":

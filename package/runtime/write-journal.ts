@@ -54,6 +54,8 @@ export type JournalWriteStage = "saved" | "synced" | "rejected";
 export type JournalWriteRecord = {
   /** The stable package-owned write id. */
   writeId: string;
+  /** Parent obligation retaining this child until it commits, or `null`. */
+  retainedBy?: string | null;
   /** The declaring verb's name, or `null` for writes without a verb. */
   verb: string | null;
   /** The written table's name. */
@@ -250,11 +252,7 @@ function localStorageStorage(key: string): JournalStorage | null {
       }
     },
     save(text: string) {
-      try {
-        localStorage.setItem(key, text);
-      } catch {
-        // A private-mode quota failure degrades to session-only pending state.
-      }
+      localStorage.setItem(key, text);
       return Promise.resolve();
     },
   };
@@ -280,6 +278,7 @@ export class WriteJournal {
   readonly #storage: JournalStorage;
   #document: JournalDocument = emptyJournal();
   #chain: Promise<void> = Promise.resolve();
+  #lastAttempt: Promise<void> = Promise.resolve();
   #loaded = false;
 
   /** Creates a journal over one storage location. */
@@ -305,13 +304,13 @@ export class WriteJournal {
   update(mutate: (document: JournalDocument) => void): void {
     mutate(this.#document);
     const snapshot = JSON.stringify(this.#document);
-    this.#chain = this.#chain
-      .then(() => this.#storage.save(snapshot))
-      .catch(() => undefined);
+    const attempt = this.#chain.then(() => this.#storage.save(snapshot));
+    this.#lastAttempt = attempt;
+    this.#chain = attempt.catch(() => undefined);
   }
 
   /** Resolves once every scheduled persistence has settled. */
   flush(): Promise<void> {
-    return this.#chain;
+    return this.#lastAttempt;
   }
 }

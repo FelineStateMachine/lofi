@@ -102,6 +102,7 @@ export {
   type EffectContext,
   type MutationDescriptor,
   type MutationRuntime,
+  type NoticeInput,
   setMutationRuntime,
 } from "../schema/effects.ts";
 export {

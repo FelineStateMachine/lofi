@@ -1,4 +1,4 @@
-import { describeSyncState } from "./DeviceStatus.tsx";
+import { describeCredentialOrigin, describeSyncState } from "./DeviceStatus.tsx";
 
 // The report's contract after the sync-state integrity pass: a reader must be
 // able to tell *why* nothing is syncing. Each blocked disposition names its
@@ -43,5 +43,24 @@ Deno.test("describeSyncState puts the owner mismatch above store answers", () =>
   });
   if (!verdict.includes("another account")) {
     throw new Error(`owner mismatch was outranked: ${verdict}`);
+  }
+});
+
+Deno.test("credential-origin status does not overstate API support", () => {
+  const local = describeCredentialOrigin({
+    status: "local-only",
+    rpId: "localhost",
+    action: "use the stable HTTPS origin",
+  });
+  if (!local.includes("local development only") || !local.includes("localhost")) {
+    throw new Error(`local credential origin was overstated: ${local}`);
+  }
+  const stable = describeCredentialOrigin({
+    status: "stable",
+    rpId: "demo.lofi.host",
+    action: "keep this hostname",
+  });
+  if (!stable.includes("stable") || !stable.includes("demo.lofi.host")) {
+    throw new Error(`stable credential origin lost its hostname: ${stable}`);
   }
 });

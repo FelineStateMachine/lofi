@@ -97,8 +97,12 @@ Deno.test("a hung or failing preflight degrades to store_unavailable", async () 
   );
 });
 
-Deno.test("only a /t/<secret> path counts as a ticket-gated server URL", () => {
+Deno.test("only ticket and PoP connect paths count as ticket-gated server URLs", () => {
   assert(isTicketServerUrl(ticketUrl), "a valid ticket URL must be recognized");
+  assert(
+    isTicketServerUrl(`${ticketUrl}/c/${"c".repeat(43)}`),
+    "a valid PoP connect URL must be recognized",
+  );
   assert(
     !isTicketServerUrl("https://sync.example.com"),
     "a first-party server URL must not be probed",
@@ -106,6 +110,10 @@ Deno.test("only a /t/<secret> path counts as a ticket-gated server URL", () => {
   assert(
     !isTicketServerUrl("https://node.example/t/short"),
     "a short secret segment must not be treated as a ticket path",
+  );
+  assert(
+    !isTicketServerUrl(`${ticketUrl}/c/short`),
+    "a short connect token must not be treated as a ticket path",
   );
   assert(!isTicketServerUrl("not a url"), "a malformed URL must not be treated as a ticket path");
 });

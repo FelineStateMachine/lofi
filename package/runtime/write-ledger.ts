@@ -24,12 +24,19 @@ import {
   type EffectContext,
   type EffectRow,
   type EffectUnit,
+  isPermanentEffectError,
   type MutationDescriptor,
   resolveEffectUnit,
   setMutationRuntime,
 } from "../schema/effects.ts";
 import { appId, syncing } from "./config.ts";
-import { recordEffectLogEntry, type RuntimeDiagnostics } from "./diagnostics.ts";
+import {
+  recordEffectDebugEvent,
+  recordEffectLogEntry,
+  recordEffectTrace,
+  type RuntimeDiagnostics,
+} from "./diagnostics.ts";
+import { createDefaultNoticeStorage, type NoticeEntry, NoticeQueue } from "./notice-queue.ts";
 import { settleDurableWrite } from "./durability.ts";
 import { classifyMutationError } from "./mutation-taxonomy.ts";
 import {
@@ -44,6 +51,7 @@ import { createWriteHandle, type WriteHandle, type WriteHandleController } from 
 import {
   createDefaultJournalStorage,
   hashJournalValue,
+  type JournalDocument,
   type JournalEffectState,
   journalIdFor,
   type JournalStorage,
@@ -103,6 +111,10 @@ export type LedgerWriteOptions = {
   units?: readonly EffectUnit<{ id: string }>[];
   /** The intent's lifespan in milliseconds, or `null` for none. */
   expiresAfterMs?: number | null;
+  /** Internal deterministic identity for a chain child. */
+  writeId?: string;
+  /** Parent obligation retaining this chain child until parent completion. */
+  retainedBy?: string | null;
 };
 
 type VendorWrite = {
@@ -272,7 +284,7 @@ export class WriteLedger {
    */
   perform<T>(request: LedgerWriteRequest, options: LedgerWriteOptions = {}): WriteHandle<T> {
     if (this.#disposed) throw new Error("write ledger has been disposed");
-    const { handle, controller } = createWriteHandle<T>(crypto.randomUUID());
+    const { handle, controller } = createWriteHandle<T>(options.writeId ?? crypto.randomUUID());
     const db = this.#db;
     const guard = this.#environment.guardWrite;
     if (db && !guard) {
@@ -321,12 +333,17 @@ export class WriteLedger {
   }
 
   /** Performs one declared verb call; the verb dispatcher's entry point. */
-  performVerb(descriptor: MutationDescriptor, args: readonly unknown[]): WriteHandle<unknown> {
+  performVerb(
+    descriptor: MutationDescriptor,
+    args: readonly unknown[],
+    internal: Pick<LedgerWriteOptions, "writeId" | "retainedBy"> = {},
+  ): WriteHandle<unknown> {
     const table = descriptor.op.table as TableProxy<unknown, unknown>;
     const options: LedgerWriteOptions = {
       verb: descriptor.verbName,
       units: descriptor.units,
       expiresAfterMs: descriptor.expiresAfterMs,
+      ...internal,
     };
     if (descriptor.op.kind === "insert") {
       return this.perform({ kind: "insert", table, values: args[0] }, options);
@@ -340,6 +357,22 @@ export class WriteLedger {
       }, options);
     }
     return this.perform({ kind: "remove", table, id: args[0] as string }, options);
+  }
+
+  /** Performs a chain child once and retains its record through parent commit. */
+  async performChainedVerb(
+    descriptor: MutationDescriptor,
+    args: readonly unknown[],
+    parentJournalId: string,
+  ): Promise<void> {
+    const writeId = `chain:${parentJournalId}`;
+    if (this.#journal.document.writes[writeId]) {
+      await this.#journal.flush();
+      return;
+    }
+    const handle = this.performVerb(descriptor, args, { writeId, retainedBy: parentJournalId });
+    await handle.saved;
+    await this.#journal.flush();
   }
 
   /** Re-attempts outstanding obligations of one effect name after late registration. */
@@ -557,6 +590,7 @@ export class WriteLedger {
     const createdAt = this.#environment.now();
     const entry: JournalWriteRecord = {
       writeId: handle.writeId,
+      retainedBy: options.retainedBy ?? null,
       verb: options.verb ?? null,
       table: (request.table as { _table?: string })._table ?? "",
       op: request.kind,
@@ -723,8 +757,9 @@ export class WriteLedger {
     const fate = entry.stage === "synced" ? "synced" as const : "rejected" as const;
     const handler = fate === "synced" ? unit.handlers.onSynced : unit.handlers.onRejected;
     if (!handler) {
-      this.#journal.update(() => {
+      this.#journal.update((document) => {
         state.status = "done";
+        this.#releaseRetainedChildren(document, journalId);
       });
       this.#afterChange();
       return;
@@ -743,7 +778,9 @@ export class WriteLedger {
         writeId: entry.writeId,
         verb: entry.verb,
         table: entry.table,
+        op: entry.op,
         rowId: entry.rowId,
+        writeCreatedAt: entry.createdAt,
         fate,
         cause: fate === "rejected" ? entry.cause ?? "denied" : null,
         code: entry.code,
@@ -751,9 +788,10 @@ export class WriteLedger {
       };
       try {
         await handler(row as EffectRow<{ id: string }>, context);
-        this.#journal.update(() => {
+        this.#journal.update((document) => {
           state.status = "done";
           state.lastError = null;
+          this.#releaseRetainedChildren(document, journalId);
         });
       } catch (error) {
         const maxAttempts = unit.maxAttempts ?? defaultMaxAttempts;
@@ -764,9 +802,11 @@ export class WriteLedger {
         this.#environment.updateDiagnostics((diagnostics) =>
           diagnostics.effectHandlerFailures += 1
         );
-        // Quarantine: a handler that keeps failing retires instead of
-        // re-arming forever; the retirement is diagnosable and prunable.
-        if (state.attempts >= maxAttempts) {
+        // A handler that declared its failure permanent retires now: retrying
+        // a request the receiver will keep refusing only burns the budget and
+        // delays the quarantine diagnostic. Otherwise a failing handler
+        // re-arms until repeated attempts quarantine it.
+        if (isPermanentEffectError(error) || state.attempts >= maxAttempts) {
           this.#retireObligation(entry, effectName, "failed-permanent");
         }
       }
@@ -808,6 +848,12 @@ export class WriteLedger {
     return { id: entry.rowId };
   }
 
+  #releaseRetainedChildren(document: JournalDocument, parentJournalId: string): void {
+    for (const child of Object.values(document.writes)) {
+      if (child.retainedBy === parentJournalId) child.retainedBy = null;
+    }
+  }
+
   #afterChange(): void {
     const document = this.#journal.document;
     for (const entry of Object.values(document.writes)) {
@@ -818,7 +864,7 @@ export class WriteLedger {
       }
       const settled = Object.values(entry.effects)
         .every((state) => isRetired(state.status));
-      if (settled) {
+      if (settled && !entry.retainedBy) {
         // Fully settled entries leave the journal; failed-but-not-quarantined
         // obligations keep theirs so the next boot can re-arm the handler.
         this.#journal.update(() => {
@@ -898,10 +944,66 @@ export function armWriteLedger(): Promise<void> {
   return getWriteLedger().arm();
 }
 
+let defaultNotices: NoticeQueue | null = null;
+let noticeSweepTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The package-wide durable notice queue behind `s.notice`, created lazily and
+ * kept in sync with the `activeNotices` diagnostic. Public read/subscribe/
+ * dismiss surfaces ({@link listNotices}, {@link subscribeNotices},
+ * {@link dismissNotice}) are re-exported from the runtime entry.
+ */
+export function getNoticeQueue(): NoticeQueue {
+  if (!defaultNotices) {
+    const queue = new NoticeQueue(
+      createDefaultNoticeStorage(appId),
+      Date.now,
+      (count) =>
+        updateRuntimeDiagnostics((diagnostics) => {
+          diagnostics.activeNotices = count;
+        }),
+    );
+    defaultNotices = queue;
+    // Load persisted entries; the merged initial count publishes through the
+    // queue's own onCountChange. A storage-less or prerender context simply
+    // starts empty.
+    void queue.load().catch(() => undefined);
+    // A TTL-only expiry has no queue mutation to repaint it, so a modest
+    // periodic sweep retires expired entries and republishes the count.
+    if (typeof setInterval === "function") {
+      noticeSweepTimer = setInterval(() => queue.sweep(), 30_000);
+      (noticeSweepTimer as { unref?: () => void })?.unref?.();
+    }
+  }
+  return defaultNotices;
+}
+
+/** The live durable notices for the current document. */
+export function listNotices(): readonly NoticeEntry[] {
+  return getNoticeQueue().list();
+}
+
+/** Subscribes to notice-queue changes; returns an unsubscribe function. */
+export function subscribeNotices(listener: () => void): () => void {
+  return getNoticeQueue().subscribe(listener);
+}
+
+/** Dismisses one durable notice by id. */
+export function dismissNotice(id: string): void {
+  getNoticeQueue().dismiss(id);
+}
+
+/** Dismisses every durable notice. */
+export function dismissAllNotices(): void {
+  getNoticeQueue().dismissAll();
+}
+
 // The runtime half of the schema-declared verb surface: importing the runtime
 // package installs dispatch, so verbs work wherever islands import hooks.
 setMutationRuntime({
   dispatch: (descriptor, args) => getWriteLedger().performVerb(descriptor, args),
+  dispatchChained: (descriptor, args, parentJournalId) =>
+    getWriteLedger().performChainedVerb(descriptor, args, parentJournalId),
   recordLog: (label, context) =>
     updateRuntimeDiagnostics((diagnostics) =>
       recordEffectLogEntry(diagnostics, {
@@ -913,10 +1015,52 @@ setMutationRuntime({
         at: Date.now(),
       })
     ),
+  recordTrace: (label, context) =>
+    updateRuntimeDiagnostics((diagnostics) =>
+      recordEffectTrace(diagnostics, {
+        label,
+        verb: context.verb,
+        rowId: context.rowId,
+        fate: context.fate,
+        durationMs: Math.max(0, Date.now() - context.writeCreatedAt),
+        at: Date.now(),
+      })
+    ),
+  recordDebug: (event, context) =>
+    updateRuntimeDiagnostics((diagnostics) =>
+      recordEffectDebugEvent(diagnostics, {
+        verb: context.verb,
+        journalId: context.journalId,
+        event,
+        at: Date.now(),
+      })
+    ),
+  enqueueNotice: (input, context) =>
+    getNoticeQueue().enqueue({
+      id: context.journalId,
+      message: input.message,
+      tone: input.tone,
+      ttlMs: input.ttlMs,
+    }),
+  applyMark: async (table, rowId, patch) => {
+    try {
+      await getWriteLedger().perform({ kind: "update", table, id: rowId, patch }).saved;
+    } catch {
+      // A mark is best-effort: the status patch may find no row (a row removed
+      // elsewhere) or be denied by policy. Swallow so the mark obligation does
+      // not re-arm and quarantine over a patch that will never land; the
+      // fate-as-data guarantee for must-survive signals belongs to s.notice.
+    }
+  },
   unitRegistered: (name) => defaultLedger?.retryObligationsFor(name),
 });
 
 import.meta.hot?.dispose(() => {
   defaultLedger?.dispose();
   defaultLedger = null;
+  defaultNotices = null;
+  if (noticeSweepTimer !== null) {
+    clearInterval(noticeSweepTimer);
+    noticeSweepTimer = null;
+  }
 });

@@ -2,6 +2,7 @@ import type { VNode } from "preact";
 import { useEffect, useState } from "preact/hooks";
 // Package-owned optional diagnostics UI.
 import { useDeviceCapabilities } from "./use-device-capabilities.ts";
+import { type CredentialOriginReport, getAuthCapability } from "../runtime/auth.ts";
 import { settleUiMutation } from "../runtime/ui-mutation.ts";
 import { getPwaState, type PwaState, subscribePwaState } from "../runtime/pwa.ts";
 import { PwaActions } from "./PwaActions.tsx";
@@ -29,6 +30,20 @@ function Row({ label, value }: { label: string; value: string }): VNode {
 }
 
 const available = (present: boolean) => (present ? "available" : "missing");
+
+/** One-line credential-origin verdict that distinguishes API support from deployability. */
+export function describeCredentialOrigin(origin: CredentialOriginReport): string {
+  switch (origin.status) {
+    case "stable":
+      return `stable — ${origin.rpId}`;
+    case "local-only":
+      return `local development only — ${origin.rpId}`;
+    case "unverified":
+      return `unverified — ${origin.rpId}`;
+    case "blocked":
+      return origin.rpId ? `blocked — ${origin.rpId}` : "blocked";
+  }
+}
 
 /**
  * The one-line Data sync verdict. The blocked dispositions are first-class —
@@ -79,6 +94,7 @@ export function DeviceStatus(): VNode {
   const [pwa, setPwa] = useState<PwaState>(getPwaState());
   const [session, setSession] = useState<Session | null>(null);
   const [runtimeDiagnostics, setRuntimeDiagnostics] = useState(getRuntimeDiagnostics());
+  const [credentialOrigin, setCredentialOrigin] = useState<CredentialOriginReport | null>(null);
 
   useEffect(() => subscribePwaState(setPwa), []);
   useEffect(
@@ -91,6 +107,15 @@ export function DeviceStatus(): VNode {
     // Re-read after electing to sync or restoring an account recreates the runtime.
     globalThis.addEventListener(runtimeRecreatedEvent, refresh);
     return () => globalThis.removeEventListener(runtimeRecreatedEvent, refresh);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void getAuthCapability().then((capability) => {
+      if (active) setCredentialOrigin(capability.origin);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (!report) return <p class="device-status">Checking device capabilities…</p>;
@@ -218,9 +243,16 @@ export function DeviceStatus(): VNode {
         <dl>
           <Row label="Identity" value="local-first account" />
           <Row label="Backup" value={backupState} />
-          <Row label="WebAuthn" value={available(report.webAuthn)} />
-          <Row label="PRF (at-rest key)" value={report.prf} />
+          <Row label="WebAuthn API" value={available(report.webAuthn)} />
+          <Row label="PRF API (at-rest key)" value={report.prf} />
+          <Row
+            label="Credential origin"
+            value={credentialOrigin ? describeCredentialOrigin(credentialOrigin) : "checking"}
+          />
         </dl>
+        {credentialOrigin && credentialOrigin.status !== "stable" && (
+          <p>{credentialOrigin.action}</p>
+        )}
       </div>
 
       <div class="device-category">

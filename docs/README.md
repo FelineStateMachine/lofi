@@ -37,6 +37,8 @@ shortest product overview and command summary. AI agents can ingest these docs a
   - [Direct sharing](examples/shared.md)
   - [Fixed-role group](examples/group.md)
   - [Policy conditions on typed columns](examples/policy-conditions.md)
+- [Nouns and verbs](nouns-and-verbs.md) — declaring verbs, effect units, and the write lifecycle
+- [The effect library](effects.md) — built-in effect units and the custom-unit authoring contract
 - Data modeling examples — how to shape tables and columns
   - [Collaborative list data model](examples/collaborative-list.md)
   - [Collaborative sets](examples/collaborative-sets.md)

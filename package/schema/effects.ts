@@ -49,8 +49,12 @@ export type EffectContext = {
   verb: string | null;
   /** The written table's name. */
   table: string;
+  /** Which operation the write performed. */
+  op: "insert" | "update" | "remove";
   /** The written row's id. */
   rowId: string;
+  /** Epoch milliseconds when the write was journaled, for latency spans. */
+  writeCreatedAt: number;
   /** Which fate settled the write. */
   fate: "synced" | "rejected";
   /**
@@ -67,6 +71,43 @@ export type EffectContext = {
   /** The adjudicated rejection reason, on the `rejected` fate. */
   reason: string | null;
 };
+
+/**
+ * Thrown from an effect handler to retire the obligation immediately instead
+ * of re-arming it. Delivery is at-least-once by default: an ordinary thrown
+ * error is *retryable* — the handler re-runs at the next boot until it
+ * succeeds or {@link EffectUnitOptions.maxAttempts} quarantines it. Some
+ * failures are known to be *permanent* — a webhook receiver answered `400`, a
+ * row a handler needed is gone for good — and retrying only burns attempts and
+ * delays the quarantine diagnostic. Throwing this retires the obligation now,
+ * counted as a permanent handler failure. The message reaches diagnostics.
+ *
+ * @example
+ * ```ts
+ * s.effect("charge", app.orders, {
+ *   onSynced: async (order, { journalId }) => {
+ *     const res = await fetch(url, { headers: { "Idempotency-Key": journalId } });
+ *     if (res.status >= 400 && res.status < 500) {
+ *       throw new PermanentEffectError(`charge refused: ${res.status}`);
+ *     }
+ *     if (!res.ok) throw new Error(`charge transient failure: ${res.status}`);
+ *   },
+ * });
+ * ```
+ */
+export class PermanentEffectError extends Error {
+  /** Stable class name for diagnostics and the ledger's severity check. */
+  override readonly name = "PermanentEffectError";
+  /** Creates the permanent-failure signal with a diagnostics message. */
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/** True when a handler failure asked to retire rather than retry. */
+export function isPermanentEffectError(error: unknown): error is PermanentEffectError {
+  return error instanceof PermanentEffectError;
+}
 
 /** The action and compensation handlers one effect unit pairs. */
 export type EffectHandlers<Row> = {
@@ -121,6 +162,15 @@ export type EffectUnit<Row = { id: string }> = {
   readonly expiresAfterMs?: number | null;
   /** Failing attempts before quarantine retires the obligation. */
   readonly maxAttempts?: number;
+  /**
+   * Set on a built-in unit the author did not name (`s.notice`, `s.mark`,
+   * `s.chain`). Such a unit is registered lazily, when a {@link mutation}
+   * includes it: its durable name becomes `<verb>#<position>` — stable across
+   * reloads because it derives from the author-chosen verb name and the unit's
+   * fixed position in that verb's `effects`, not from module-evaluation order.
+   * Absent on named units, which register at declaration.
+   */
+  readonly anonymousPrefix?: string;
 };
 
 /** Which operation a {@link MutationOp} performs. */
@@ -206,12 +256,50 @@ export type MutationDescriptor = {
   readonly expiresAfterMs: number | null;
 };
 
+/**
+ * One durable notice a {@link notice} unit enqueues. The queue is persistent
+ * and UI-agnostic: entries may be created at a boot re-arm with nothing
+ * mounted, and a component renders them later. `tone` classifies the message
+ * for the render; `ttlMs` bounds its life when the author sets no explicit
+ * dismissal.
+ */
+export type NoticeInput = {
+  /** The user-facing message. */
+  message: string;
+  /** How to classify the message for rendering. */
+  tone: "info" | "success" | "warning" | "error";
+  /** Lifespan in milliseconds before the queue retires the entry, or `null`. */
+  ttlMs: number | null;
+};
+
 /** The runtime half installed by the package runtime before verbs are called. */
 export type MutationRuntime = {
   /** Performs one declared verb call and returns its write handle. */
   dispatch(descriptor: MutationDescriptor, args: readonly unknown[]): WriteHandle<unknown>;
+  /** Performs a chain child under a deterministic id retained by its parent. */
+  dispatchChained(
+    descriptor: MutationDescriptor,
+    args: readonly unknown[],
+    parentJournalId: string,
+  ): Promise<void>;
   /** Records one structured {@link log} entry. */
   recordLog(label: string, context: EffectContext): void;
+  /** Records one {@link trace} span from the write's journaling to its fate. */
+  recordTrace?(label: string | null, context: EffectContext): void;
+  /** Records one {@link debug} timeline event; a no-op in production builds. */
+  recordDebug?(event: string, context: EffectContext): void;
+  /** Enqueues one durable {@link notice} entry. */
+  enqueueNotice?(input: NoticeInput, context: EffectContext): Promise<void>;
+  /**
+   * Patches a row on behalf of a {@link mark} unit: a bare update carrying no
+   * further units, so write fate becomes replicated row data without
+   * recursion. Resolves at local durability; rejects if the row is gone.
+   */
+  applyMark?(
+    table: TableProxy<unknown, unknown>,
+    rowId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void>;
   /** Re-attempts outstanding journal obligations after a late unit registration. */
   unitRegistered?(name: string): void;
 };
@@ -221,6 +309,13 @@ type EffectsSlot = {
   effects: Map<string, EffectUnit<{ id: string }>>;
   verbs: Map<string, MutationDescriptor>;
   logs: Map<string, EffectUnit<{ id: string }>>;
+  /** Cache for shared built-ins (trace, debug, webhook) keyed by durable name. */
+  cache: Map<string, CachedBuiltinEntry>;
+};
+
+type CachedBuiltinEntry = {
+  unit: EffectUnit<{ id: string }>;
+  signature: string | null;
 };
 
 const slotName = "__LOFI_EFFECT_DECLARATIONS__";
@@ -232,6 +327,7 @@ function slot(): EffectsSlot {
     effects: new Map(),
     verbs: new Map(),
     logs: new Map(),
+    cache: new Map(),
   };
   return effectsGlobal[slotName];
 }
@@ -256,6 +352,7 @@ export function clearEffectDeclarations(): void {
   state.effects.clear();
   state.verbs.clear();
   state.logs.clear();
+  state.cache.clear();
 }
 
 // During dev hot replacement author modules re-evaluate routinely; the newest
@@ -366,6 +463,79 @@ function requireRuntime(): MutationRuntime {
 }
 
 /**
+ * The installed runtime, or a thrown explanation when none is. The built-in
+ * effect library ({@link EffectUnit} factories in `effect-library.ts`) reaches
+ * the runtime through this so it stays on the public authoring surface — the
+ * same requirement custom units must meet.
+ */
+export function requireMutationRuntime(): MutationRuntime {
+  return requireRuntime();
+}
+
+/**
+ * Builds an anonymous built-in unit (a notice, mark, or chain the author did
+ * not name) without registering it. Registration is deferred to
+ * {@link mutation}, which names it `<verb>#<position>` from the verb it is
+ * attached to and its position in that verb's `effects`. That identity is
+ * stable across reloads regardless of which module evaluates first, so a
+ * journaled obligation always re-arms against the same logical unit; the only
+ * way to orphan one is to reorder the effects within its own verb.
+ */
+export function anonymousUnit<Row extends { id: string }>(
+  prefix: string,
+  handlers: EffectHandlers<Row>,
+  options: EffectUnitOptions = {},
+): EffectUnit<Row> {
+  return {
+    effectName: "",
+    handlers,
+    anonymousPrefix: prefix,
+    expiresAfterMs: options.expiresAfterMs ?? null,
+    ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
+  };
+}
+
+/**
+ * Returns the shared built-in unit registered under `name`, building and
+ * registering it on first use. For observation and external units (`s.trace`,
+ * `s.debug`, `s.webhook`) whose whole identity is their durable name, so
+ * reusing one across verbs shares a single unit instead of colliding — the
+ * same discipline {@link log} follows. A supplied in-memory signature makes
+ * reuse under different configuration fail without putting that configuration
+ * into the durable name.
+ */
+export function cachedBuiltin<Row extends { id: string }>(
+  name: string,
+  build: () => EffectHandlers<Row>,
+  options: Omit<EffectUnitOptions, "expiresAfterMs"> & { expiresAfterMs?: number | null } = {},
+  signature?: string,
+): EffectUnit<Row> {
+  const state = slot();
+  const existing = state.cache.get(name);
+  if (existing && "unit" in existing) {
+    if (existing.signature !== (signature ?? null)) {
+      throw new Error(`built-in effect "${name}" is already declared with different options`);
+    }
+    return existing.unit as unknown as EffectUnit<Row>;
+  }
+  // A dev hot-reload may retain the pre-signature cache shape. Rebuild that
+  // entry so future declarations receive the same configuration checks.
+  if (existing) state.cache.delete(name);
+  const unit: EffectUnit<Row> = {
+    effectName: name,
+    handlers: build(),
+    expiresAfterMs: options.expiresAfterMs ?? null,
+    ...(options.maxAttempts !== undefined ? { maxAttempts: options.maxAttempts } : {}),
+  };
+  state.cache.set(name, {
+    unit: unit as unknown as EffectUnit<{ id: string }>,
+    signature: signature ?? null,
+  });
+  registerUnit(unit as unknown as EffectUnit<{ id: string }>);
+  return unit;
+}
+
+/**
  * Declares a typed, callable verb: a named mutation over one table operation,
  * carrying its effect units. Call sites invoke the verb like a function and
  * receive a {@link WriteHandle}; `await` resolves at `saved`.
@@ -409,12 +579,28 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
   }
   const units: EffectUnit<{ id: string }>[] = [];
   const seen = new Set<string>();
-  for (const unit of options.effects ?? []) {
+  const seenDeclarations = new Set<EffectUnit<T>>();
+  const declared = options.effects ?? [];
+  for (let index = 0; index < declared.length; index += 1) {
+    const declaration = declared[index];
+    if (seenDeclarations.has(declaration)) {
+      throw new Error(`mutation "${name}" declares the same effect unit twice`);
+    }
+    seenDeclarations.add(declaration);
+    let unit = declaration as EffectUnit<{ id: string }>;
+    if (unit.anonymousPrefix !== undefined) {
+      // An anonymous built-in (s.notice/s.mark/s.chain) is named and
+      // registered here, from the verb it is attached to and its position in
+      // this verb's effects — a durable identity independent of module load
+      // order. Register a finalized copy so the ledger resolves it at re-arm.
+      unit = { ...unit, effectName: `${name}#${index}`, anonymousPrefix: undefined };
+      registerUnit(unit);
+    }
     if (seen.has(unit.effectName)) {
       throw new Error(`mutation "${name}" declares effect "${unit.effectName}" twice`);
     }
     seen.add(unit.effectName);
-    units.push(unit as EffectUnit<{ id: string }>);
+    units.push(unit);
   }
   if (options.onSynced || options.onRejected) {
     if (seen.has(name)) {
@@ -437,5 +623,23 @@ export function mutation<T extends { id: string }, Init, Kind extends MutationOp
   };
   state.verbs.set(name, descriptor);
   const verb = (...args: readonly unknown[]) => requireRuntime().dispatch(descriptor, args);
+  Object.defineProperty(verb, mutationDescriptor, { value: descriptor });
   return verb as MutationVerb<MutationOp<T, Init, Kind>>;
+}
+
+const mutationDescriptor = Symbol.for("@nzip/lofi/mutationDescriptor");
+
+/** Dispatches a declared mutation as a deterministic child of an effect. */
+export function dispatchChainedMutation<Input, Result>(
+  verb: (input: Input) => WriteHandle<Result>,
+  args: readonly [Input],
+  parentJournalId: string,
+): Promise<void> {
+  const descriptor = (verb as unknown as { [mutationDescriptor]?: MutationDescriptor })[
+    mutationDescriptor
+  ];
+  if (!descriptor) {
+    throw new Error("chain target must be a mutation declared with s.mutation");
+  }
+  return requireRuntime().dispatchChained(descriptor, args, parentJournalId);
 }

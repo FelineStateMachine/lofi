@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useState } from "preact/hooks";
 import type { RowOf, WriteHandle } from "@nzip/lofi";
 import { useLiveQuery, useWrite } from "@nzip/lofi/preact";
 import { s } from "@nzip/lofi/schema";
@@ -17,53 +17,26 @@ const tasksTable = app.schema.tasks;
 /** The row type comes straight from the declared schema. */
 export type Task = RowOf<typeof tasksTable>;
 
-/** A one-line consequence or compensation surfaced to the UI. */
-export type TaskNotice = { kind: "synced" | "rejected"; text: string };
-
-// A tiny author-owned notice channel: effect handlers run outside any
-// component, so they publish through module state and hooks subscribe.
-let notice: TaskNotice | null = null;
-const noticeListeners = new Set<() => void>();
-
-function publishNotice(next: TaskNotice | null): void {
-  notice = next;
-  for (const listener of [...noticeListeners]) listener();
-}
-
 /**
  * The verb call sites use. Its effect units are declared once, here: the
  * consequence runs when the store confirms the task, the compensation runs if
  * a stale-policy write is denied — even if the app restarted in between.
  */
 export const addTask = s.mutation("addTask", s.insert(tasksTable), {
-  effects: [s.log("task-added")],
-  onSynced: (task) => {
-    publishNotice({ kind: "synced", text: `"${task.text ?? "Task"}" synced to your account` });
-  },
-  onRejected: (task) => {
-    // The engine already rolled the denied row back out of local reads; this
-    // compensates what the user was told.
-    publishNotice({
-      kind: "rejected",
-      text: `"${task.text ?? "Task"}" was declined by the store and has been removed`,
-    });
-  },
+  effects: [
+    s.log("task-added"),
+    s.trace("task-added"),
+    s.notice<Task>({
+      synced: (task) => `"${task.text ?? "Task"}" synced to your account`,
+      // The engine already rolled a denied insert out of local reads; this
+      // durable notice compensates what the user was told, even after reload.
+      rejected: (task) => `"${task.text ?? "Task"}" was declined by the store and has been removed`,
+    }),
+  ],
 });
 
 /** Toggling completion is a plain verb: no consequences, same lifecycle. */
 export const setTaskCompleted = s.mutation("setTaskCompleted", s.update(tasksTable));
-
-/** Subscribes to the latest effect notice; `null` until one is published. */
-export function useTaskNotice(): TaskNotice | null {
-  const [current, setCurrent] = useState<TaskNotice | null>(notice);
-  useEffect(() => {
-    const listener = () => setCurrent(notice);
-    noticeListeners.add(listener);
-    listener();
-    return () => void noticeListeners.delete(listener);
-  }, []);
-  return current;
-}
 
 export function useTasks() {
   const query = useLiveQuery(() => tasksTable.orderBy("createdAt", "desc"), []);

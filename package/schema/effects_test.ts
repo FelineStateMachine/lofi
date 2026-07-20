@@ -19,6 +19,9 @@ function installRecorder(): { dispatched: Dispatched[]; logs: string[] } {
       dispatched.push({ descriptor, args });
       return { stage: "saving" } as unknown as WriteHandle<unknown>;
     },
+    dispatchChained() {
+      return Promise.resolve();
+    },
     recordLog(label) {
       logs.push(label);
     },
@@ -99,6 +102,19 @@ Deno.test("verb names are unique per app and collide fast", () => {
   clearEffectDeclarations();
 });
 
+Deno.test("one anonymous unit object cannot occupy two mutation positions", () => {
+  clearEffectDeclarations();
+  const unit = s.notice({ synced: "Saved." });
+  let thrown = false;
+  try {
+    s.mutation("duplicateNotice", s.insert(app.orders), { effects: [unit, unit] });
+  } catch {
+    thrown = true;
+  }
+  assert(thrown, "reusing one anonymous declaration must fail before it gains two identities");
+  clearEffectDeclarations();
+});
+
 Deno.test("s.log reuses one unit per label and records through the runtime", () => {
   clearEffectDeclarations();
   const recorder = installRecorder();
@@ -110,7 +126,9 @@ Deno.test("s.log reuses one unit per label and records through the runtime", () 
     writeId: "w1",
     verb: "placeOrder",
     table: "orders",
+    op: "insert",
     rowId: "row-1",
+    writeCreatedAt: 0,
     fate: "synced",
     cause: null,
     code: null,

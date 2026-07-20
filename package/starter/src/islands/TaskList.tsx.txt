@@ -2,11 +2,12 @@ import { useState } from "preact/hooks";
 import { settleUiMutation } from "@nzip/lofi";
 import {
   type BootProgress,
+  Notices,
   useBootProgress,
   usePendingWrites,
   useSyncStatus,
 } from "@nzip/lofi/preact";
-import { type Task, useTaskNotice, useTasks } from "./use-tasks.ts";
+import { type Task, useTasks } from "./use-tasks.ts";
 
 // A cold first visit waits on the engine download, not on storage; name the
 // wait it is actually in, with byte progress while the download runs.
@@ -26,7 +27,6 @@ function loadingLabel(boot: BootProgress): string {
  */
 export default function TaskList() {
   const { status, error, durability, tasks, failureKind, create, setCompleted } = useTasks();
-  const notice = useTaskNotice();
   const pending = usePendingWrites();
   const boot = useBootProgress();
   const [text, setText] = useState("");
@@ -78,11 +78,7 @@ export default function TaskList() {
           {pending.count} change{pending.count === 1 ? "" : "s"} waiting to sync
         </p>
       )}
-      {notice && (
-        <p class="state" role="status" data-notice={notice.kind}>
-          {notice.text}
-        </p>
-      )}
+      <Notices />
       <ul aria-label="Tasks">
         {tasks.map((task) => <TaskItem key={task.id} task={task} setCompleted={setCompleted} />)}
       </ul>

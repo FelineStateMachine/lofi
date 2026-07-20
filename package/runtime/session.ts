@@ -27,7 +27,26 @@ import {
   syncElected,
   syncing,
 } from "./config.ts";
-import { declareSinkFromTicket, parseSyncTicket, splitTicketForEnrollment } from "./data-sink.ts";
+import {
+  clearDeclaredSink,
+  type DataSinkDeclaration,
+  declareDataSink,
+  declareSinkFromTicket,
+  parseSyncTicket,
+  readDeclaredSink,
+  splitTicketForEnrollment,
+} from "./data-sink.ts";
+import type { DeviceKeyStore } from "./envelope.ts";
+import { resolveStoreStatus } from "./store-status.ts";
+import type { TicketStoreStatus } from "../schema/store.ts";
+import {
+  adjudicateSyncOwner,
+  clearSyncOwner,
+  readSyncOwnerVerdict,
+  recordSyncOwner,
+  secretFingerprint,
+  SyncOwnerError,
+} from "./sync-owner.ts";
 import { type DevicePublicKey, exportDevicePublicKey, getOrCreatePopKeyPair } from "./pop.ts";
 import { holdProvisionCapability } from "./provision.ts";
 import { fromRecoveryPhrase, RecoveryError, toRecoveryPhrase } from "./recovery.ts";
@@ -46,6 +65,7 @@ import {
   replaceRuntimePrincipal,
   runtimeCanReconnect,
   runtimeRecreatedEvent,
+  updateRuntimeDiagnostics,
 } from "./runtime.ts";
 import { electManagedNamespace, readNamespaceState } from "./namespace-state.ts";
 
@@ -75,6 +95,12 @@ export type Session = {
   backedUp: boolean;
   /** Whether writes replicate right now (available *and* elected). */
   syncing: boolean;
+  /**
+   * Whether this boot found sync elected by a different account than the one
+   * in hand. Transport is then suppressed; the remediation is to stop sync
+   * (releasing the election) or restore the owning account.
+   */
+  syncOwnerMismatch: boolean;
   /**
    * Whether a passkey guards the recovery phrase on this device — revealing it
    * then requires a user-verifying ceremony. This confirms the person is present;
@@ -177,6 +203,7 @@ export function readSession(): Session {
     sink: sessionSink(),
     backedUp: syncElected(),
     syncing: syncing(),
+    syncOwnerMismatch: readSyncOwnerVerdict().state === "foreign",
     phraseGuarded: phraseGuarded(),
     passkeyRecoverable: passkeyRecoverable(),
   };
@@ -290,12 +317,18 @@ export async function revealRecoveryPhrase(): Promise<string> {
  * to reopen the runtime on the elected namespace; the returned promise never
  * settles there, and the app resumes after reload. Do not put follow-up UI
  * behind the `await` — read the post-reload session state instead.
+ *
+ * Throws {@link SyncOwnerError} when sync on this device was elected by a
+ * different account: stop sync (releasing the election) or restore the owning
+ * account first. Electing under an unclaimed election records this account as
+ * the owner.
  */
 export async function enableSyncBackup(): Promise<Session> {
   // The documented no-op: without a sync location there is nothing to sync
   // to, and electing the managed namespace anyway would hide the local rows
   // behind an empty database on every later boot.
   if (!syncAvailable()) return readSession();
+  await assertAndRecordSyncOwnerForElection();
   const alreadyManaged = readNamespaceState().mode === "managed";
   setSyncElected(true);
   if (alreadyManaged && runtimeCanReconnect()) {
@@ -311,11 +344,142 @@ export async function enableSyncBackup(): Promise<Session> {
   return readSession();
 }
 
+// The election half of the sync-owner pin: refuse to elect under an account
+// that is not the recorded owner, and claim ownership when none is recorded.
+// The secret resolver is injectable so tests adjudicate without a secret
+// store. Exported for those tests; the entry does not re-export it.
+export async function assertAndRecordSyncOwnerForElection(
+  resolveSecret: () => Promise<string> = currentSecret,
+): Promise<void> {
+  const fingerprint = await secretFingerprint(await resolveSecret());
+  const verdict = adjudicateSyncOwner(fingerprint);
+  if (verdict.state === "foreign") throw new SyncOwnerError(verdict.owner_user_id);
+  if (verdict.state === "unclaimed") {
+    // The principal may not be known yet (first election precedes the managed
+    // boot); the fingerprint adjudicates, and boot backfills the name.
+    recordSyncOwner({ fingerprint, user_id: getRuntimePrincipal() });
+  }
+}
+
+/**
+ * Stable categories for a refused ticket enrollment, relayed from the node's
+ * store preflight: `no_schema` — the store holds no deployed schema for this
+ * app, so nothing could sync; `ticket_rejected` — the node no longer accepts
+ * the ticket (revoked, or the node was reset). Both are definite answers from
+ * the node; an unreachable store is deliberately not a refusal category.
+ */
+export type SyncEnrollmentFailureCode = "no_schema" | "ticket_rejected";
+
+const enrollmentMessages: Record<SyncEnrollmentFailureCode, (scope?: string) => string> = {
+  no_schema: (scope) =>
+    "The node accepted the ticket, but its store has no schema deployed for this app, so " +
+    "nothing can sync. Enrollment was not kept. " +
+    (scope === "provision"
+      ? "Provision the store, then enroll again."
+      : "Provision the store from a provision-scoped ticket, then enroll this device again."),
+  ticket_rejected: () =>
+    "The node rejected this ticket — it was revoked or the node was reset. Enrollment was " +
+    "not kept. Get a fresh ticket from the node and enroll again.",
+};
+
+/**
+ * Thrown by {@link enrollSyncTicket} when the node's store preflight refuses
+ * the enrollment: the sink declaration is rolled back, no provision
+ * capability is held, and sync is not elected, so the device stays exactly as
+ * it was before the attempt. The message is user-presentable and names the
+ * remediation for its {@link SyncEnrollmentFailureCode}. A merely unreachable
+ * store never throws this — it enrolls with the warning recorded in runtime
+ * diagnostics (`storeStatus`) instead, because a flaky network must not block
+ * a legitimate ticket.
+ */
+export class SyncEnrollmentError extends Error {
+  /** Stable error class name for diagnostics and UI boundaries. */
+  override readonly name = "SyncEnrollmentError";
+  /** The preflight answer that refused the enrollment. */
+  readonly code: SyncEnrollmentFailureCode;
+
+  /** Creates the refusal with a remediation message aware of the ticket's scope. */
+  constructor(code: SyncEnrollmentFailureCode, scope?: "sync" | "provision") {
+    super(enrollmentMessages[code](scope));
+    this.code = code;
+  }
+}
+
+/** True when an error is a refused ticket enrollment (see {@link SyncEnrollmentError}). */
+export function isSyncEnrollmentError(error: unknown): error is SyncEnrollmentError {
+  return error instanceof SyncEnrollmentError;
+}
+
 /** Options for {@link enrollSyncTicket}. */
 export type EnrollSyncTicketOptions = {
   /** Fetch implementation for the scope-down exchange (tests inject one). */
   fetcher?: typeof fetch;
 };
+
+// Injectable dependencies for the enrollment flow; production callers go
+// through enrollSyncTicket, tests drive this directly.
+type TicketEnrollmentDeps = {
+  fetcher?: typeof fetch;
+  keyStore?: DeviceKeyStore;
+  preflight?: (ticketUrl: string) => Promise<TicketStoreStatus>;
+  timeoutMs?: number;
+  elect?: () => Promise<Session>;
+};
+
+// The enrollment flow behind enrollSyncTicket, with its network, key-custody,
+// and election dependencies injectable. Exported for tests; the entry does
+// not re-export it.
+export async function performTicketEnrollment(
+  ticket: string,
+  deps: TicketEnrollmentDeps = {},
+): Promise<Session> {
+  // Only a provision-scoped ticket reaches the scope-down exchange, so only
+  // then is there a binding to offer.
+  let devicePublicKey: DevicePublicKey | undefined;
+  const parsed = parseSyncTicket(ticket);
+  if (parsed?.scope === "provision") {
+    try {
+      devicePublicKey = await exportDevicePublicKey(await getOrCreatePopKeyPair(parsed.appId));
+    } catch {
+      // No usable key custody in this context; the exchange still derives a
+      // ticket, held as a bearer credential exactly as before.
+    }
+  }
+  const split = await splitTicketForEnrollment(ticket, deps.fetcher, devicePublicKey);
+  const previous = readDeclaredSink();
+  const declared = await declareSinkFromTicket(split.sinkTicket, deps.keyStore, split.pop);
+  // The preflight decides whether enrollment is kept: a store that answers
+  // with a definite refusal rolls the declaration back before anything else
+  // (election, provision custody) observes it. An unreachable store is not a
+  // refusal — flaky networks must not block enrollment — so it enrolls with
+  // the warning recorded where status surfaces read it.
+  const status = await resolveStoreStatus({
+    connect: true,
+    sink: { serverUrl: declared.serverUrl },
+    ...(deps.preflight ? { preflight: deps.preflight } : {}),
+    ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
+  });
+  if (status.state === "no_schema" || status.state === "ticket_rejected") {
+    if (previous === null) clearDeclaredSink();
+    else await restorePreviousSink(previous, deps.keyStore);
+    throw new SyncEnrollmentError(status.state, declared.scope);
+  }
+  updateRuntimeDiagnostics((diagnostics) => {
+    diagnostics.storeStatus = status;
+  });
+  if (split.provisionUrl !== null) holdProvisionCapability(split.provisionUrl);
+  return await (deps.elect ?? enableSyncBackup)();
+}
+
+async function restorePreviousSink(
+  previous: DataSinkDeclaration,
+  keyStore?: DeviceKeyStore,
+): Promise<void> {
+  // declareDataSink refuses to replace a *different* sink; enrollment over an
+  // existing declaration can only have re-declared the same store (or thrown
+  // before reaching the preflight), so restoring the snapshot always passes.
+  await declareDataSink(previous, keyStore);
+}
 
 /**
  * Enrolls a `lofisync1.` app-connect ticket as this device's sync location and
@@ -335,6 +499,14 @@ export type EnrollSyncTicketOptions = {
  * being a pure bearer string. Against a node without the exchange, the ticket
  * enrolls as pasted, exactly as before.
  *
+ * Before electing, the node's store answers a bounded metadata preflight and
+ * that answer decides whether enrollment is kept: a store with no schema for
+ * this app or a rejected ticket rolls the declaration back and throws
+ * {@link SyncEnrollmentError} — the device stays exactly as it was. A store
+ * that is merely unreachable enrolls anyway, with the warning recorded in
+ * runtime diagnostics (`storeStatus`). {@link SyncOwnerError} propagates from
+ * the election when sync on this device belongs to a different account.
+ *
  * Enrollment ends by electing sync, so the {@link enableSyncBackup} reload
  * caveat applies: on `SharedWorker`-capable browsers the page reloads and the
  * returned promise never settles.
@@ -343,33 +515,27 @@ export async function enrollSyncTicket(
   ticket: string,
   options: EnrollSyncTicketOptions = {},
 ): Promise<Session> {
-  // Only a provision-scoped ticket reaches the scope-down exchange, so only
-  // then is there a binding to offer.
-  let devicePublicKey: DevicePublicKey | undefined;
-  const parsed = parseSyncTicket(ticket);
-  if (parsed?.scope === "provision") {
-    try {
-      devicePublicKey = await exportDevicePublicKey(await getOrCreatePopKeyPair(parsed.appId));
-    } catch {
-      // No usable key custody in this context; the exchange still derives a
-      // ticket, held as a bearer credential exactly as before.
-    }
-  }
-  const split = await splitTicketForEnrollment(ticket, options.fetcher, devicePublicKey);
-  await declareSinkFromTicket(split.sinkTicket, undefined, split.pop);
-  if (split.provisionUrl !== null) holdProvisionCapability(split.provisionUrl);
-  return await enableSyncBackup();
+  return await performTicketEnrollment(ticket, { fetcher: options.fetcher });
 }
 
 /**
  * Stops replicating this account to the server and returns to local-only. The
  * local data and the account are untouched — this only detaches the network, so
- * electing to sync again resumes against the same account.
+ * electing to sync again resumes against the same account. Also releases the
+ * sync-owner pin, so a different account on this device may elect afterwards.
+ * Safe to call whatever state the transport is in: a runtime that was created
+ * without a configured server has nothing to detach and none is forced open.
  */
 export async function stopSyncBackup(): Promise<Session> {
-  const runtime = await getRuntime();
   setSyncElected(false);
-  await runtime.db.disconnect();
+  clearSyncOwner();
+  // Only a transport that was actually configured can disconnect: a runtime
+  // created local-only (a stale tab, an unopenable sink) has nothing to
+  // detach, and the vendor client throws when asked to. The election above is
+  // already cleared either way, which is the state stop-sync promises.
+  if (runtimeCanReconnect()) {
+    await (await getRuntime()).db.disconnect();
+  }
   globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));
   return readSession();
 }
@@ -412,13 +578,17 @@ async function replaceAccountSecret(
   }
   onConfirmed?.();
   await replaceRuntimePrincipal(secret, {
-    onSecretSaved: () => {
+    onSecretSaved: async () => {
       // Commit election only after the restored secret is durably saved: a
       // replacement that fails earlier leaves the device booting its intact
       // local account instead of an empty managed namespace.
       if (!syncAvailable()) return;
       setSyncElected(true);
       electManagedNamespace({ migrateLocalRows: false });
+      // An explicit restore ceremony adopts sync ownership: the restored
+      // account is who the user chose to sync as. The principal's name is
+      // backfilled by the first managed boot.
+      recordSyncOwner({ fingerprint: await secretFingerprint(secret), user_id: null });
     },
   });
   globalThis.dispatchEvent(new Event(runtimeRecreatedEvent));

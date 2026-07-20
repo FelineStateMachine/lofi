@@ -137,6 +137,34 @@ display it. `no_schema` means the store has never been provisioned for this app 
 never provisions or repairs a store on its own, and for non-ticket sinks the row stays
 `not checked`.
 
+Ticket enrollment runs the same check up front and refuses to keep an enrollment whose store answers
+`no_schema` or rejects the ticket (`SyncEnrollmentError`), so this boot-time symptom is reached
+through a store that regressed after enrollment, not through a fresh enrollment.
+
+## Enrolling a ticket fails with "no schema deployed"
+
+The node accepted the ticket, but its store has never been provisioned for this app, so nothing
+could sync; enrollment was rolled back and the device is unchanged. Provision the store — see
+[Store provisioning](store-provisioning.md) — then enroll again. A sync-only ticket cannot
+provision; the store's owner deploys the schema from a provision-scoped capability first.
+
+## Sync says it belongs to another account
+
+Sync on a device is pinned to the account that elected it. When the account in hand differs — a
+restored identity over a device that was already syncing, or a reset browser store that minted a
+fresh local account — the runtime boots local-only with transport suppressed, the session reports
+`syncOwnerMismatch`, and the `DeviceStatus` panel names the owning account when it is known. Nothing
+is merged and nothing is deleted. Either stop syncing (which releases the pin, so the current
+account may elect afterwards) or restore the owning account, then enable sync again.
+
+## The app stopped reloading automatically
+
+Framework-driven reloads (sync election, account replacement) are budgeted per tab: a sequence of
+reloads that never reaches a working runtime stops instead of cycling, and the failure surfaces as a
+`reload-loop` runtime startup failure in the recovery UI and the device report. A reload cycle means
+persisted state contradicts itself, often after a partially cleared browser store. Check the device
+report's account and sync state, resolve what it names, then reload manually.
+
 ## The installed app opened empty after Add to Home Screen
 
 WebKit gives an installed web app its own storage container: cookies are copied at install time, but

@@ -55,7 +55,10 @@ const preflight = await readTicketStoreStatus(ticketUrl);
 
 `no_schema` is why classification exists beyond provisioning: against an empty store the engine's
 writes hang rather than fail, so an app should reach this state — and prompt the user — before ever
-attaching sync to a fresh store.
+attaching sync to a fresh store. Ticket enrollment enforces exactly that: enrolling against a store
+that answers `no_schema` (or rejects the ticket) is rolled back with `SyncEnrollmentError` instead
+of being kept, so provisioning happens first and the device never sits silently on a store that
+cannot serve it.
 
 The browser runtime runs this preflight itself on every boot that connects managed sync to a
 ticket-gated sink, recording the answer as `storeStatus` in runtime diagnostics. It never blocks

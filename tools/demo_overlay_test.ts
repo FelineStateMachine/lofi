@@ -48,4 +48,8 @@ Deno.test("the demo uses the starter's durable notice surface", async () => {
     "the overlay must not restore the hand-rolled in-memory notice channel",
   );
   assert(board.includes("<Notices"), "the incident board must render the durable notice queue");
+  assert(
+    board.includes('name="severity"'),
+    "the severity control must expose a form-field name for browser tooling",
+  );
 });

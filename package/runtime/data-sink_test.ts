@@ -8,6 +8,7 @@ import {
   clearDeclaredSink,
   declareDataSink,
   declareSinkFromTicket,
+  ensureDeclaredSinkRestored,
   isDataSinkError,
   parseSyncTicket,
   readDeclaredSink,
@@ -102,6 +103,73 @@ test(
     clearDeclaredSink();
     assert(readDeclaredSink() === null, "clearing must remove the declaration");
     assert(await restoreDeclaredSink() === "none", "clearing must remove the stored record");
+  }),
+);
+
+test(
+  "boot and app islands single-flight the sealed sink restore",
+  withCleanState(async () => {
+    const keyStore = memoryDeviceKeyStore();
+    await declareDataSink({
+      appId: ticketAppId,
+      serverUrl: "https://node.example:4802",
+      label: "boot race",
+    }, keyStore);
+    const stored = localStorage.getItem(sinkKey);
+    assert(stored !== null, "the test sink must persist before simulating a fresh document");
+    clearDeclaredSink();
+    localStorage.setItem(sinkKey, stored);
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reads = 0;
+    const delayedStore = {
+      getOrCreate: (keyId: string) => keyStore.getOrCreate(keyId),
+      async get(keyId: string) {
+        reads++;
+        await gate;
+        return await keyStore.get(keyId);
+      },
+    };
+    const boot = ensureDeclaredSinkRestored(delayedStore);
+    const island = (await import("./data-sink.ts?island=early-runtime"))
+      .ensureDeclaredSinkRestored(delayedStore);
+    assert(boot === island, "boot and an eager island must await the same restore promise");
+    assert(
+      readDeclaredSink() === null,
+      "the sink must remain unavailable while restore is pending",
+    );
+    release();
+    assert(await boot === "restored", "the shared restore must open the sealed sink");
+    assert(reads === 1, `the device key was read ${reads} times instead of once`);
+    assert(
+      readDeclaredSink()?.label === "boot race",
+      "the restored sink must precede runtime open",
+    );
+  }),
+);
+
+test(
+  "duplicate app-island module instances share the document sink cache",
+  withCleanState(async () => {
+    const accountIsland = await import("./data-sink.ts?island=account");
+    const deviceIsland = await import("./data-sink.ts?island=device");
+    await accountIsland.declareDataSink({
+      appId: ticketAppId,
+      serverUrl: "https://node.example:4802",
+      label: "shared island sink",
+    });
+    assert(
+      deviceIsland.readDeclaredSink()?.label === "shared island sink",
+      "a sibling island must observe the sink declared through another module instance",
+    );
+    deviceIsland.clearDeclaredSink();
+    assert(
+      accountIsland.readDeclaredSink() === null,
+      "clearing through one island must update every module instance",
+    );
   }),
 );
 

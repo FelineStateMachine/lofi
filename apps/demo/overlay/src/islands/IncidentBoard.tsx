@@ -78,6 +78,7 @@ export default function IncidentBoard() {
             autocomplete="off"
           />
           <select
+            name="severity"
             aria-label="Severity"
             value={severity}
             onChange={(event) => setSeverity(event.currentTarget.value as Severity)}

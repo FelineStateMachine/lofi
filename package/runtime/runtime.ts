@@ -5,6 +5,7 @@ import { getLofiApp } from "./app.ts";
 import { bootProgressTracker } from "./boot-progress.ts";
 import { createDiagnostics, type RuntimeDiagnostics } from "./diagnostics.ts";
 import { activeSink, appId, databaseConfig, syncing } from "./config.ts";
+import { ensureDeclaredSinkRestored } from "./data-sink.ts";
 import { assertSchemaWritable, schemaCompatGate, subscribeSchemaCompat } from "./schema-compat.ts";
 import { resolveStoreStatus } from "./store-status.ts";
 import { acquireUpgradeWriteLock } from "./upgrade-coordination.ts";
@@ -481,10 +482,14 @@ subscribeSchemaCompat((compat) => {
 });
 
 /** Opens or reuses the one package runtime for the current browser document. */
-export function getRuntime(): Promise<LofiRuntime> {
-  if (recreationPromise) return recreationPromise;
+export async function getRuntime(): Promise<LofiRuntime> {
+  // client:load islands can run concurrently with the inline boot module.
+  // Never let either path create a client until the one document-wide sink
+  // restore has settled, or a configured device can open local-only by race.
+  await ensureDeclaredSinkRestored();
+  if (recreationPromise) return await recreationPromise;
   const state = slot();
-  return adapter.get(
+  return await adapter.get(
     () => getResource(state.client, () => createClient(state)),
     (db) => attachRuntime(state, db),
   );

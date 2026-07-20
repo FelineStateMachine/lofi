@@ -98,7 +98,14 @@ export function DeviceStatus(): VNode {
 
   useEffect(() => subscribePwaState(setPwa), []);
   useEffect(
-    () => subscribeRuntimeDiagnostics(() => setRuntimeDiagnostics(getRuntimeDiagnostics())),
+    () =>
+      subscribeRuntimeDiagnostics(() => {
+        setRuntimeDiagnostics(getRuntimeDiagnostics());
+        // Initial boot restores a sealed runtime-declared sink asynchronously.
+        // An island can mount before that restore completes, so refresh the
+        // synchronous session snapshot whenever boot diagnostics advance.
+        setSession(readSession());
+      }),
     [],
   );
   useEffect(() => {

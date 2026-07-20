@@ -68,12 +68,20 @@ export interface EncryptedColumn<TView> extends
     TypedColumnBuilder<EncryptedStoredSql, false, undefined, false, TView>,
     "default" | "merge" | "transform" | "optional"
   > {
+  /** Carries the decrypted view type without affecting the runtime shape. */
   readonly [encryptedColumnBrand]?: TView;
+  /** Encrypted columns cannot define plaintext defaults. */
   default(value: never): never;
+  /** Encrypted columns cannot merge ciphertext values. */
   merge(strategy: never): never;
+  /** Encrypted columns cannot replace their sealing transform. */
   transform(transform: never): never;
-  // The `this: never` parameter keeps the method arity-compatible with the
-  // base builder while making every call site a compile error.
+  /**
+   * Encrypted columns cannot be optional.
+   *
+   * The `this: never` parameter keeps the method arity-compatible with the
+   * base builder while making every call site a compile error.
+   */
   optional(this: never): never;
 }
 

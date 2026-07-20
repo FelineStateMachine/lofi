@@ -34,3 +34,18 @@ Deno.test("the demo landing page stamps the released version", async () => {
       `which release produced the demo`,
   );
 });
+
+Deno.test("the demo uses the starter's durable notice surface", async () => {
+  const incidents = await Deno.readTextFile(
+    join(OVERLAY_ROOT, "src/islands/use-incidents.ts"),
+  );
+  const board = await Deno.readTextFile(
+    join(OVERLAY_ROOT, "src/islands/IncidentBoard.tsx"),
+  );
+  assert(incidents.includes("s.notice<Incident>"), "incident effects must enqueue durable notices");
+  assert(
+    !incidents.includes("publishNotice") && !incidents.includes("useIncidentNotice"),
+    "the overlay must not restore the hand-rolled in-memory notice channel",
+  );
+  assert(board.includes("<Notices"), "the incident board must render the durable notice queue");
+});

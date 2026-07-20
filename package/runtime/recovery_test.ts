@@ -49,12 +49,20 @@ test("fromRecoveryPhrase tolerates messy whitespace and casing", () => {
 
 test("fromRecoveryPhrase rejects a wrong word count with invalid-length", () => {
   let code: string | undefined;
+  let message = "";
   try {
     fromRecoveryPhrase("one two three");
   } catch (error) {
-    if (error instanceof RecoveryError) code = error.code;
+    if (error instanceof RecoveryError) {
+      code = error.code;
+      message = error.message;
+    }
   }
   assert(code === "invalid-length", "too few words must raise invalid-length");
+  assert(
+    message.includes(`${RECOVERY_PHRASE_WORDS} words`) && !message.includes("invalid-length"),
+    "the invalid-length error must give person-readable word-count guidance",
+  );
 });
 
 test("fromRecoveryPhrase rejects an empty phrase with invalid-length", () => {

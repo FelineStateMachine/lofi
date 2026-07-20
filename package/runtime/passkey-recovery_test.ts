@@ -25,6 +25,12 @@ Deno.test("passkey backup errors become actionable non-secret recovery errors", 
       !mapped.message.includes("vendor detail"),
       "vendor detail leaked into public error text",
     );
+    if (code === "cancelled") {
+      assert(
+        mapped.message.includes("not created or opened") && !mapped.message.includes("cancelled"),
+        "NotAllowedError guidance must not assume the person dismissed the prompt",
+      );
+    }
   }
 });
 

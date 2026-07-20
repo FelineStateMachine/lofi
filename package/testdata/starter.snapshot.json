@@ -14,7 +14,7 @@
   "README.md": "125e906d85029b14d788b8e2dfe6e3037700770b9fd50e76ce69f98c3a82bb05",
   "src/app.ts": "2021889ec895b7c758e9c541eb968a480f63610073fe2c2d316faa7b66e85113",
   "src/env.d.ts": "b44daed05ec5cdfacfd8d8acf7866974b5f6b8db923ab53bd244419093c719da",
-  "src/islands/AccountGate.tsx": "0faa82edb05ea9c6da1f575ebb75cc2f60d8e95e88524c0720e3c885a1eee659",
+  "src/islands/AccountGate.tsx": "bce8ea5f64d4c9bb399b8665b0e14b3c20e6e3a9ab1663e011e811057b1f8a5e",
   "src/islands/TaskList.tsx": "5b76707bf953d12a42d2be26c0a4f3eab77e972e228685a6cd945a65891e18f0",
   "src/islands/use-tasks.ts": "277a54f6f77afebc303d869f0aac9db8423a2b5c707333046ce4d95993577a17",
   "src/layouts/Shell.astro": "57f5c144813fad7d6c7223b0e68498665f41dcd8b0855f2e8bf020d3bb072711",

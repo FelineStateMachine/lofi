@@ -335,16 +335,19 @@ export type SyncTicket = {
 
 const TICKET_PREFIX = "lofisync1.";
 const TICKET_PATH = /^\/t\/[A-Za-z0-9_-]{43}$/;
+const TICKET_CONNECT_PATH = /^\/t\/[A-Za-z0-9_-]{43}\/c\/[A-Za-z0-9_-]{43}$/;
 
 /**
- * Whether a server URL carries an app-connect ticket path (`/t/<secret>`) and
+ * Whether a server URL carries an app-connect ticket path (`/t/<secret>`) or
+ * its PoP-authenticated connect-token form (`/t/<secret>/c/<token>`) and
  * therefore fronts a lofi-node gate, which is what exposes the metadata-only
  * store-status endpoint. First-party Jazz servers and open-mode node URLs do
  * not match.
  */
 export function isTicketServerUrl(serverUrl: string): boolean {
   try {
-    return TICKET_PATH.test(new URL(serverUrl).pathname);
+    const path = new URL(serverUrl).pathname;
+    return TICKET_PATH.test(path) || TICKET_CONNECT_PATH.test(path);
   } catch {
     return false;
   }

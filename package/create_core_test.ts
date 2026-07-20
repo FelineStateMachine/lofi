@@ -106,7 +106,7 @@ Deno.test("starter mirror stays byte-identical to the reference app sources", as
       stale.join(", ")
     }. Run \`deno task test:update:create\` to refresh package/starter.`,
   );
-  const expectedMirrorFiles = new Set(mirrored.map((path) => `${path}.txt`));
+  const expectedMirrorFiles = new Set([...mirrored.map((path) => `${path}.txt`), "README.md"]);
   const mirrorRoot = new URL("./starter/", import.meta.url);
   const strays: string[] = [];
   async function visit(url: URL, prefix: string): Promise<void> {

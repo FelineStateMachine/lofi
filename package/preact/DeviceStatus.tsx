@@ -15,7 +15,7 @@ import { describeStorageFork, dismissStorageFork } from "../runtime/storage-fork
 import { useStorageFork } from "./use-storage-fork.ts";
 import { readSession, type Session } from "../runtime/session.ts";
 import { readSinkRestoreOutcome } from "../runtime/data-sink.ts";
-import { describeStoreStatus } from "../runtime/store-status.ts";
+import { describeStoreStatus, type RuntimeStoreStatus } from "../runtime/store-status.ts";
 import { RuntimeRecovery } from "./RuntimeRecovery.tsx";
 
 // One label/value row inside a category's definition list.
@@ -29,6 +29,30 @@ function Row({ label, value }: { label: string; value: string }): VNode {
 }
 
 const available = (present: boolean) => (present ? "available" : "missing");
+
+/**
+ * The one-line Data sync verdict. The blocked dispositions are first-class —
+ * the report must say *why* nothing is syncing, not merely that it is not:
+ * the election belongs to another account, the store refused (no schema, or
+ * the ticket is no longer accepted), the declared sink's sealed record cannot
+ * be opened on this device, or no sync location exists at all. Exported for
+ * tests; the entry does not re-export it.
+ */
+export function describeSyncState(input: {
+  syncing: boolean;
+  syncAvailable: boolean;
+  ownerMismatch: boolean;
+  storeState: RuntimeStoreStatus["state"];
+  sinkUnopenable: boolean;
+}): string {
+  if (input.ownerMismatch) return "paused — sync belongs to another account on this device";
+  if (input.storeState === "no_schema") return "blocked — store has no schema for this app";
+  if (input.storeState === "ticket_rejected") return "blocked — ticket no longer accepted";
+  if (input.sinkUnopenable) return "blocked — sync location record unopenable";
+  if (input.syncing) return "syncing to your account";
+  if (input.syncAvailable) return "available — not yet backed up";
+  return "local-only";
+}
 
 /**
  * Renders the Device gate: every subsystem's live status — storage, sync,
@@ -72,6 +96,8 @@ export function DeviceStatus(): VNode {
   if (!report) return <p class="device-status">Checking device capabilities…</p>;
 
   const synced = Boolean(session?.syncAvailable);
+  const ownerMismatch = Boolean(session?.syncOwnerMismatch);
+  const syncOwner = runtimeDiagnostics.syncOwner;
   const sinkUnopenable = !session?.sink && readSinkRestoreOutcome() === "unopenable";
   const sinkState = session?.sink
     ? session.sink.source === "declared"
@@ -80,11 +106,13 @@ export function DeviceStatus(): VNode {
     : sinkUnopenable
     ? "declared — record unopenable on this device"
     : "not configured";
-  const syncState = session?.syncing
-    ? "syncing to your account"
-    : session?.syncAvailable
-    ? "available — not yet backed up"
-    : "local-only";
+  const syncState = describeSyncState({
+    syncing: Boolean(session?.syncing),
+    syncAvailable: synced,
+    ownerMismatch,
+    storeState: runtimeDiagnostics.storeStatus.state,
+    sinkUnopenable,
+  });
   const backupState = session?.backedUp
     ? "recovery phrase"
     : session?.syncAvailable
@@ -140,6 +168,20 @@ export function DeviceStatus(): VNode {
           <Row label="Sync location" value={sinkState} />
           <Row label="Store" value={describeStoreStatus(runtimeDiagnostics.storeStatus)} />
         </dl>
+        {ownerMismatch && (
+          <p>
+            Sync on this device was set up by{" "}
+            {syncOwner.state === "mismatch" && syncOwner.owner_user_id
+              ? (
+                <>
+                  the account <code>{syncOwner.owner_user_id}</code>
+                </>
+              )
+              : "a different account"}. Nothing connects while the accounts differ, so neither store
+            can merge into the other. Stop syncing in the account panel to release this device for
+            the current account, or restore the owning account to resume.
+          </p>
+        )}
         {runtimeDiagnostics.storeStatus.state === "no_schema" && (
           <p>{runtimeDiagnostics.storeStatus.message}</p>
         )}
@@ -158,10 +200,12 @@ export function DeviceStatus(): VNode {
             data is intact and pushes up.
           </p>
         )}
-        {!synced && (
+        {!synced && !ownerMismatch && (
           <p>
-            Set <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in <code>.env</code>{" "}
-            and rebuild, or enroll a sync ticket at runtime, to replicate writes to your account.
+            Enroll an app-connect ticket from your node to replicate writes to your account — a
+            saved ticket autofills from your password manager. Building with{" "}
+            <code>JAZZ_APP_ID</code> and <code>JAZZ_SERVER_URL</code> in <code>.env</code>{" "}
+            remains the compiled-in alternative.
           </p>
         )}
       </div>

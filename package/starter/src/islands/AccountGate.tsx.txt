@@ -3,17 +3,22 @@ import {
   confirmPhraseAccess,
   createBackupPasskey,
   createRecoverablePasskeyBackup,
+  describeStoreStatus,
   enableSyncBackup,
+  getRuntimeDiagnostics,
   isAccountReplacementError,
   isAuthError,
   isRecoverablePasskeyError,
   isRecoveryError,
+  isSyncOwnerError,
   readAccountSession,
   restoreFromPasskey,
   restoreFromRecoveryPhrase,
   revealRecoveryPhrase,
+  runtimeRecreatedEvent,
   type Session,
   stopSyncBackup,
+  subscribeRuntimeDiagnostics,
 } from "@nzip/lofi";
 import { encodeSharingIdentity } from "@nzip/lofi/access";
 import { TicketEnrollForm } from "@nzip/lofi/preact";
@@ -54,6 +59,7 @@ function describe(error: unknown): string {
   }
   if (isRecoveryError(error)) return error.message;
   if (isRecoverablePasskeyError(error) || isAccountReplacementError(error)) return error.message;
+  if (isSyncOwnerError(error)) return error.message;
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -74,9 +80,19 @@ export default function AccountGate() {
   // so the phrase block can say so honestly rather than imply a confirmation.
   const [unguarded, setUnguarded] = useState(false);
 
+  const [diagnostics, setDiagnostics] = useState(getRuntimeDiagnostics());
+
   useEffect(() => {
-    void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
+    const refresh = () =>
+      void readAccountSession().then(setSession, (cause) => setError(describe(cause)));
+    refresh();
+    // Electing sync, stopping it, or restoring an account recreates the
+    // runtime; a snapshot read once on mount would keep rendering the old
+    // account state over the new reality.
+    globalThis.addEventListener(runtimeRecreatedEvent, refresh);
+    return () => globalThis.removeEventListener(runtimeRecreatedEvent, refresh);
   }, []);
+  useEffect(() => subscribeRuntimeDiagnostics(() => setDiagnostics(getRuntimeDiagnostics())), []);
 
   // Every account action funnels through here: one busy flag, one error line,
   // and any returned Session becomes the new snapshot.
@@ -182,6 +198,41 @@ export default function AccountGate() {
     </>
   );
 
+  // Sync on this device was elected by a different account: the runtime booted
+  // with transport suppressed so neither store can merge into the other. The
+  // two remediations are exactly the actions offered here — stop syncing
+  // releases the election for the current account, restore adopts the owner.
+  if (session.syncOwnerMismatch) {
+    const owner = diagnostics.syncOwner.state === "mismatch"
+      ? diagnostics.syncOwner.owner_user_id
+      : null;
+    return (
+      <section class="account account-out" aria-labelledby="account-title">
+        <header>
+          <p class="eyebrow">Account</p>
+          <h2 id="account-title">Sync paused — set up by a different account</h2>
+        </header>
+        <p>
+          Sync on this device was set up by{" "}
+          {owner ? <code>{owner}</code> : "a different account"}, so nothing connects — syncing now
+          would merge two accounts&rsquo; data. Stop syncing to release this device for the current
+          account, or restore the owning account to resume where it left off.
+        </p>
+        <div class="account-actions">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => run("stop", stopSyncBackup)}
+          >
+            {busy === "stop" ? "Stopping…" : "Stop syncing & release this device"}
+          </button>
+        </div>
+        {restoreBlock}
+        {error && <p class="account-error" role="alert">{error}</p>}
+      </section>
+    );
+  }
+
   // No sync location yet: offer the connect step, with restore available so a
   // fresh device recovers its identity before or after choosing where to sync.
   if (!session.syncAvailable) {
@@ -228,6 +279,16 @@ export default function AccountGate() {
     </div>
   );
 
+  // A definite store problem is worth a line here, not only in the device
+  // report: the account panel is where the user just acted, and each of these
+  // states means writes are not replicating despite sync being on.
+  const storeStatus = diagnostics.storeStatus;
+  const storeProblem = storeStatus.state === "no_schema" ||
+      storeStatus.state === "ticket_rejected" ||
+      storeStatus.state === "store_unavailable"
+    ? describeStoreStatus(storeStatus)
+    : null;
+
   if (session.backedUp) {
     return (
       <section class="account account-in" aria-labelledby="account-title">
@@ -244,6 +305,11 @@ export default function AccountGate() {
         {sharingIdentity && (
           <p class="account-note">
             Share identity: <code data-sharing-identity>{sharingIdentity}</code>
+          </p>
+        )}
+        {storeProblem && (
+          <p class="account-note" role="alert">
+            Sync location: {storeProblem}. See the device report for details.
           </p>
         )}
         <div class="account-actions">

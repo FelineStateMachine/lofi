@@ -7,7 +7,8 @@ import {
   type SealOutcome,
   sealProvisionCapability,
 } from "../runtime/provision.ts";
-import { enrollSyncTicket, type Session } from "../runtime/session.ts";
+import { enrollSyncTicket, isSyncEnrollmentError, type Session } from "../runtime/session.ts";
+import { isSyncOwnerError } from "../runtime/sync-owner.ts";
 
 /** Dependencies {@link TicketEnrollForm} accepts for testing and composition. */
 export interface TicketEnrollFormProps {
@@ -19,6 +20,22 @@ export interface TicketEnrollFormProps {
   readonly enroll?: (ticket: string) => Promise<Session>;
   /** Sealing implementation; defaults to the runtime's `sealProvisionCapability`. */
   readonly seal?: () => Promise<SealOutcome>;
+}
+
+/**
+ * Turns an enrollment failure into the sentence the form shows. The typed
+ * refusals carry user-presentable messages that name their remediation — a
+ * refused store preflight ({@link isSyncEnrollmentError}), a sync election
+ * owned by another account ({@link isSyncOwnerError}), and malformed or
+ * conflicting tickets ({@link isDataSinkError}) — so those pass through
+ * verbatim; only an unrecognized failure gets the generic retry line.
+ * Exported for tests; the entry does not re-export it.
+ */
+export function describeEnrollmentProblem(error: unknown): string {
+  if (isSyncEnrollmentError(error) || isSyncOwnerError(error) || isDataSinkError(error)) {
+    return error.message;
+  }
+  return "Enrollment failed; check the ticket and the node, then paste it again.";
 }
 
 type Phase =
@@ -101,10 +118,7 @@ export function TicketEnrollForm({
       setPhase({ name: "enrolled", sealOffer: provision.held && !provision.sealed });
       onEnrolled?.(session);
     } catch (error) {
-      const problem = isDataSinkError(error)
-        ? error.message
-        : "Enrollment failed; check the ticket and the node, then paste it again.";
-      setPhase({ name: "edit", problem });
+      setPhase({ name: "edit", problem: describeEnrollmentProblem(error) });
     }
   }
 

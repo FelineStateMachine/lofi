@@ -20,7 +20,11 @@ import "../styles/global.css";
   <AccountGate client:load />
   <TaskList client:load />
   <DeviceStatus client:load />
-  <footer>
-    <a href={app.repositoryUrl} rel="noreferrer">lofi on GitHub →</a>
-  </footer>
+  {
+    app.repositoryUrl && (
+      <footer>
+        <a href={app.repositoryUrl} rel="noreferrer">Source repository →</a>
+      </footer>
+    )
+  }
 </Shell>

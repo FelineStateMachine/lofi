@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import packageManifest from "../deno.json" with { type: "json" };
 import { createProject } from "./create_core.ts";
+import { STARTER_FILES } from "./starter_template.ts";
 import { LOFI_VERSION } from "./version.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -75,6 +76,53 @@ function makeTestRoot(): Promise<string> {
   return Deno.makeTempDir({ dir: ".", prefix: ".lofi-create-test-" });
 }
 
+// Declared before the snapshot test so that snapshot updates regenerate the
+// mirror first and the snapshot is taken from current sources.
+Deno.test("starter mirror stays byte-identical to the reference app sources", async () => {
+  const mirrored = STARTER_FILES.filter((path) => /\.tsx?$/.test(path));
+  const update = Deno.env.get("LOFI_UPDATE_SNAPSHOT") === "1";
+  const stale: string[] = [];
+  for (const relativePath of mirrored) {
+    const source = await Deno.readFile(
+      new URL(`../apps/reference/${relativePath}`, import.meta.url),
+    );
+    const mirrorUrl = new URL(`./starter/${relativePath}.txt`, import.meta.url);
+    if (update) {
+      await Deno.mkdir(new URL(".", mirrorUrl), { recursive: true });
+      await Deno.writeFile(mirrorUrl, source);
+      continue;
+    }
+    const mirror = await Deno.readFile(mirrorUrl).catch(() => null);
+    if (
+      mirror === null || mirror.length !== source.length ||
+      mirror.some((byte, index) => byte !== source[index])
+    ) {
+      stale.push(relativePath);
+    }
+  }
+  assert(
+    stale.length === 0,
+    `starter mirror is stale for: ${
+      stale.join(", ")
+    }. Run \`deno task test:update:create\` to refresh package/starter.`,
+  );
+  const expectedMirrorFiles = new Set([...mirrored.map((path) => `${path}.txt`), "README.md"]);
+  const mirrorRoot = new URL("./starter/", import.meta.url);
+  const strays: string[] = [];
+  async function visit(url: URL, prefix: string): Promise<void> {
+    for await (const entry of Deno.readDir(url)) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory) await visit(new URL(`${entry.name}/`, url), relative);
+      else if (!expectedMirrorFiles.has(relative)) strays.push(relative);
+    }
+  }
+  await visit(mirrorRoot, "");
+  assert(
+    strays.length === 0,
+    `starter mirror contains files with no reference-app source: ${strays.join(", ")}`,
+  );
+});
+
 Deno.test("createProject materializes the complete starter snapshot", async () => {
   const cwd = await makeTestRoot();
   try {
@@ -112,6 +160,44 @@ Deno.test("createProject materializes the complete starter snapshot", async () =
     assert(
       lofiSpecifiers.every((specifier) => specifier.startsWith("jsr:@nzip/lofi@0.8.1/")),
       "generated lofi commands do not resolve through one exact package version",
+    );
+    const appSource = await Deno.readTextFile(join(result.destination, "src", "app.ts"));
+    assert(appSource.includes('name: "starter"'), "generated app.ts does not carry the app name");
+    assert(
+      appSource.includes('databaseName: "starter"'),
+      "generated app.ts does not carry the database namespace",
+    );
+    assert(
+      !appSource.includes("lofi-prototype") && !appSource.includes("repositoryUrl"),
+      "generated app.ts still carries the reference app's identity",
+    );
+    const manifest = JSON.parse(
+      await Deno.readTextFile(join(result.destination, "public", "manifest.webmanifest")),
+    );
+    assertEquals(
+      [manifest.name, manifest.short_name, manifest.id],
+      ["starter", "starter", "./starter"],
+    );
+    const index = await Deno.readTextFile(
+      join(result.destination, "src", "pages", "index.astro"),
+    );
+    assert(index.includes('<Shell title="starter">'), "generated index.astro keeps the lofi title");
+    for (const relativePath of STARTER_FILES.filter((path) => /\.(?:tsx?|astro)$/.test(path))) {
+      const source = await Deno.readTextFile(join(result.destination, relativePath));
+      assert(
+        !source.includes("jsr:@nzip/lofi") && !source.includes("npm:preact"),
+        `generated ${relativePath} bypasses the pinned import map with a direct specifier`,
+      );
+    }
+    const fmt = await new Deno.Command(Deno.execPath(), {
+      args: ["fmt", "--check"],
+      cwd: result.destination,
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    assert(
+      fmt.success,
+      `generated project fails deno fmt --check:\n${new TextDecoder().decode(fmt.stderr)}`,
     );
     const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
     for (

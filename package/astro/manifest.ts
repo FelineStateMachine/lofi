@@ -10,6 +10,7 @@
 /** Runtime modules vendored into `.lofi/`; kept in lockstep by the manifest test. */
 export const runtimeFiles = [
   "app.ts",
+  "auth-secret-lock.ts",
   "auth.ts",
   "boot-progress.ts",
   "boot.ts",

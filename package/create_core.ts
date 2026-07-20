@@ -64,18 +64,19 @@ on-device account with no sign-in. To enable managed sync and account backup, ru
 
 ## Accounts: back up & recover
 
-With a Jazz app configured, the \`AccountGate\` island lets a user back up and sync their local account,
-restore it with a recoverable passkey, or use the portable 24-word recovery phrase fallback. The
-account they already have carries over — electing to sync never changes its identity. Passkey restore
-is scoped to the app's stable relying-party ID; provider syncing is not universally portable. The
-framework implementation is provided by \`@nzip/lofi\`.
+With a Jazz app configured, the \`AccountGate\` island lets a user back up and sync their local
+account, restore it with a recoverable passkey, or use the portable 24-word recovery phrase
+fallback. The account they already have carries over — electing to sync never changes its identity.
+Passkey restore is scoped to the app's stable relying-party ID; provider syncing is not universally
+portable. The framework implementation is provided by \`@nzip/lofi\`.
 
 ## Sharing and groups
 
 The optional \`@nzip/lofi/access\` entrypoint provides private, direct-share, and fixed-role group
 templates over ordinary Jazz schemas. Collaboration requires configured sync and fails explicitly in
 local-only mode. Start with the
-[permissions guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/permissions.md) and the
+[permissions guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/permissions.md) and
+the
 [access API reference](https://github.com/FelineStateMachine/lofi/blob/main/docs/reference/access.md).
 
 ## Optional installed-app recipes
@@ -84,17 +85,17 @@ OS-facing capabilities remain absent until the product opts in. Start with the
 [installed-app recipe catalog](https://github.com/FelineStateMachine/lofi/blob/main/docs/recipes/README.md)
 for tested manifest patches, feature detection, input validation, offline behavior, and normal-web
 fallbacks. Isolated entrypoints cover Web Share, installed-window launch handling, and validated
-file-import previews, custom protocol links, and presentation-only companion discovery without adding
-any to the starter. Cross-origin app-window scope and desktop titlebar geometry remain explicit
-experimental opt-ins.
+file-import previews, custom protocol links, and presentation-only companion discovery without
+adding any to the starter. Cross-origin app-window scope and desktop titlebar geometry remain
+explicit experimental opt-ins.
 
 Public tasks: \`dev\`, \`doctor\`, \`test\`, \`build\`, and \`preview\`. Sync/backup and schema tasks:
 \`jazz:provision\`, \`schema:validate\`, \`schema:deploy\`, \`migrations:create\`, and \`migrations:push\`.
 
 Start with the framework's
 [generated-app guide](https://github.com/FelineStateMachine/lofi/blob/main/docs/getting-started.md)
-when replacing the task example with your own schema, permissions, hook, and UI.
-The [exact generated-project map](https://github.com/FelineStateMachine/lofi/blob/main/docs/reference/project-layout.md)
+when replacing the task example with your own schema, permissions, hook, and UI. The
+[exact generated-project map](https://github.com/FelineStateMachine/lofi/blob/main/docs/reference/project-layout.md)
 lists every source-controlled path and its ownership.
 
 Runtime, PWA, identity, sync, diagnostics, and Astro/Vite integration come from the one pinned
@@ -102,8 +103,8 @@ Runtime, PWA, identity, sync, diagnostics, and Astro/Vite integration come from 
 
 ## Hosting
 
-\`deno task build\` emits a static PWA in \`dist/\`. The deploy tasks host it on Deno Deploy as a
-static site — they push the built \`dist/\` as the deploy root, which serves it as plain assets:
+\`deno task build\` emits a static PWA in \`dist/\`. The deploy tasks host it on Deno Deploy as a static
+site — they push the built \`dist/\` as the deploy root, which serves it as plain assets:
 
 - \`deno task deploy:create --org <org> --app <app>\` — one-time: create the app from \`dist/\`.
 - \`deno task deploy\` — thereafter: build and push \`dist/\`.
@@ -111,8 +112,8 @@ static site — they push the built \`dist/\` as the deploy root, which serves i
 Point them at any other static host by editing those two tasks.
 
 Deployments use the origin root by default. If the host mounts the app below it, copy
-\`.env.example\`, set \`LOFI_BASE_PATH=/my-app/\`, and rebuild. Upload \`dist/\` at that same path;
-the manifest, public assets, service worker, worker scope, and preview URL all follow this value.
+\`.env.example\`, set \`LOFI_BASE_PATH=/my-app/\`, and rebuild. Upload \`dist/\` at that same path; the
+manifest, public assets, service worker, worker scope, and preview URL all follow this value.
 `;
 }
 
@@ -241,6 +242,48 @@ async function assertNoSymlinkPath(cwd: string, segments: readonly string[]): Pr
   }
 }
 
+async function rewriteStarterFile(
+  root: string,
+  relativePath: string,
+  edits: ReadonlyArray<readonly [marker: string, replacement: string]>,
+): Promise<void> {
+  const path = join(root, relativePath);
+  let content = await Deno.readTextFile(path);
+  for (const [marker, replacement] of edits) {
+    if (!content.includes(marker)) {
+      throw new Error(
+        `starter ${relativePath} is missing the ${JSON.stringify(marker)} marker`,
+      );
+    }
+    content = content.replaceAll(marker, replacement);
+  }
+  await Deno.writeTextFile(path, content);
+}
+
+// The starter is a copy of the reference app, so the identity it carries — app
+// and database names, install manifest, repository link — belongs to lofi, not
+// to the new project. Rewrite that identity to the requested name and drop the
+// repository link; the index page only renders its footer link when
+// `repositoryUrl` is present.
+async function personalizeStarter(root: string, name: string): Promise<void> {
+  const quoted = JSON.stringify(name);
+  await rewriteStarterFile(root, join("src", "app.ts"), [
+    ['name: "lofi-prototype"', `name: ${quoted}`],
+    ['databaseName: "lofi-prototype"', `databaseName: ${quoted}`],
+    ['\n  repositoryUrl: "https://github.com/FelineStateMachine/lofi",', ""],
+  ]);
+  await rewriteStarterFile(root, join("src", "pages", "index.astro"), [
+    ['<Shell title="lofi starter">', `<Shell title=${quoted}>`],
+    ['<p class="eyebrow">lofi</p>', `<p class="eyebrow">${name}</p>`],
+  ]);
+  const manifestPath = join(root, "public", "manifest.webmanifest");
+  const manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+  manifest.name = name;
+  manifest.short_name = name;
+  manifest.id = `./${name}`;
+  await Deno.writeTextFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
 async function writeTemplate(destination: string): Promise<void> {
   // Fetch concurrently: remote creation (jsr:) otherwise pays one network
   // round trip per starter file.
@@ -282,6 +325,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   });
   try {
     await writeTemplate(staging);
+    await personalizeStarter(staging, basename(destination));
     await rewritePortableDenoConfig(staging, options.packagePrefix ?? LOFI_PACKAGE_PREFIX);
     await Deno.writeTextFile(join(staging, ".gitignore"), generatedGitignore);
     await Deno.writeTextFile(join(staging, ".env.example"), generatedEnvironment);

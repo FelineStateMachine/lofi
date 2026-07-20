@@ -24,7 +24,7 @@ permissions:
 # Bump procedure: point LOFI_NODE_REF at the new lofi-node commit SHA in the
 # same PR that reviews the resulting /node pages.
 env:
-  LOFI_NODE_REF: 101161c9dc2f2a79907d902b0639bee6fd517408
+  LOFI_NODE_REF: 9bc3319fe30d747921f27206ba6d5a5193f29894
 
 jobs:
   build:

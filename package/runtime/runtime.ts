@@ -20,6 +20,7 @@ import { sharedColumnConfigs } from "../schema/shared-registry.ts";
 import { recordSharedFieldAlert } from "./diagnostics.ts";
 import { activeAppId } from "./config.ts";
 import { completePopExchange, getOrCreatePopKeyPair } from "./pop.ts";
+import { withAuthSecretLock } from "./auth-secret-lock.ts";
 import { assertDurableBrowser } from "./device-capabilities.ts";
 import {
   createTableStore,
@@ -105,8 +106,10 @@ function recordStartupFailure(state: RuntimeSlot, failure: RuntimeStartupFailure
 // later election to back up and sync (see `session.ts`) keeps all existing
 // data. Recovering from a phrase replaces the cached secret and recreates the
 // runtime, so the restored account's synced data opens under the same identity.
+// Creation runs under the app's exclusive secret lock: two first tabs must not
+// each mint a secret (see `auth-secret-lock.ts`).
 async function resolveAccountSecret(): Promise<string> {
-  return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
+  return await withAuthSecretLock(appId, () => BrowserAuthSecretStore.getOrCreateSecret({ appId }));
 }
 
 async function accountNamespace(secret: string): Promise<string> {
@@ -540,7 +543,7 @@ export function replaceRuntimePrincipal(
     // a restore report success without replacing the principal.
     await previous?.catch(() => undefined);
     const saveSecret = async () => {
-      await BrowserAuthSecretStore.saveSecret(secret, { appId });
+      await withAuthSecretLock(appId, () => BrowserAuthSecretStore.saveSecret(secret, { appId }));
       options.onSecretSaved?.();
     };
     if (typeof window !== "undefined" && typeof SharedWorker !== "undefined") {

@@ -19,6 +19,7 @@
 
 import { BrowserAuthSecretStore } from "jazz-tools";
 import { getLofiApp } from "./app.ts";
+import { withAuthSecretLock } from "./auth-secret-lock.ts";
 import {
   activeSink,
   appId,
@@ -190,9 +191,10 @@ export async function readAccountSession(): Promise<Session> {
 
 // The account secret the runtime is already using. `getOrCreateSecret` is a
 // read-through: the runtime created it on first boot, so this returns that same
-// secret rather than minting a new one.
+// secret rather than minting a new one. It still takes the app's secret lock so
+// a call that races a first boot in another tab observes that boot's secret.
 async function currentSecret(): Promise<string> {
-  return await BrowserAuthSecretStore.getOrCreateSecret({ appId });
+  return await withAuthSecretLock(appId, () => BrowserAuthSecretStore.getOrCreateSecret({ appId }));
 }
 
 /**

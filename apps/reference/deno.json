@@ -38,7 +38,7 @@
     "preact/jsx-dev-runtime": "npm:preact@10.29.7/jsx-dev-runtime",
     "preact/jsx-runtime": "npm:preact@10.29.7/jsx-runtime",
     "typescript": "npm:typescript@6.0.3",
-    "vite": "npm:vite@8.0.1"
+    "vite": "npm:vite@8.1.4"
   },
   "nodeModulesDir": "auto",
   "compilerOptions": {

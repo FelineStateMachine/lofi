@@ -24,12 +24,19 @@ import {
   type EffectContext,
   type EffectRow,
   type EffectUnit,
+  isPermanentEffectError,
   type MutationDescriptor,
   resolveEffectUnit,
   setMutationRuntime,
 } from "../schema/effects.ts";
 import { appId, syncing } from "./config.ts";
-import { recordEffectLogEntry, type RuntimeDiagnostics } from "./diagnostics.ts";
+import {
+  recordEffectDebugEvent,
+  recordEffectLogEntry,
+  recordEffectTrace,
+  type RuntimeDiagnostics,
+} from "./diagnostics.ts";
+import { createDefaultNoticeStorage, type NoticeEntry, NoticeQueue } from "./notice-queue.ts";
 import { settleDurableWrite } from "./durability.ts";
 import { classifyMutationError } from "./mutation-taxonomy.ts";
 import {
@@ -743,7 +750,9 @@ export class WriteLedger {
         writeId: entry.writeId,
         verb: entry.verb,
         table: entry.table,
+        op: entry.op,
         rowId: entry.rowId,
+        writeCreatedAt: entry.createdAt,
         fate,
         cause: fate === "rejected" ? entry.cause ?? "denied" : null,
         code: entry.code,
@@ -764,9 +773,11 @@ export class WriteLedger {
         this.#environment.updateDiagnostics((diagnostics) =>
           diagnostics.effectHandlerFailures += 1
         );
-        // Quarantine: a handler that keeps failing retires instead of
-        // re-arming forever; the retirement is diagnosable and prunable.
-        if (state.attempts >= maxAttempts) {
+        // A handler that declared its failure permanent retires now: retrying
+        // a request the receiver will keep refusing only burns the budget and
+        // delays the quarantine diagnostic. Otherwise a failing handler
+        // re-arms until repeated attempts quarantine it.
+        if (isPermanentEffectError(error) || state.attempts >= maxAttempts) {
           this.#retireObligation(entry, effectName, "failed-permanent");
         }
       }
@@ -898,6 +909,57 @@ export function armWriteLedger(): Promise<void> {
   return getWriteLedger().arm();
 }
 
+let defaultNotices: NoticeQueue | null = null;
+
+/**
+ * The package-wide durable notice queue behind `s.notice`, created lazily and
+ * kept in sync with the `activeNotices` diagnostic. Public read/subscribe/
+ * dismiss surfaces ({@link listNotices}, {@link subscribeNotices},
+ * {@link dismissNotice}) are re-exported from the runtime entry.
+ */
+export function getNoticeQueue(): NoticeQueue {
+  if (!defaultNotices) {
+    defaultNotices = new NoticeQueue(
+      createDefaultNoticeStorage(appId),
+      Date.now,
+      (count) =>
+        updateRuntimeDiagnostics((diagnostics) => {
+          diagnostics.activeNotices = count;
+        }),
+    );
+    // Load persisted entries and publish the initial count; a storage-less or
+    // prerender context simply starts empty.
+    void defaultNotices.load()
+      .then(() =>
+        updateRuntimeDiagnostics((diagnostics) => {
+          diagnostics.activeNotices = defaultNotices?.list().length ?? 0;
+        })
+      )
+      .catch(() => undefined);
+  }
+  return defaultNotices;
+}
+
+/** The live durable notices for the current document. */
+export function listNotices(): readonly NoticeEntry[] {
+  return getNoticeQueue().list();
+}
+
+/** Subscribes to notice-queue changes; returns an unsubscribe function. */
+export function subscribeNotices(listener: () => void): () => void {
+  return getNoticeQueue().subscribe(listener);
+}
+
+/** Dismisses one durable notice by id. */
+export function dismissNotice(id: string): void {
+  getNoticeQueue().dismiss(id);
+}
+
+/** Dismisses every durable notice. */
+export function dismissAllNotices(): void {
+  getNoticeQueue().dismissAll();
+}
+
 // The runtime half of the schema-declared verb surface: importing the runtime
 // package installs dispatch, so verbs work wherever islands import hooks.
 setMutationRuntime({
@@ -913,10 +975,41 @@ setMutationRuntime({
         at: Date.now(),
       })
     ),
+  recordTrace: (label, context) =>
+    updateRuntimeDiagnostics((diagnostics) =>
+      recordEffectTrace(diagnostics, {
+        label,
+        verb: context.verb,
+        rowId: context.rowId,
+        fate: context.fate,
+        durationMs: Math.max(0, Date.now() - context.writeCreatedAt),
+        at: Date.now(),
+      })
+    ),
+  recordDebug: (event, context) =>
+    updateRuntimeDiagnostics((diagnostics) =>
+      recordEffectDebugEvent(diagnostics, {
+        verb: context.verb,
+        journalId: context.journalId,
+        event,
+        at: Date.now(),
+      })
+    ),
+  enqueueNotice: (input, context) =>
+    getNoticeQueue().enqueue({
+      id: context.journalId,
+      message: input.message,
+      tone: input.tone,
+      ttlMs: input.ttlMs,
+    }),
+  applyMark: async (table, rowId, patch) => {
+    await getWriteLedger().perform({ kind: "update", table, id: rowId, patch }).saved;
+  },
   unitRegistered: (name) => defaultLedger?.retryObligationsFor(name),
 });
 
 import.meta.hot?.dispose(() => {
   defaultLedger?.dispose();
   defaultLedger = null;
+  defaultNotices = null;
 });

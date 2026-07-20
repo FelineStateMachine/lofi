@@ -1,6 +1,6 @@
 import type { Db, MutationErrorEvent, TableProxy } from "jazz-tools";
 import { createDiagnostics } from "./diagnostics.ts";
-import type { EffectContext, EffectUnit } from "../schema/effects.ts";
+import { type EffectContext, type EffectUnit, PermanentEffectError } from "../schema/effects.ts";
 import { assert, assertCount } from "./test-assert.ts";
 import {
   createMemoryJournalStorage,
@@ -135,6 +135,7 @@ function unit(
   options: {
     failFirst?: { onSynced?: boolean };
     failAlways?: boolean;
+    failPermanent?: boolean;
     expiresAfterMs?: number;
     maxAttempts?: number;
   } = {},
@@ -144,6 +145,7 @@ function unit(
     effectName: name,
     handlers: {
       onSynced: (row, context) => {
+        if (options.failPermanent) throw new PermanentEffectError("receiver refused for good");
         if (options.failAlways) throw new Error("handler always explodes");
         if (options.failFirst?.onSynced && !failed) {
           failed = true;
@@ -744,6 +746,38 @@ Deno.test("a closed delivery window retires the obligation: no handler, diagnosa
     (fixture.storage.text() ?? "").includes(handle.writeId) === false,
     "a retired obligation makes the entry prunable",
   );
+  fixture.ledger.dispose();
+});
+
+Deno.test("a PermanentEffectError retires the obligation on the first failure", async () => {
+  const storage = createMemoryJournalStorage();
+  const calls: Array<
+    { handler: "onSynced" | "onRejected"; row: { id: string }; context: EffectContext }
+  > = [];
+  // A high attempt bound proves the retirement is the permanent signal, not
+  // the attempt count: an ordinary throw would re-arm four more times.
+  const refusing = unit("permanent", calls, { failPermanent: true, maxAttempts: 5 });
+  const fixture = harness({ storage, units: new Map([["permanent", refusing]]) });
+  await fixture.ledger.arm();
+  const handle = fixture.ledger.perform<Row>(
+    { kind: "insert", table: table as TableProxy<unknown, unknown>, values: { title: "gone" } },
+    { units: [refusing] },
+  );
+  await handle;
+  fixture.db.settleGlobal();
+  await flush();
+  await fixture.ledger.flush();
+  assertCount(fixture.diagnostics.effectHandlerFailures, 1, "the failure is counted once");
+  assertCount(
+    fixture.diagnostics.quarantinedObligations,
+    1,
+    "a permanent failure quarantines without exhausting attempts",
+  );
+  assert(
+    (storage.text() ?? "").includes(handle.writeId) === false,
+    "the retired obligation makes the entry prunable, so it never re-arms",
+  );
+  assertCount(calls.length, 0, "a permanently refused handler never reports success");
   fixture.ledger.dispose();
 });
 

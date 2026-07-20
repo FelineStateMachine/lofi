@@ -99,7 +99,10 @@ and data-attached effects would have no owning replica).
   swallowed.
 
 `s.log(label)` is a built-in unit that records a structured entry in runtime diagnostics on either
-fate. Repeated calls with one label share one unit.
+fate. Repeated calls with one label share one unit. It is the first of a tiered built-in library —
+observe (`s.log`, `s.trace`), make fate data (`s.notice`, `s.mark`), compose (`s.chain`), reach the
+outside world (`s.webhook`) — with the contract for authoring your own. See
+[the effect library](effects.md).
 
 ## Retention: durable things know how to die
 

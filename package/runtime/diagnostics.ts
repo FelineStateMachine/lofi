@@ -31,6 +31,65 @@ export function recordEffectLogEntry(
 }
 
 /**
+ * One OpenTelemetry-shaped span recorded by the built-in `s.trace` effect
+ * unit: the write's journaling to its settled fate, with the elapsed latency.
+ * The framework emits these into diagnostics with no vendor coupling; an
+ * OTLP exporter is an adapter over this feed, never a concept the author sees.
+ */
+export type EffectTraceEntry = {
+  /** The author's span label, or `null` when the verb name labels it. */
+  label: string | null;
+  /** The declaring verb's name, or `null` for writes without a verb. */
+  verb: string | null;
+  /** The written row's id. */
+  rowId: string;
+  /** Which fate ended the span. */
+  fate: "synced" | "rejected";
+  /** Saved-to-fate latency in milliseconds. */
+  durationMs: number;
+  /** Epoch milliseconds when the span closed. */
+  at: number;
+};
+
+/** One development-only timeline event recorded by the built-in `s.debug` unit. */
+export type EffectDebugEvent = {
+  /** The declaring verb's name, or `null` for writes without a verb. */
+  verb: string | null;
+  /** The obligation's journal id. */
+  journalId: string;
+  /** The stage/fate this event marks. */
+  event: string;
+  /** Epoch milliseconds when the event was recorded. */
+  at: number;
+};
+
+// Recent-entry windows for the trace and dev-debug feeds.
+const maxEffectTraceEntries = 20;
+const maxEffectDebugEvents = 50;
+
+/** Appends one `s.trace` span, keeping the bounded recent window. */
+export function recordEffectTrace(
+  diagnostics: RuntimeDiagnostics,
+  entry: EffectTraceEntry,
+): void {
+  diagnostics.effectTraces = [
+    ...diagnostics.effectTraces.slice(-(maxEffectTraceEntries - 1)),
+    entry,
+  ];
+}
+
+/** Appends one `s.debug` timeline event, keeping the bounded recent window. */
+export function recordEffectDebugEvent(
+  diagnostics: RuntimeDiagnostics,
+  entry: EffectDebugEvent,
+): void {
+  diagnostics.effectDebugTimeline = [
+    ...diagnostics.effectDebugTimeline.slice(-(maxEffectDebugEvents - 1)),
+    entry,
+  ];
+}
+
+/**
  * Runtime-owned observability counters. These describe the framework's storage,
  * subscription, and write machinery and never reference any application schema.
  *
@@ -92,6 +151,15 @@ export type RuntimeDiagnostics = {
   quarantinedObligations: number;
   /** Recent structured entries recorded by the built-in `s.log` effect unit. */
   effectLog: readonly EffectLogEntry[];
+  /** Recent saved→fate spans recorded by the built-in `s.trace` effect unit. */
+  effectTraces: readonly EffectTraceEntry[];
+  /**
+   * Recent development-only timeline events from the built-in `s.debug` unit;
+   * always empty in production builds, where `s.debug` records nothing.
+   */
+  effectDebugTimeline: readonly EffectDebugEvent[];
+  /** How many durable `s.notice` entries are unread (undismissed, unexpired). */
+  activeNotices: number;
   /** Recent shared-field key alerts: substitutions, forged wraps, self-key
    * conflicts. A non-empty list is the detection surface the threat model
    * promises — render it, never swallow it. */
@@ -155,6 +223,9 @@ export function createDiagnostics(): RuntimeDiagnostics {
     expiredObligations: 0,
     quarantinedObligations: 0,
     effectLog: [],
+    effectTraces: [],
+    effectDebugTimeline: [],
+    activeNotices: 0,
     sharedFieldAlerts: [],
   };
 }

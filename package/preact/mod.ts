@@ -14,6 +14,13 @@
  * @module
  */
 export { DeviceStatus } from "./DeviceStatus.tsx";
+export { Notices, type NoticesProps } from "./Notices.tsx";
+export {
+  type NoticeEntry,
+  type NoticesSurface,
+  type NoticeTone,
+  useNotices,
+} from "./use-notices.ts";
 export { RuntimeRecovery, type RuntimeRecoveryProps } from "./RuntimeRecovery.tsx";
 export {
   type LiveQuerySnapshot,

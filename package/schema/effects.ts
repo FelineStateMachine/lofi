@@ -49,8 +49,12 @@ export type EffectContext = {
   verb: string | null;
   /** The written table's name. */
   table: string;
+  /** Which operation the write performed. */
+  op: "insert" | "update" | "remove";
   /** The written row's id. */
   rowId: string;
+  /** Epoch milliseconds when the write was journaled, for latency spans. */
+  writeCreatedAt: number;
   /** Which fate settled the write. */
   fate: "synced" | "rejected";
   /**
@@ -67,6 +71,43 @@ export type EffectContext = {
   /** The adjudicated rejection reason, on the `rejected` fate. */
   reason: string | null;
 };
+
+/**
+ * Thrown from an effect handler to retire the obligation immediately instead
+ * of re-arming it. Delivery is at-least-once by default: an ordinary thrown
+ * error is *retryable* — the handler re-runs at the next boot until it
+ * succeeds or {@link EffectUnitOptions.maxAttempts} quarantines it. Some
+ * failures are known to be *permanent* — a webhook receiver answered `400`, a
+ * row a handler needed is gone for good — and retrying only burns attempts and
+ * delays the quarantine diagnostic. Throwing this retires the obligation now,
+ * counted as a permanent handler failure. The message reaches diagnostics.
+ *
+ * @example
+ * ```ts
+ * s.effect("charge", app.orders, {
+ *   onSynced: async (order, { journalId }) => {
+ *     const res = await fetch(url, { headers: { "Idempotency-Key": journalId } });
+ *     if (res.status >= 400 && res.status < 500) {
+ *       throw new PermanentEffectError(`charge refused: ${res.status}`);
+ *     }
+ *     if (!res.ok) throw new Error(`charge transient failure: ${res.status}`);
+ *   },
+ * });
+ * ```
+ */
+export class PermanentEffectError extends Error {
+  /** Stable class name for diagnostics and the ledger's severity check. */
+  override readonly name = "PermanentEffectError";
+  /** Creates the permanent-failure signal with a diagnostics message. */
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/** True when a handler failure asked to retire rather than retry. */
+export function isPermanentEffectError(error: unknown): error is PermanentEffectError {
+  return error instanceof PermanentEffectError;
+}
 
 /** The action and compensation handlers one effect unit pairs. */
 export type EffectHandlers<Row> = {
@@ -206,12 +247,44 @@ export type MutationDescriptor = {
   readonly expiresAfterMs: number | null;
 };
 
+/**
+ * One durable notice a {@link notice} unit enqueues. The queue is persistent
+ * and UI-agnostic: entries may be created at a boot re-arm with nothing
+ * mounted, and a component renders them later. `tone` classifies the message
+ * for the render; `ttlMs` bounds its life when the author sets no explicit
+ * dismissal.
+ */
+export type NoticeInput = {
+  /** The user-facing message. */
+  message: string;
+  /** How to classify the message for rendering. */
+  tone: "info" | "success" | "warning" | "error";
+  /** Lifespan in milliseconds before the queue retires the entry, or `null`. */
+  ttlMs: number | null;
+};
+
 /** The runtime half installed by the package runtime before verbs are called. */
 export type MutationRuntime = {
   /** Performs one declared verb call and returns its write handle. */
   dispatch(descriptor: MutationDescriptor, args: readonly unknown[]): WriteHandle<unknown>;
   /** Records one structured {@link log} entry. */
   recordLog(label: string, context: EffectContext): void;
+  /** Records one {@link trace} span from the write's journaling to its fate. */
+  recordTrace?(label: string | null, context: EffectContext): void;
+  /** Records one {@link debug} timeline event; a no-op in production builds. */
+  recordDebug?(event: string, context: EffectContext): void;
+  /** Enqueues one durable {@link notice} entry. */
+  enqueueNotice?(input: NoticeInput, context: EffectContext): void;
+  /**
+   * Patches a row on behalf of a {@link mark} unit: a bare update carrying no
+   * further units, so write fate becomes replicated row data without
+   * recursion. Resolves at local durability; rejects if the row is gone.
+   */
+  applyMark?(
+    table: TableProxy<unknown, unknown>,
+    rowId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void>;
   /** Re-attempts outstanding journal obligations after a late unit registration. */
   unitRegistered?(name: string): void;
 };
@@ -221,6 +294,8 @@ type EffectsSlot = {
   effects: Map<string, EffectUnit<{ id: string }>>;
   verbs: Map<string, MutationDescriptor>;
   logs: Map<string, EffectUnit<{ id: string }>>;
+  /** Monotonic counter naming anonymous built-in units in declaration order. */
+  anonSequence: number;
 };
 
 const slotName = "__LOFI_EFFECT_DECLARATIONS__";
@@ -232,6 +307,7 @@ function slot(): EffectsSlot {
     effects: new Map(),
     verbs: new Map(),
     logs: new Map(),
+    anonSequence: 0,
   };
   return effectsGlobal[slotName];
 }
@@ -256,6 +332,7 @@ export function clearEffectDeclarations(): void {
   state.effects.clear();
   state.verbs.clear();
   state.logs.clear();
+  state.anonSequence = 0;
 }
 
 // During dev hot replacement author modules re-evaluate routinely; the newest
@@ -363,6 +440,30 @@ function requireRuntime(): MutationRuntime {
     );
   }
   return runtime;
+}
+
+/**
+ * The installed runtime, or a thrown explanation when none is. The built-in
+ * effect library ({@link EffectUnit} factories in `effect-library.ts`) reaches
+ * the runtime through this so it stays on the public authoring surface — the
+ * same requirement custom units must meet.
+ */
+export function requireMutationRuntime(): MutationRuntime {
+  return requireRuntime();
+}
+
+/**
+ * A stable-per-declaration name for an anonymous built-in unit (a notice,
+ * mark, or chain the author did not name). The journal re-arms by name, and
+ * these carry no author name, so their durable identity is declaration order
+ * within one module-evaluation — deterministic across reloads for an unchanged
+ * bundle. Reordering the verbs that declare them orphans in-flight obligations
+ * the same way renaming a named unit does.
+ */
+export function anonymousEffectName(prefix: string): string {
+  const state = slot();
+  state.anonSequence = (state.anonSequence ?? 0) + 1;
+  return `${prefix}#${state.anonSequence}`;
 }
 
 /**

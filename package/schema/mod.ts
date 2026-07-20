@@ -30,6 +30,7 @@
  */
 import { schema } from "jazz-tools";
 import { effect, insert, log, mutation, remove, update } from "./effects.ts";
+import { chain, debug, mark, notice, trace, webhook } from "./effect-library.ts";
 import {
   encryptedDate,
   encryptedJson,
@@ -100,6 +101,12 @@ export type SchemaDsl =
     mutation: typeof mutation;
     effect: typeof effect;
     log: typeof log;
+    trace: typeof trace;
+    debug: typeof debug;
+    notice: typeof notice;
+    mark: typeof mark;
+    chain: typeof chain;
+    webhook: typeof webhook;
     insert: typeof insert;
     update: typeof update;
     remove: typeof remove;
@@ -150,6 +157,12 @@ export const s: SchemaDsl = {
   mutation,
   effect,
   log,
+  trace,
+  debug,
+  notice,
+  mark,
+  chain,
+  webhook,
   insert,
   update,
   remove,
@@ -211,17 +224,32 @@ export {
   type EffectUnitOptions,
   insert,
   type InsertVerb,
+  isPermanentEffectError,
   log,
   mutation,
   type MutationOp,
   type MutationOpKind,
   type MutationOptions,
   type MutationVerb,
+  type NoticeInput,
+  PermanentEffectError,
   remove,
   type RemoveVerb,
   update,
   type UpdateVerb,
 } from "./effects.ts";
+export {
+  chain,
+  debug,
+  mark,
+  type MarkConfig,
+  notice,
+  type NoticeConfig,
+  type NoticeResolver,
+  trace,
+  webhook,
+  type WebhookOptions,
+} from "./effect-library.ts";
 // Type-only, so the authoring-only module graph stays free of runtime code:
 // verb calls settle through the runtime write handle, and these names let
 // schema-graph modules annotate that contract without importing the runtime.

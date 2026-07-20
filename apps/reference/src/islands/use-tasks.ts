@@ -36,7 +36,7 @@ function publishNotice(next: TaskNotice | null): void {
  * a stale-policy write is denied — even if the app restarted in between.
  */
 export const addTask = s.mutation("addTask", s.insert(tasksTable), {
-  effects: [s.log("task-added")],
+  effects: [s.log("task-added"), s.trace("task-added")],
   onSynced: (task) => {
     publishNotice({ kind: "synced", text: `"${task.text ?? "Task"}" synced to your account` });
   },

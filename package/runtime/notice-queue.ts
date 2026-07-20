@@ -1,0 +1,200 @@
+/**
+ * Package-owned durable notice queue: the store behind the built-in
+ * `s.notice` effect unit.
+ *
+ * A notice is a user-visible message an effect enqueues when a write settles —
+ * the durable answer to "a rejected write still flashed success". The queue is
+ * deliberately not an imperative toast: an effect can fire at a boot re-arm
+ * with no UI mounted, so the entry must outlive the render and be picked up
+ * later. Entries persist beside the write journal (OPFS when the browser
+ * provides it, `localStorage` otherwise), are keyed by the enqueuing
+ * obligation's journal id so an at-least-once re-delivery adds one entry, and
+ * retire by dismissal or TTL. A component (the built-in notices surface, or an
+ * author's) subscribes and renders; toasts are a userland wrapper over this.
+ *
+ * @module
+ */
+
+import {
+  createDefaultJournalStorage,
+  createMemoryJournalStorage,
+  type JournalStorage,
+} from "./write-journal.ts";
+
+/** How a notice is classified for rendering. */
+export type NoticeTone = "info" | "success" | "warning" | "error";
+
+/** One durable notice entry. */
+export type NoticeEntry = {
+  /** The enqueuing obligation's journal id — the entry's idempotency key. */
+  id: string;
+  /** The user-facing message. */
+  message: string;
+  /** The message classification. */
+  tone: NoticeTone;
+  /** Epoch milliseconds when the entry was enqueued. */
+  createdAt: number;
+  /** Epoch milliseconds when the entry retires by TTL, or `null` for none. */
+  expiresAt: number | null;
+};
+
+/** The persisted queue document. */
+type NoticeDocument = {
+  version: 1;
+  entries: NoticeEntry[];
+};
+
+function parse(text: string | null): NoticeDocument {
+  if (!text) return { version: 1, entries: [] };
+  try {
+    const value = JSON.parse(text) as Partial<NoticeDocument> | null;
+    if (value && value.version === 1 && Array.isArray(value.entries)) {
+      const entries = value.entries.filter((entry): entry is NoticeEntry =>
+        typeof entry?.id === "string" && typeof entry.message === "string"
+      );
+      return { version: 1, entries };
+    }
+  } catch {
+    // A corrupt queue must not brick boot; start empty.
+  }
+  return { version: 1, entries: [] };
+}
+
+/** What one enqueue call carries, before the queue stamps identity and time. */
+export type NoticeEnqueueInput = {
+  /** The idempotency key — the enqueuing obligation's journal id. */
+  id: string;
+  /** The user-facing message. */
+  message: string;
+  /** The message classification. */
+  tone: NoticeTone;
+  /** Lifespan before TTL retirement, or `null` to keep until dismissed. */
+  ttlMs: number | null;
+};
+
+/**
+ * The single reader and writer of the durable notice queue: an in-memory
+ * document with coalesced persistence, a live-notice snapshot, and change
+ * notification. Retirement (dismissal, TTL) is applied lazily on every read
+ * and on a periodic sweep, so a queue loaded at boot never surfaces a message
+ * whose window already closed.
+ */
+export class NoticeQueue {
+  readonly #storage: JournalStorage;
+  readonly #now: () => number;
+  #document: NoticeDocument = { version: 1, entries: [] };
+  #chain: Promise<void> = Promise.resolve();
+  #loaded = false;
+  #listeners = new Set<() => void>();
+  #onCountChange?: (count: number) => void;
+
+  /** Creates a queue over one storage location and clock. */
+  constructor(
+    storage: JournalStorage,
+    now: () => number = Date.now,
+    onCountChange?: (count: number) => void,
+  ) {
+    this.#storage = storage;
+    this.#now = now;
+    this.#onCountChange = onCountChange;
+  }
+
+  /** Loads the persisted document once, dropping already-expired entries. */
+  async load(): Promise<void> {
+    if (this.#loaded) return;
+    this.#document = parse(await this.#storage.load());
+    this.#loaded = true;
+    this.#sweepExpired();
+  }
+
+  /**
+   * Enqueues one notice, idempotent by id: an entry whose id is already
+   * present is left untouched, so an at-least-once re-delivery adds nothing.
+   */
+  enqueue(input: NoticeEnqueueInput): void {
+    if (this.#document.entries.some((entry) => entry.id === input.id)) return;
+    const createdAt = this.#now();
+    this.#document.entries.push({
+      id: input.id,
+      message: input.message,
+      tone: input.tone,
+      createdAt,
+      expiresAt: input.ttlMs === null ? null : createdAt + input.ttlMs,
+    });
+    this.#persist();
+    this.#emit();
+  }
+
+  /** Dismisses one entry by id; unknown ids are a no-op. */
+  dismiss(id: string): void {
+    const next = this.#document.entries.filter((entry) => entry.id !== id);
+    if (next.length === this.#document.entries.length) return;
+    this.#document.entries = next;
+    this.#persist();
+    this.#emit();
+  }
+
+  /** Dismisses every entry. */
+  dismissAll(): void {
+    if (this.#document.entries.length === 0) return;
+    this.#document.entries = [];
+    this.#persist();
+    this.#emit();
+  }
+
+  /** The live notices: enqueued, not dismissed, not past their TTL. */
+  list(): readonly NoticeEntry[] {
+    this.#sweepExpired();
+    return this.#document.entries;
+  }
+
+  /** Subscribes to queue changes; returns an unsubscribe function. */
+  subscribe(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  /** Resolves once every scheduled persistence has settled. */
+  flush(): Promise<void> {
+    return this.#chain;
+  }
+
+  /** Applies TTL retirement, persisting and notifying if anything changed. */
+  sweep(): void {
+    if (this.#sweepExpired()) {
+      this.#persist();
+      this.#emit();
+    }
+  }
+
+  #sweepExpired(): boolean {
+    const now = this.#now();
+    const before = this.#document.entries.length;
+    this.#document.entries = this.#document.entries.filter((entry) =>
+      entry.expiresAt === null || entry.expiresAt > now
+    );
+    return this.#document.entries.length !== before;
+  }
+
+  #persist(): void {
+    const snapshot = JSON.stringify(this.#document);
+    this.#chain = this.#chain.then(() => this.#storage.save(snapshot)).catch(() => undefined);
+  }
+
+  #emit(): void {
+    this.#onCountChange?.(this.#document.entries.length);
+    for (const listener of this.#listeners) listener();
+  }
+}
+
+/** Resolves the default notice-queue storage for one app id. */
+export function createDefaultNoticeStorage(appId: string): JournalStorage {
+  // The journal's storage resolver already picks OPFS, then localStorage, then
+  // memory; a distinct file name keeps the two documents apart.
+  return createDefaultJournalStorage(`notices-${appId}`);
+}
+
+/** An in-memory notice queue for tests and storage-less runtimes. */
+export function createMemoryNoticeQueue(now?: () => number): NoticeQueue {
+  return new NoticeQueue(createMemoryJournalStorage(), now);
+}

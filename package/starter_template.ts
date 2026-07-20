@@ -34,12 +34,28 @@ export const STARTER_FILES: readonly string[] = [
 ];
 
 /**
+ * TypeScript starter files are read from a verbatim `.txt` mirror under
+ * `package/starter/` instead of the reference app itself. Publishing rewrites
+ * the specifiers inside every module in the package — which would hand
+ * generated projects direct `jsr:`/`npm:` imports that bypass their pinned
+ * import map and break their formatting — but leaves non-module files alone.
+ * The mirror is kept byte-identical to the reference app by
+ * `create_core_test.ts`.
+ */
+function starterFileUrl(relativePath: string): URL {
+  if (/\.tsx?$/.test(relativePath)) {
+    return new URL(`./starter/${relativePath}.txt`, import.meta.url);
+  }
+  return new URL(`../apps/reference/${relativePath}`, import.meta.url);
+}
+
+/**
  * Reads a starter file's contents, resolving it relative to the reference app.
  * Works both from a source checkout (a `file:` URL read from disk) and from the
  * published package (an `https:` JSR URL fetched over the network).
  */
 export async function readStarterFile(relativePath: string): Promise<Uint8Array> {
-  const url = new URL(`../apps/reference/${relativePath}`, import.meta.url);
+  const url = starterFileUrl(relativePath);
   if (url.protocol === "file:") return await Deno.readFile(url);
   const response = await fetch(url);
   if (!response.ok) {

@@ -259,8 +259,9 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      // Two trees, no wordmark: the site now fronts two products, and each
+      // Two trees, no wordmark: the site fronts two products, and each
       // product's own dropdown carries its links (so no top-level GitHub/JSR).
+      // The demo stands beside them as a third top-level entry.
       logo: {
         alt: "lofi",
         src: "img/two-trees.svg",
@@ -278,7 +279,6 @@ const config: Config = {
           items: [
             { label: "docs", to: "/docs" },
             { label: "api", to: "/api" },
-            { label: "demo", href: "https://demo.lofi.host" },
             {
               label: "github",
               href: "https://github.com/FelineStateMachine/lofi",
@@ -300,6 +300,14 @@ const config: Config = {
             },
             { label: "jsr", href: "https://jsr.io/@nzip/lofi-node" },
           ],
+        },
+        {
+          label: "demo",
+          position: "left",
+          href: "https://demo.lofi.host",
+          // Wears the demo's magma styling (custom.css) instead of the
+          // navbar link treatment.
+          className: "navbar-demo-link",
         },
       ],
     },

@@ -93,6 +93,36 @@
   color: #f3faf6;
 }
 
+/* The demo entry wears the demo's own magma dress — the incident board's
+   report button: heat gradient, sharp 2px corners, char text, ember glow on
+   hover, warm focus ring. Self-contained, so it reads the same on both color
+   modes and in the mobile drawer. */
+.navbar-demo-link {
+  background: linear-gradient(120deg, #b3122e, #ff3d00 55%, #ff9d45);
+  border-radius: 2px;
+  color: #1a0703;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.navbar__items .navbar-demo-link {
+  margin-left: 0.25rem;
+  padding: 0.25rem 0.75rem;
+}
+.navbar-sidebar .menu__link.navbar-demo-link {
+  color: #1a0703;
+  margin: 0.25rem 0;
+  width: fit-content;
+}
+.navbar-demo-link:hover {
+  box-shadow: 0 0 20px rgba(255, 61, 0, 0.4);
+  color: #1a0703;
+}
+.navbar-demo-link:focus-visible {
+  outline: 3px solid #ffcf99;
+  outline-offset: 2px;
+}
+
 /* Dracula's comment color fails WCAG contrast on its background; sage
    clears 4.5:1. prism-react-renderer inlines token colors, so !important. */
 [data-theme="dark"] .theme-code-block .token.comment,

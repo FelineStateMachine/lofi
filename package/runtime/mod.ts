@@ -208,7 +208,7 @@ export {
   type SinkRestoreOutcome,
   type SyncTicket,
 } from "./data-sink.ts";
-export { RecoveryError } from "./recovery.ts";
+export { RecoveryError, type RecoveryErrorCode } from "./recovery.ts";
 export { RecoverablePasskeyError, type RecoverablePasskeyErrorCode } from "./passkey-recovery.ts";
 export {
   type RowOf,

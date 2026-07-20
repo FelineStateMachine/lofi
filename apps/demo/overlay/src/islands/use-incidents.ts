@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useState } from "preact/hooks";
 import type { RowOf, WriteHandle } from "@nzip/lofi";
 import { useLiveQuery, useWrite } from "@nzip/lofi/preact";
 import { s } from "@nzip/lofi/schema";
@@ -18,56 +18,26 @@ export type Incident = RowOf<typeof incidentsTable>;
 export type Severity = Incident["severity"];
 export type IncidentStatus = Incident["status"];
 
-/** A one-line consequence or compensation surfaced to the UI. */
-export type IncidentNotice = { kind: "synced" | "rejected"; text: string };
-
-// A tiny author-owned notice channel: effect handlers run outside any
-// component, so they publish through module state and hooks subscribe.
-let notice: IncidentNotice | null = null;
-const noticeListeners = new Set<() => void>();
-
-function publishNotice(next: IncidentNotice | null): void {
-  notice = next;
-  for (const listener of [...noticeListeners]) listener();
-}
-
 /**
  * The reporting verb. Its effect units are declared once, here: the
  * consequence runs when the store confirms the row, the compensation runs if
  * a stale-policy write is denied, even if the app restarted in between.
  */
 export const reportIncident = s.mutation("reportIncident", s.insert(incidentsTable), {
-  effects: [s.log("incident-reported")],
-  onSynced: (incident) => {
-    publishNotice({
-      kind: "synced",
-      text: `"${incident.title ?? "Incident"}" confirmed by the store`,
-    });
-  },
-  onRejected: (incident) => {
-    // The engine already rolled the denied row back out of local reads; this
-    // compensates what the user was told.
-    publishNotice({
-      kind: "rejected",
-      text: `"${incident.title ?? "Incident"}" was declined by the store and has been removed`,
-    });
-  },
+  effects: [
+    s.log("incident-reported"),
+    s.notice<Incident>({
+      synced: (incident) => `"${incident.title ?? "Incident"}" confirmed by the store`,
+      // The engine already rolled a denied insert out of local reads; this
+      // durable notice compensates what the user was told, even after reload.
+      rejected: (incident) =>
+        `"${incident.title ?? "Incident"}" was declined by the store and has been removed`,
+    }),
+  ],
 });
 
 /** Moving an incident between states is a plain verb: same lifecycle. */
 export const setIncidentStatus = s.mutation("setIncidentStatus", s.update(incidentsTable));
-
-/** Subscribes to the latest effect notice; `null` until one is published. */
-export function useIncidentNotice(): IncidentNotice | null {
-  const [current, setCurrent] = useState<IncidentNotice | null>(notice);
-  useEffect(() => {
-    const listener = () => setCurrent(notice);
-    noticeListeners.add(listener);
-    listener();
-    return () => void noticeListeners.delete(listener);
-  }, []);
-  return current;
-}
 
 export function useIncidents() {
   const query = useLiveQuery(() => incidentsTable.orderBy("openedAt", "desc"), []);

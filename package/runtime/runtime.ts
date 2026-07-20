@@ -294,15 +294,6 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
       }
       notifyDiagnostics(state);
     }
-    // The store preflight rides alongside database creation, never in front
-    // of it: local-first boot must not wait on the network. resolveStoreStatus
-    // maps every failure and timeout to a diagnostic value, so this only
-    // records state — a schema-less or drifted store surfaces here at boot
-    // instead of as a hanging first write, and is never repaired from here.
-    void resolveStoreStatus({ connect: effectiveConnect, sink: activeSink() }).then((status) => {
-      state.diagnostics.storeStatus = status;
-      notifyDiagnostics(state);
-    });
     // A possession-bound sink proves the device key before connecting: the
     // exchange mints a connect token the sync client carries as a path
     // segment. A failed exchange (node restart, revocation, key loss) boots
@@ -325,6 +316,17 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
         keyPair,
       }) ?? undefined;
     }
+    // The store preflight rides alongside database creation, never in front
+    // of it: local-first boot must not wait on the network. A possession-bound
+    // sink must use the authenticated connect URL minted above; its bare
+    // ticket URL correctly rejects even metadata reads. resolveStoreStatus
+    // maps every remaining failure and timeout to a diagnostic value, so this
+    // only records state and never repairs the store.
+    const statusSink = popSink ? { serverUrl: serverUrlOverride ?? popSink.serverUrl } : null;
+    void resolveStoreStatus({ connect: effectiveConnect, sink: statusSink }).then((status) => {
+      state.diagnostics.storeStatus = status;
+      notifyDiagnostics(state);
+    });
     const db = await createDb(
       databaseConfig(
         secret,

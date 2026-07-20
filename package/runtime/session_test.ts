@@ -289,6 +289,112 @@ test(
 );
 
 test(
+  "a PoP-bound provision enrollment preflights through its authenticated connect URL",
+  withCleanSyncState(async () => {
+    const derivedSecret = "d".repeat(43);
+    const connectSecret = "c".repeat(43);
+    const requestedUrls: string[] = [];
+    const fetcher: typeof fetch = (input, init) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.endsWith("/derive-sync-ticket")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ v: 1, id: "derived-id", ticket: derivedTicket, pop: true }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.endsWith("/pop/challenge")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: "challenge-id", nonce: "nonce" }), {
+            status: 200,
+          }),
+        );
+      }
+      if (url.endsWith("/pop/answer") && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ v: 1, connect: connectSecret }), { status: 200 }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+    let preflightUrl = "";
+    await performTicketEnrollment(provisionTicket, {
+      fetcher,
+      keyStore: memoryDeviceKeyStore(),
+      preflight: (url) => {
+        preflightUrl = url;
+        return answering("deployed")();
+      },
+      elect: () => Promise.resolve(undefined as never),
+    });
+    assert(
+      preflightUrl ===
+        `http://192.168.1.10:4802/t/${derivedSecret}/c/${connectSecret}`,
+      `store-status must use the PoP-authenticated connect URL (received ${preflightUrl})`,
+    );
+    assert(
+      requestedUrls.some((url) => url.endsWith("/pop/challenge")) &&
+        requestedUrls.some((url) => url.endsWith("/pop/answer")),
+      "enrollment must complete the PoP exchange before preflight",
+    );
+  }),
+);
+
+test(
+  "a no_schema answer through a PoP connect URL still rolls enrollment back",
+  withCleanSyncState(async () => {
+    const fetcher: typeof fetch = (input) => {
+      const url = String(input);
+      if (url.endsWith("/derive-sync-ticket")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ v: 1, id: "derived-id", ticket: derivedTicket, pop: true }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.endsWith("/pop/challenge")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: "challenge-id", nonce: "nonce" }), {
+            status: 200,
+          }),
+        );
+      }
+      if (url.endsWith("/pop/answer")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ v: 1, connect: "c".repeat(43) }), { status: 200 }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    };
+    let thrown: unknown;
+    try {
+      await performTicketEnrollment(provisionTicket, {
+        fetcher,
+        keyStore: memoryDeviceKeyStore(),
+        preflight: answering("no_schema"),
+        elect: () => Promise.reject(new Error("elect must not run")),
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    assert(
+      isSyncEnrollmentError(thrown) && thrown.code === "no_schema",
+      `the authenticated no-schema answer must retain the enrollment safety gate (received ${
+        thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown)
+      })`,
+    );
+    assert(readDeclaredSink() === null, "the PoP-bound sink must be rolled back");
+    assert(
+      !provisionCapabilityStatus().held,
+      "the provision capability must not be held after the refused enrollment",
+    );
+  }),
+);
+
+test(
   "electing under a foreign owner is refused; an unclaimed election records the owner",
   withCleanSyncState(async () => {
     recordSyncOwner({ fingerprint: await secretFingerprint("owner-secret"), user_id: "user-1" });

@@ -21,20 +21,14 @@ import { RecoveryPhrase, RecoveryPhraseError } from "jazz-tools/passphrase";
 /** The number of words in a lofi recovery phrase. */
 export const RECOVERY_PHRASE_WORDS = 24;
 
-/** A precise, non-leaking failure reason for a recovery-phrase operation. */
-export class RecoveryError extends Error {
-  /** Stable error class name for diagnostics and error boundaries. */
-  override readonly name = "RecoveryError";
-  /** Actionable category that callers can map to recovery guidance. */
-  readonly code: "invalid-length" | "invalid-word" | "invalid-checksum" | "invalid-secret";
-  /** Creates a phrase error without retaining the submitted phrase. */
-  constructor(code: RecoveryError["code"], message?: string) {
-    super(message ?? `Recovery phrase operation failed: ${code}.`);
-    this.code = code;
-  }
-}
+/** Stable recovery-phrase failure categories for actionable UI guidance. */
+export type RecoveryErrorCode =
+  | "invalid-length"
+  | "invalid-word"
+  | "invalid-checksum"
+  | "invalid-secret";
 
-const MESSAGES: Record<RecoveryError["code"], string> = {
+const MESSAGES: Record<RecoveryErrorCode, string> = {
   "invalid-length":
     `A recovery phrase is ${RECOVERY_PHRASE_WORDS} words — check for a missing or extra word.`,
   "invalid-word": "One of the words is not in the recovery word list — check your spelling.",
@@ -43,10 +37,23 @@ const MESSAGES: Record<RecoveryError["code"], string> = {
   "invalid-secret": "The account secret could not be encoded as a recovery phrase.",
 };
 
+/** A precise, non-leaking failure reason for a recovery-phrase operation. */
+export class RecoveryError extends Error {
+  /** Stable error class name for diagnostics and error boundaries. */
+  override readonly name = "RecoveryError";
+  /** Actionable category that callers can map to recovery guidance. */
+  readonly code: RecoveryErrorCode;
+  /** Creates a phrase error without retaining the submitted phrase. */
+  constructor(code: RecoveryErrorCode, message?: string) {
+    super(message ?? MESSAGES[code]);
+    this.code = code;
+  }
+}
+
 function mapError(error: unknown): RecoveryError {
   if (error instanceof RecoveryError) return error;
   if (error instanceof RecoveryPhraseError) {
-    const code = error.code as RecoveryError["code"];
+    const code = error.code as RecoveryErrorCode;
     return new RecoveryError(code, MESSAGES[code] ?? undefined);
   }
   return new RecoveryError("invalid-checksum", error instanceof Error ? error.message : undefined);

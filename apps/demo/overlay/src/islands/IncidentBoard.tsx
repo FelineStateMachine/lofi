@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { settleUiMutation } from "@nzip/lofi";
 import {
   type BootProgress,
+  Notices,
   useBootProgress,
   usePendingWrites,
   useSyncStatus,
@@ -10,7 +11,6 @@ import {
   type Incident,
   type IncidentStatus,
   type Severity,
-  useIncidentNotice,
   useIncidents,
 } from "./use-incidents.ts";
 
@@ -51,7 +51,6 @@ function openedLabel(value: Incident["openedAt"]): string {
  */
 export default function IncidentBoard() {
   const { status, error, durability, incidents, failureKind, report, setStatus } = useIncidents();
-  const notice = useIncidentNotice();
   const pending = usePendingWrites();
   const boot = useBootProgress();
   const [title, setTitle] = useState("");
@@ -107,11 +106,7 @@ export default function IncidentBoard() {
           {pending.count} change{pending.count === 1 ? "" : "s"} waiting to sync
         </p>
       )}
-      {notice && (
-        <p class="state" role="status" data-notice={notice.kind}>
-          {notice.text}
-        </p>
-      )}
+      <Notices label="Incident notifications" />
       <div class="columns">
         {COLUMNS.map((column) => {
           const rows = incidents.filter((incident) => incident.status === column.status);

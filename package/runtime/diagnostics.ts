@@ -47,6 +47,8 @@ export type RuntimeDiagnostics = {
   startupFailure: RuntimeStartupFailure | null;
   /** Whether the configured store answered; feeds connected/unreachable UI. */
   storeStatus: RuntimeStoreStatus;
+  /** This boot's sync-owner verdict; `mismatch` means transport was suppressed. */
+  syncOwner: SyncOwnerDiagnostic;
   /** The schema gate's verdict; `data-ahead` means this device is read-only. */
   schemaCompat: SchemaCompatState;
   /** Storage clients opened since page load, runtime recreations included. */
@@ -96,6 +98,19 @@ export type RuntimeDiagnostics = {
   sharedFieldAlerts: readonly SharedFieldAlert[];
 };
 
+/**
+ * The boot-time sync-owner adjudication. `unchecked` means the runtime was
+ * not connecting (nothing to adjudicate); `self` means the account in hand
+ * owns the election; `mismatch` means sync on this device was elected by a
+ * different account, so the runtime booted with transport suppressed rather
+ * than writing into the owner's store. The remediation is explicit: stop
+ * sync (releasing the election) or restore the owning account.
+ */
+export type SyncOwnerDiagnostic =
+  | { state: "unchecked" }
+  | { state: "self" }
+  | { state: "mismatch"; owner_user_id: string | null };
+
 /** One detected shared-field key anomaly. */
 export type SharedFieldAlert = {
   /**
@@ -119,6 +134,7 @@ export function createDiagnostics(): RuntimeDiagnostics {
     storageState: "persistent-requested",
     startupFailure: null,
     storeStatus: { state: "unchecked", reason: "sync-not-connected" },
+    syncOwner: { state: "unchecked" },
     schemaCompat: { state: "unchecked", reason: "inactive" },
     clientsCreated: 0,
     activeClients: 0,

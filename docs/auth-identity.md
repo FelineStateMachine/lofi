@@ -87,7 +87,12 @@ confused.
   subscriptions, stores, workers, cached clients, and Jazz client shut down → the restored account
   starts and synced rows can arrive.
 - **Stop syncing** → detaches the network and returns to local-only; the account and data are
-  untouched, and electing again resumes against the same account.
+  untouched, and electing again resumes against the same account. Stopping also releases the
+  device's sync-owner pin, so a different account may elect sync on this device afterwards.
+- **A different account over an existing election** → the runtime refuses to connect: sync on a
+  device is pinned to the account that elected it, so a restored identity (or a reset browser store
+  that minted a fresh account) boots local-only with `session.syncOwnerMismatch` set instead of
+  writing into the owner's store. Stop syncing or restore the owning account to proceed.
 
 The framework side is exported by `@nzip/lofi` (`readAccountSession`,
 `createRecoverablePasskeyBackup`, `restoreFromPasskey`, `revealRecoveryPhrase`, `enableSyncBackup`,

@@ -104,7 +104,11 @@ export {
   requestPwaInstall,
   subscribePwaState,
 } from "./pwa.ts";
-export { type RuntimeDiagnostics, type SharedFieldAlert } from "./diagnostics.ts";
+export {
+  type RuntimeDiagnostics,
+  type SharedFieldAlert,
+  type SyncOwnerDiagnostic,
+} from "./diagnostics.ts";
 export {
   createSchemaCompatGate,
   describeSchemaCompat,
@@ -177,6 +181,7 @@ export {
   isAuthError,
   isRecoverablePasskeyError,
   isRecoveryError,
+  isSyncEnrollmentError,
   type PasskeyBackupReceipt,
   readAccountSession,
   readSession,
@@ -186,7 +191,10 @@ export {
   type Session,
   type SessionSink,
   stopSyncBackup,
+  SyncEnrollmentError,
+  type SyncEnrollmentFailureCode,
 } from "./session.ts";
+export { isSyncOwnerError, SyncOwnerError } from "./sync-owner.ts";
 export {
   clearDeclaredSink,
   type DataSinkDeclaration,

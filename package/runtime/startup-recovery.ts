@@ -9,6 +9,7 @@ import { DurableStorageUnsupportedError } from "./device-capabilities.ts";
 export type RuntimeStartupFailureCode =
   | "broker-incompatible"
   | "configuration-error"
+  | "reload-loop"
   | "storage-startup-failed"
   | "unsupported-capabilities";
 
@@ -24,6 +25,8 @@ const startupMessages: Record<RuntimeStartupFailureCode, string> = {
     "Another tab for this app is running an incompatible version. Close every other app tab, then reload this tab.",
   "configuration-error":
     "The Lofi runtime configuration is invalid. Run deno task doctor, fix the first blocker, then reload.",
+  "reload-loop":
+    "The app kept reloading without reaching a working runtime, so automatic reloads stopped. Check the device report's account and sync state, then reload manually.",
   "storage-startup-failed":
     "Durable storage could not start. Run deno task doctor, fix the first blocker, then reload.",
   "unsupported-capabilities":
@@ -50,6 +53,13 @@ export class RuntimeStartupError extends Error {
 /** True when an error is a classified persistent-runtime startup failure. */
 export function isRuntimeStartupError(error: unknown): error is RuntimeStartupError {
   return error instanceof RuntimeStartupError;
+}
+
+/** Builds the stable failure record for a refused framework-driven reload. */
+export function reloadLoopFailure(
+  runtimeMode: RuntimeStartupFailure["runtimeMode"],
+): RuntimeStartupFailure {
+  return { code: "reload-loop", runtimeMode, message: startupMessages["reload-loop"] };
 }
 
 /** Maps vendor, capability, configuration, and fallback failures onto stable Lofi categories. */

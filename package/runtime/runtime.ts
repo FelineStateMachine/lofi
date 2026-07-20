@@ -39,10 +39,19 @@ import {
 } from "./resource-lifecycle.ts";
 import {
   createBrokerIncompatibilityHandler,
+  reloadLoopFailure,
   runRuntimeStartup,
+  RuntimeStartupError,
   type RuntimeStartupFailure,
 } from "./startup-recovery.ts";
 import { completeLocalRowMigration, readNamespaceState } from "./namespace-state.ts";
+import { noteReloadAttempt, resetReloadAttempts } from "./reload-guard.ts";
+import {
+  adjudicateSyncOwner,
+  readSyncOwner,
+  recordSyncOwner,
+  secretFingerprint,
+} from "./sync-owner.ts";
 import { type NestedAppRoot, nestedAppTables } from "../schema/nested.ts";
 
 /** The shared, lazily opened Jazz client and its application-facing adapters. */
@@ -112,11 +121,10 @@ async function resolveAccountSecret(): Promise<string> {
   return await withAuthSecretLock(appId, () => BrowserAuthSecretStore.getOrCreateSecret({ appId }));
 }
 
+// The namespace name doubles as the account's sync-owner fingerprint; both
+// must stay byte-identical, so the derivation lives in sync-owner.ts.
 async function accountNamespace(secret: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
-  return [...new Uint8Array(digest).slice(0, 8)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return await secretFingerprint(secret);
 }
 
 type RuntimeTable = {
@@ -252,16 +260,8 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
   state.diagnostics.storageState = "persistent-requested";
   state.diagnostics.startupFailure = null;
   state.diagnostics.storeStatus = { state: "unchecked", reason: "sync-not-connected" };
+  state.diagnostics.syncOwner = { state: "unchecked" };
   notifyDiagnostics(state);
-  // The store preflight rides alongside database creation, never in front of
-  // it: local-first boot must not wait on the network. resolveStoreStatus maps
-  // every failure and timeout to a diagnostic value, so this only records
-  // state — a schema-less or drifted store surfaces here at boot instead of as
-  // a hanging first write, and is never repaired from here.
-  void resolveStoreStatus({ connect, sink: activeSink() }).then((status) => {
-    state.diagnostics.storeStatus = status;
-    notifyDiagnostics(state);
-  });
   return await runRuntimeStartup(runtimeMode, async () => {
     assertDurableBrowser();
     // On a cold first visit the engine binary is the wait; download it with
@@ -278,6 +278,31 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     clearSharedFieldKeys();
     await installSharedFieldIdentityFromSecret(secret);
     const namespace = await accountNamespace(secret);
+    // The election is pinned to the account that made it: a different account
+    // on the same device (a reset secret store, a partial restore) boots with
+    // transport suppressed instead of writing into the owner's store. The
+    // namespace name is the fingerprint, so the verdict closes before any
+    // client exists.
+    let effectiveConnect = connect;
+    if (connect) {
+      const verdict = adjudicateSyncOwner(namespace);
+      if (verdict.state === "foreign") {
+        effectiveConnect = false;
+        state.diagnostics.syncOwner = { state: "mismatch", owner_user_id: verdict.owner_user_id };
+      } else {
+        state.diagnostics.syncOwner = { state: "self" };
+      }
+      notifyDiagnostics(state);
+    }
+    // The store preflight rides alongside database creation, never in front
+    // of it: local-first boot must not wait on the network. resolveStoreStatus
+    // maps every failure and timeout to a diagnostic value, so this only
+    // records state — a schema-less or drifted store surfaces here at boot
+    // instead of as a hanging first write, and is never repaired from here.
+    void resolveStoreStatus({ connect: effectiveConnect, sink: activeSink() }).then((status) => {
+      state.diagnostics.storeStatus = status;
+      notifyDiagnostics(state);
+    });
     // A possession-bound sink proves the device key before connecting: the
     // exchange mints a connect token the sync client carries as a path
     // segment. A failed exchange (node restart, revocation, key loss) boots
@@ -291,7 +316,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     // like a revoked ticket and recovers on reload.
     let serverUrlOverride: string | undefined;
     const popSink = activeSink();
-    if (connect && popSink?.pop) {
+    if (effectiveConnect && popSink?.pop) {
       const keyPair = await getOrCreatePopKeyPair(popSink.appId);
       serverUrlOverride = await completePopExchange({
         serverUrl: popSink.serverUrl,
@@ -305,7 +330,7 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
         secret,
         namespace,
         runtimeMode,
-        connect,
+        effectiveConnect,
         createBrokerIncompatibilityHandler(runtimeMode, record),
         serverUrlOverride,
       ),
@@ -322,8 +347,17 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
       await migrateLocalRows(state, db, secret, namespace);
     }
     state.principal = db.getAuthState().session?.user_id ?? null;
-    state.serverConfigured = connect;
-    startSharedFieldRuntime(state, db, connect);
+    state.serverConfigured = effectiveConnect;
+    startSharedFieldRuntime(state, db, effectiveConnect);
+    // Display-only backfill: the owner record adjudicates by fingerprint, but
+    // once the owning account's principal is known it names the owner in
+    // mismatch surfaces on other accounts.
+    if (effectiveConnect && state.principal !== null) {
+      const owner = readSyncOwner();
+      if (owner !== null && owner.fingerprint === namespace && owner.user_id === null) {
+        recordSyncOwner({ fingerprint: namespace, user_id: state.principal });
+      }
+    }
     state.diagnostics.storageState = "persistent-driver-open";
     state.diagnostics.startupFailure = null;
     state.diagnostics.clientsCreated += 1;
@@ -332,6 +366,9 @@ async function createClient(state: RuntimeSlot): Promise<Db> {
     // local schema version forward (it never stamps while data is ahead).
     schemaCompatGate.markRuntimeWritable();
     bootProgressTracker.mark("ready");
+    // A settled boot ends any framework reload sequence; the budget restarts
+    // from zero for the next one.
+    resetReloadAttempts();
     notifyDiagnostics(state);
     return db;
   }, record);
@@ -507,12 +544,29 @@ export function recreateRuntime(): Promise<LofiRuntime> {
   return tracked;
 }
 
+// Refuses a framework-driven reload once the per-tab budget is spent: the
+// refusal lands in startup diagnostics (so the recovery surface renders it)
+// and throws, so the caller's flow fails loudly instead of cycling.
+function assertReloadBudget(): void {
+  if (noteReloadAttempt().allowed) return;
+  const state = slot();
+  const failure = reloadLoopFailure(
+    readNamespaceState().mode === "managed" ? "managed" : "local",
+  );
+  recordStartupFailure(state, failure);
+  throw new RuntimeStartupError(failure);
+}
+
 /**
  * Fully tears down a browser persistent worker and reloads the document. Jazz
  * alpha.53 cannot attach a second OPFS worker reliably in the same document
  * after shutdown; navigation is the supported clean-runtime boundary.
+ * Framework reloads are budgeted per tab: a sequence of reloads that never
+ * reaches a settled boot is refused with a `reload-loop` startup failure
+ * instead of cycling.
  */
 export async function reloadBrowserRuntime(): Promise<never> {
+  assertReloadBudget();
   await shutdownRuntime();
   globalThis.location.reload();
   return await new Promise<never>(() => {});
@@ -533,7 +587,7 @@ async function releaseRuntime(state: RuntimeSlot): Promise<void> {
  */
 export function replaceRuntimePrincipal(
   secret: string,
-  options: { onSecretSaved?: () => void } = {},
+  options: { onSecretSaved?: () => void | Promise<void> } = {},
 ): Promise<LofiRuntime> {
   const state = slot();
   const previous = recreationPromise;
@@ -544,9 +598,12 @@ export function replaceRuntimePrincipal(
     await previous?.catch(() => undefined);
     const saveSecret = async () => {
       await withAuthSecretLock(appId, () => BrowserAuthSecretStore.saveSecret(secret, { appId }));
-      options.onSecretSaved?.();
+      await options.onSecretSaved?.();
     };
     if (typeof window !== "undefined" && typeof SharedWorker !== "undefined") {
+      // The budget check precedes every mutation: a refused reload leaves the
+      // current principal and runtime fully intact.
+      assertReloadBudget();
       await releaseRuntime(state);
       await saveSecret();
       globalThis.location.reload();

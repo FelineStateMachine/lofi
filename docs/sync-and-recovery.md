@@ -47,13 +47,14 @@ ticket — a `lofisync1.…` string carrying the store's app id and a gate URL �
 into the app:
 
 ```ts
-import { enrollSyncTicket, isDataSinkError } from "@nzip/lofi";
+import { enrollSyncTicket, isDataSinkError, isSyncEnrollmentError } from "@nzip/lofi";
 
 try {
   const session = await enrollSyncTicket(pastedTicket);
   // session.sink → { source: "declared", host: "192.168.1.10:4802", label: "phone" }
 } catch (error) {
   if (isDataSinkError(error)) showEnrollmentProblem(error.code, error.message);
+  else if (isSyncEnrollmentError(error)) showEnrollmentProblem(error.code, error.message);
   else throw error;
 }
 ```
@@ -74,6 +75,16 @@ Semantics to rely on:
   re-pointed.
 - **One store, one active sink.** Declaring a different sink over an existing one is refused; clear
   the declaration first. Local data and elections survive clearing.
+- **The store answers before enrollment is kept.** Enrollment runs a bounded metadata preflight
+  against the node: a store with no schema deployed for this app, or a rejected ticket, rolls the
+  declaration back and throws `SyncEnrollmentError` — the device stays exactly as it was. A store
+  that is merely unreachable enrolls anyway, with the warning recorded as `storeStatus` in runtime
+  diagnostics, because a flaky network must not block a legitimate ticket.
+- **The election is pinned to the account that made it.** Electing sync records the electing
+  account's fingerprint; a boot that finds a different account in hand opens local-only with
+  transport suppressed, and the session reports `syncOwnerMismatch` rather than letting a second
+  identity write into the owner's store. Electing under the mismatch throws `SyncOwnerError`.
+  Stopping sync releases the pin; an explicit restore ceremony adopts it for the restored account.
 - **What the server can see is documented, not implied.** The [threat model](threat-model.md) states
   the server's view, the user's holdings, and the ticket/XSS custody story in one place.
 - **The ticket URL is a bearer credential.** It is used verbatim as the sync server (its secret path
